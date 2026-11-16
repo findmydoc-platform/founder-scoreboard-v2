@@ -3,9 +3,9 @@
 import { ChevronRight, ExternalLink, GitPullRequest, Globe2, Network } from "lucide-react";
 import { SiGithub, SiNotion } from "@icons-pack/react-simple-icons";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
-import type { SubIssueEvidenceEntry, SubIssueEvidenceGroup } from "@/features/tasks/model/sub-issue-evidence";
+import type { SubIssueEvidenceEntry, SubIssueEvidenceGroup, SubIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { evidenceLinkPresentation, parseEvidenceUrl } from "@/features/tasks/model/task-evidence-links";
-import { classNames } from "@/shared/atoms/ui-primitives";
+import { UiNotice, classNames } from "@/shared/atoms/ui-primitives";
 
 const statuses = {
   open: { label: "Offen", color: "text-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
@@ -51,30 +51,38 @@ function EvidenceEntry({ entry, onOpenTask }: { entry: SubIssueEvidenceEntry; on
   );
 }
 
-export function SubIssueEvidenceSection({ count, groups, onOpenTask }: {
-  count: number;
-  groups: SubIssueEvidenceGroup[];
-  onOpenTask?: (id: string) => void;
-}) {
-  if (!count) return null;
-  return (
-    <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <summary data-tour-id="task-sub-issue-evidence-summary" aria-label={`Nachweise aus Sub-Issues: ${count}`} className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+function EvidenceGroups({ groups, onOpenTask }: { groups: SubIssueEvidenceGroup[]; onOpenTask?: (id: string) => void }) {
+  return <ul className="border-t border-slate-100">
+    {groups.map((group) => (
+      <li key={group.source.id} className="border-t border-slate-100 first:border-t-0">
+        <div className="flex min-h-11 items-center gap-3 px-3.5 py-2">
+          <Network size={18} className="shrink-0 text-slate-500" aria-hidden="true" />
+          <TaskReferenceLink task={group.source} onOpenTask={onOpenTask} showIcon={false} className="text-sm font-medium text-blue-600 sm:min-h-6 [overflow-wrap:anywhere]" />
+        </div>
+        <ul>{group.entries.map((entry) => <EvidenceEntry key={entry.url} entry={entry} onOpenTask={onOpenTask} />)}</ul>
+      </li>
+    ))}
+  </ul>;
+}
+
+export function SubIssueEvidenceSection(summary: SubIssueEvidenceSummary & { onOpenTask?: (id: string) => void }) {
+  if (summary.count === 0) return null;
+  const { groups, onOpenTask } = summary;
+  const knownCount = summary.count === null ? summary.knownCount : summary.count;
+  const label = summary.count === null ? `Mindestens ${knownCount}` : String(knownCount);
+  return <>
+    {summary.count === null ? <UiNotice tone="info" role="status">Der aktuelle Stand der Nachweise aus Sub-Issues ist noch nicht vollständig bestätigt.</UiNotice> : null}
+    {knownCount > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <summary data-tour-id="task-sub-issue-evidence-summary" aria-label={`Nachweise aus Sub-Issues: ${label}`} className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={18} className="shrink-0 transition-transform group-open/evidence:rotate-90" aria-hidden="true" />
         <span className="min-w-0 flex-1">Nachweise aus Sub-Issues</span>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">{count}</span>
+        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">{label}</span>
       </summary>
-      <ul className="border-t border-slate-100">
-        {groups.map((group) => (
-          <li key={group.source.id} className="border-t border-slate-100 first:border-t-0">
-            <div className="flex min-h-11 items-center gap-3 px-3.5 py-2">
-              <Network size={18} className="shrink-0 text-slate-500" aria-hidden="true" />
-              <TaskReferenceLink task={group.source} onOpenTask={onOpenTask} showIcon={false} className="text-sm font-medium text-blue-600 sm:min-h-6 [overflow-wrap:anywhere]" />
-            </div>
-            <ul>{group.entries.map((entry) => <EvidenceEntry key={entry.url} entry={entry} onOpenTask={onOpenTask} />)}</ul>
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
+      <EvidenceGroups groups={groups} onOpenTask={onOpenTask} />
+    </details> : null}
+    {summary.count === null && summary.retainedGroups.length > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <summary className="flex min-h-14 cursor-pointer items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 focus-visible:ring-2 focus-visible:ring-blue-500">Zuvor geladene Nachweise – Aktualität unbestätigt</summary>
+      <EvidenceGroups groups={summary.retainedGroups} onOpenTask={onOpenTask} />
+    </details> : null}
+  </>;
 }

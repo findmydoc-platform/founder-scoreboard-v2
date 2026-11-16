@@ -9,7 +9,7 @@ import { ReviewEvidenceGateDialog } from "@/features/reviews/molecules/review-ev
 import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
 import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
 import {
-  taskHasValidReviewEvidence,
+  taskReviewEvidenceStatus,
   type ReviewEvidenceSubmission,
 } from "@/features/reviews/model/review-evidence";
 import { isTaskReviewActive, isTaskReviewLocked, reviewLockMessage } from "@/features/reviews/model/task-review-state";
@@ -468,7 +468,7 @@ function HydratedTaskDetailSurface({
     const includesEvidence = Boolean(patch.evidenceLinks?.length || patch.reviewEvidenceExceptionNote?.trim());
     if (task.taskType === "deliverable"
       && requestsReview
-      && !taskHasValidReviewEvidence(task, directChildren)
+      && taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown }) === "absent"
       && !includesEvidence) {
       beginInlineEditing();
       setReviewEvidenceTask(task);
@@ -478,7 +478,7 @@ function HydratedTaskDetailSurface({
     return updateInline(patch);
   };
   const reopenReview = () => {
-    if (!taskHasValidReviewEvidence(task, directChildren)) {
+    if (taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown }) === "absent") {
       setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("reopen");
       return;
@@ -515,6 +515,7 @@ function HydratedTaskDetailSurface({
         <TaskOverviewPanel
           task={task}
           subIssues={directChildren}
+          subIssueMembershipComplete={childrenKnown}
           onOpenTask={openTask}
           profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}

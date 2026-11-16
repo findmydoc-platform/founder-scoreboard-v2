@@ -1,5 +1,5 @@
 import type { Task } from "@/lib/types";
-import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
+import { subIssueEvidenceSummary, type SubIssueEvidenceReadContext } from "@/features/tasks/model/sub-issue-evidence";
 
 export type ReviewEvidenceSubmission = Readonly<{
   evidenceLink?: string;
@@ -12,12 +12,24 @@ export type StoredReviewEvidenceLink = Readonly<{
   metadata?: unknown;
 }>;
 
+export function taskReviewEvidenceStatus(
+  task: Pick<Task, "evidenceLinks" | "linkedPullRequests"> & Partial<Pick<Task, "id" | "taskType" | "detailAvailability">>,
+  tasks: readonly Task[] = [],
+  context: SubIssueEvidenceReadContext = {},
+): "present" | "absent" | "unknown" {
+  const current = task.detailAvailability !== "summary" && task.detailAvailability !== "stale";
+  const hasLinks = Array.isArray(task.evidenceLinks), hasPullRequests = Array.isArray(task.linkedPullRequests);
+  if (current && (hasLinks && task.evidenceLinks.length > 0 || hasPullRequests && task.linkedPullRequests.length > 0)) return "present";
+  const inherited = task.id && task.taskType ? subIssueEvidenceSummary({ id: task.id, taskType: task.taskType }, tasks, context) : { count: 0, groups: [] };
+  if (inherited.count === null ? inherited.knownCount > 0 : inherited.count > 0) return "present";
+  return !current || !hasLinks || !hasPullRequests || inherited.count === null ? "unknown" : "absent";
+}
+
 export function taskHasValidReviewEvidence(
-  task: Pick<Task, "evidenceLinks" | "linkedPullRequests"> & Partial<Pick<Task, "id" | "taskType">>,
+  task: Pick<Task, "evidenceLinks" | "linkedPullRequests"> & Partial<Pick<Task, "id" | "taskType" | "detailAvailability">>,
   tasks: readonly Task[] = [],
 ) {
-  return task.evidenceLinks.length > 0 || task.linkedPullRequests.length > 0
-    || Boolean(task.id && task.taskType && subIssueEvidenceSummary({ id: task.id, taskType: task.taskType }, tasks).count);
+  return taskReviewEvidenceStatus(task, tasks) === "present";
 }
 
 export function validReviewEvidenceUrl(value: string) {
