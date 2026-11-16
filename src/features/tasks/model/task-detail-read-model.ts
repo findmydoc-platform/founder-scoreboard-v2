@@ -53,10 +53,12 @@ type TaskDetailModelFields = Readonly<{
 
 // Canonical and legacy models retain their required supporting context. Only
 // independent children may explicitly omit data they did not read.
-export type TaskDetailModel = TaskDetailModelFields & (
-  | Readonly<{ supportingData?: never; project: Project; people: readonly Profile[]; sprints: readonly Sprint[] }>
-  | Readonly<{ readArea: "children"; supportingData: "omitted"; project?: never; people?: never; sprints?: never }>
-);
+export type HydratedTaskDetailModel = TaskDetailModelFields & Readonly<{
+  supportingData?: never; project: Project; people: readonly Profile[]; sprints: readonly Sprint[];
+}>;
+export type TaskDetailModel = HydratedTaskDetailModel | (TaskDetailModelFields & Readonly<{
+  readArea: "children"; supportingData: "omitted"; project?: never; people?: never; sprints?: never;
+}>);
 
 export type TaskDetailHydration = Readonly<{
   itemId: string;

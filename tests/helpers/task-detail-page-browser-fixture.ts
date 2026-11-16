@@ -6,7 +6,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { readyHeaderSlot } from "@/lib/planning-header-data";
 import type { PlanningHeaderData, Profile, Task } from "@/lib/types";
 import type { User } from "@supabase/supabase-js";
-import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
+import type { HydratedTaskDetailModel, TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 import { mockAccountLifecycle } from "./account-lifecycle-browser-fixture";
 import { releaseStoryFixture } from "@/features/platform-releases/organisms/platform-release-story-fixture";
 
@@ -18,7 +18,7 @@ export const itemPageHeaderData: PlanningHeaderData = {
   notifications: readyHeaderSlot({ unreadCount: 0, items: [] }),
 };
 
-export function itemPageModel(taskType: Task["taskType"] = "deliverable"): TaskDetailModel {
+export function itemPageModel(taskType: Task["taskType"] = "deliverable"): HydratedTaskDetailModel {
   return {
     revision: "item-page-r1", project: emptyPlanningShellState.project,
     item: taskDetailStoryTask({ id: "item-page-task", taskType, title: "Reliable planning", assignee: itemPageProfile.id, assigneeId: itemPageProfile.id, owner: itemPageProfile.id, problemStatement: "Keep the planning context.", description: "Strategic context", updatedAt: "2026-11-01T12:00:00Z" }),
