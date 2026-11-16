@@ -35,18 +35,43 @@ test("canonical detail keeps its content read shape across independent history, 
     expect(taskReads.every(value => new URL(value, "http://localhost:3000").searchParams.has("id"))).toBe(true);
     return { item: model.item, ancestors: model.ancestors, content: [...content].sort() };
   };
+  const noChildProgress = { completed: 0, total: 0, unfinished: 0, percentage: 0 };
+  const twoChildProgress = { completed: 0, total: 2, unfinished: 2, percentage: 0 };
+  const independentChildren = async (expectedIds: readonly string[], expectedProgress: typeof noChildProgress) => {
+    content.splice(0);
+    const response: Response = await GET(f.request("founder", `/api/tasks/${target}/detail-data?area=children`), { params: Promise.resolve({ id: target }) });
+    expect(response.status).toBe(200);
+    const { taskDetail: model, readAuthority } = await response.json();
+    expect(model.readArea).toBe("children");
+    expect(model.coverage).toEqual({ children: "complete" });
+    expect(model.children.map((item: { id: string }) => item.id)).toEqual(expectedIds);
+    expect(model.childProgress).toEqual(expectedProgress);
+    expect(model.item).toMatchObject({ id: target, title: "Canonical shape fixture", parentTaskId: f.initiativeId, status: "Offen", detailAvailability: "summary" });
+    expect(model.item).not.toHaveProperty("description");
+    expect(model.ancestors.map((item: { id: string }) => item.id)).toEqual([`${f.prefix}-epic`, f.initiativeId]);
+    expect(model.children.every((item: { parentTaskId: string; status: string; detailAvailability: string }) => item.parentTaskId === target && item.status === "Offen" && item.detailAvailability === "summary")).toBe(true);
+    expect(model.relatedItems).toEqual([]); expect(model.relationships).toEqual([]);
+    expect(model.authorityDeadline).toBe(readAuthority.deadline);
+    expect(content.some(value => /\/(task_links|planning_item_strategy|planning_item_raci_assignments|task_relationship_edges|task_blockers|task_dependencies|task_comments|task_external_comments|task_audit_timeline|task_reviews)(\?|$)/.test(value))).toBe(false);
+    const taskReads = content.filter(value => value.startsWith("/rest/v1/active_tasks?"));
+    expect(taskReads).toHaveLength(2);
+    const scopes = taskReads.map(value => new URL(value, "http://localhost:3000").searchParams);
+    expect(scopes.filter(scope => scope.get("id") === `in.(${target},${f.prefix}-epic,${f.initiativeId})`)).toHaveLength(1);
+    expect(scopes.filter(scope => scope.get("parent_task_id") === `eq.${target}`)).toHaveLength(1);
+    return { item: model.item, ancestors: model.ancestors, content: [...content].sort() };
+  };
   const counts = async () => (await f.db.query(`select
     (select count(*)::integer from public.tasks where id like $2||'-shape-history-%') as history,
     (select count(*)::integer from public.tasks where parent_task_id=$1) as children,
     (select count(*)::integer from public.task_relationship_edges where task_id=$1 or related_task_id=$1) as fanout`, [target, f.prefix])).rows[0];
-  const before = await canonical(); expect(await counts()).toEqual({ history: 0, children: 0, fanout: 0 });
+  const before = await canonical(); const childrenBefore = await independentChildren([], noChildProgress); expect(await counts()).toEqual({ history: 0, children: 0, fanout: 0 });
   await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority)
     select $1||'-shape-history-'||n,'findmydoc-founder-execution','Unrelated completed history','epic','Erledigt','P2' from generate_series(1,40) n`, [f.prefix]);
-  expect(await counts()).toEqual({ history: 40, children: 0, fanout: 0 }); expect(await canonical()).toEqual(before);
+  expect(await counts()).toEqual({ history: 40, children: 0, fanout: 0 }); expect(await canonical()).toEqual(before); expect(await independentChildren([], noChildProgress)).toEqual(childrenBefore);
   const types = async () => (await f.db.query("select task_type,count(*)::integer as total from public.tasks where id like $1||'%' group by task_type order by task_type", [f.prefix])).rows;
   const fixedTypes = await types();
   await f.db.query("update public.tasks set parent_task_id=$1 where id=any($2)", [target, children]);
-  expect(await counts()).toEqual({ history: 40, children: 2, fanout: 0 }); expect(await types()).toEqual(fixedTypes); expect(await canonical()).toEqual(before);
+  expect(await counts()).toEqual({ history: 40, children: 2, fanout: 0 }); expect(await types()).toEqual(fixedTypes); expect(await canonical()).toEqual(before); expect(await independentChildren(children, twoChildProgress)).toEqual(childrenBefore);
   await f.db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type) values($1,$2,'blocked_by'),($3,$1,'blocked_by')", [target, endpoints[0], endpoints[1]]);
-  expect(await counts()).toEqual({ history: 40, children: 2, fanout: 2 }); expect(await types()).toEqual(fixedTypes); expect(await canonical()).toEqual(before);
+  expect(await counts()).toEqual({ history: 40, children: 2, fanout: 2 }); expect(await types()).toEqual(fixedTypes); expect(await canonical()).toEqual(before); expect(await independentChildren(children, twoChildProgress)).toEqual(childrenBefore);
 }));
