@@ -28,8 +28,8 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
   const parent = { ...base.item, id: `child-list-${level}`, title: `Parent ${level}`, detailAvailability: "summary" as const };
   const childType = level === "epic" ? "initiative" : level === "initiative" ? "deliverable" : "sub_issue";
   const children = [
-    taskDetailStoryTask({ id: "on-demand-child", taskType: childType, parentTaskId: parent.id, title: "On-demand child", status: "Offen", assigneeId: itemPageProfile.id }),
-    taskDetailStoryTask({ id: "finished-child", taskType: childType, parentTaskId: parent.id, title: "Finished child", status: "Erledigt", order: 2 }),
+    taskDetailStoryTask({ id: "on-demand-child", taskType: childType, parentTaskId: parent.id, title: "On-demand child", status: "Offen", assigneeId: itemPageProfile.id, ...(parallelOpen ? { updatedAt: "2026-11-02T12:00:00.000Z" } : {}) }),
+    taskDetailStoryTask({ id: "finished-child", taskType: childType, parentTaskId: parent.id, title: "Finished child", status: "Erledigt", order: 2, ...(parallelOpen ? { updatedAt: "2026-11-02T12:00:00.000Z" } : {}) }),
   ];
   const query = normalizePlanningBoardQuery({ level });
   const columns = Object.fromEntries([...taskStatuses, "Pausiert"].map(status => [status, { total: status === parent.status ? 1 : 0, loaded: status === parent.status ? 1 : 0, completeness: "complete", continuation: null } satisfies PlanningBoardColumn])) as Record<TaskStatus, PlanningBoardColumn>;
