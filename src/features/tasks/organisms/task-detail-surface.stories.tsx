@@ -5,9 +5,11 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import type { Profile } from "@/lib/types";
+import type { Profile, Task } from "@/lib/types";
 import { allowedGitHubRepositories } from "@/lib/github-repositories";
 import { TaskDetailSurface } from "./task-detail-surface";
+import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
+import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-evidence";
 
 const profiles: Profile[] = [
   { id: "sebastian", name: "Sebastian Schütze", platformRole: "ceo", orgRole: "CEO", githubLogin: "SebastianSchuetze", weeklyCapacity: 40 },
@@ -756,4 +758,148 @@ export const ChildOpeningControls: Story = {
 export const PanelChildOpeningControls: Story = {
   ...ChildOpeningControls,
   args: { ...ChildOpeningControls.args, surface: "modal" },
+};
+
+
+const unknownReviewParent = { ...evidenceParent, status: "Offen" as const, reviewStatus: "not_requested" as const, reviewOwnerProfileId: "volkan", updatedAt: "2026-11-02T12:00:00.000Z" };
+const unknownReviewChild = taskDetailStoryTask({ id: "unknown-review-child", taskType: "sub_issue", parentTaskId: unknownReviewParent.id, detailAvailability: "summary" });
+Reflect.deleteProperty(unknownReviewChild, "evidenceLinks"); Reflect.deleteProperty(unknownReviewChild, "linkedPullRequests");
+const rejectedReviewMessage = "Review-Anfrage wurde serverseitig abgelehnt.";
+let releaseUnknownReview: (() => Promise<void>) | undefined;
+
+function UnknownReviewHarness({ held = false, initialError = "", ...args }: React.ComponentProps<typeof TaskDetailSurface> & { held?: boolean; initialError?: string }) {
+  const [current, setCurrent] = useState(args.task);
+  const [saveError, setSaveError] = useState(initialError);
+  const [calls, setCalls] = useState(0);
+  const apply = (result: TaskUpdateResult, subject: string) => {
+    setSaveError(result.ok ? "" : result.error);
+    if (result.ok) setCurrent(value => value.id === subject ? { ...value, ...result.task } : value);
+    return result;
+  };
+  return <>
+    <output aria-label="Review command calls">{calls}</output>
+    <output aria-label="Review task status">{current.status}</output>
+    <button type="button" onClick={() => setCurrent(taskDetailStoryTask({ ...unknownReviewParent, id: "other-review-task", title: "Neu ausgewähltes Deliverable" }))}>Anderes Deliverable öffnen</button>
+    <TaskDetailSurface {...args} task={current} error={saveError}
+      subIssues={current.id === args.task.id ? args.subIssues : []}
+      allTasks={[current, ...args.subIssues]}
+      onUpdate={(patch, options) => {
+        setCalls(value => value + 1);
+        const subject = current.id;
+        const result = options ? args.onUpdate(patch, options) : args.onUpdate(patch);
+        if (!result) return;
+        if (held) return new Promise<TaskUpdateResult>(resolve => { releaseUnknownReview = async () => { resolve(apply(await result, subject)); }; });
+        return result.then(outcome => apply(outcome, subject));
+      }}
+      onReopenReview={(subject, submission) => {
+        setCalls(value => value + 1);
+        const applyReopen = (accepted: boolean) => {
+          setSaveError(accepted ? "" : rejectedReviewMessage);
+          if (accepted) setCurrent(value => value.id === subject.id ? { ...value, status: "Review", reviewStatus: "requested" } : value);
+          return accepted;
+        };
+        const result = args.onReopenReview(subject, submission);
+        if (typeof result === "boolean") return applyReopen(result);
+        if (result) return result.then(applyReopen);
+      }}
+    />
+  </>;
+}
+const unknownReviewArgs = { task: unknownReviewParent, subIssues: [unknownReviewChild], allTasks: [unknownReviewParent, unknownReviewChild], comments: [], activities: [] };
+async function requestUnknownReview(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement), page = within(canvasElement.ownerDocument.body);
+  await expect(canvas.getByText("Der aktuelle Stand der Nachweise aus Sub-Issues ist noch nicht vollständig bestätigt.")).toBeVisible();
+  await expect(canvas.queryByLabelText("Nachweise aus Sub-Issues: 0")).not.toBeInTheDocument();
+  await userEvent.click(canvas.getByRole("combobox", { name: "Status ändern" }));
+  await userEvent.click(page.getByRole("option", { name: /^Review$/ }));
+  return { canvas, page };
+}
+
+export const UnknownReviewUsesTheAuthoritativeServerCommand: Story = {
+  args: { ...unknownReviewArgs, onUpdate: fn(async (patch: Partial<Task>) => ({ ok: true as const, task: { ...patch, status: "Review" as const, reviewStatus: "requested" as const } })) },
+  render: args => <UnknownReviewHarness {...args} />,
+  play: async ({ canvasElement, args }) => {
+    const { canvas, page } = await requestUnknownReview(canvasElement);
+    await waitFor(() => expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Review"));
+    await expect(args.onUpdate).toHaveBeenCalledWith({ status: "Review" });
+    await expect(canvas.getByLabelText("Review command calls")).toHaveTextContent("1");
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
+  },
+};
+
+export const UnknownReviewRejectKeepsStatusAndOffersEvidenceRetry: Story = {
+  args: { ...unknownReviewArgs, onUpdate: fn(async (patch: Partial<Task>) => patch.reviewEvidenceExceptionNote
+    ? { ok: true as const, task: { ...patch, status: "Review" as const, reviewStatus: "requested" as const } }
+    : { ok: false as const, error: rejectedReviewMessage, kind: "rejected" as const }) },
+  render: args => <UnknownReviewHarness {...args} />,
+  play: async ({ canvasElement, args }) => {
+    const { canvas, page } = await requestUnknownReview(canvasElement);
+    const capture = await canvas.findByRole("button", { name: "Nachweis ergänzen" });
+    await expect(canvas.getByRole("alert")).toHaveTextContent(rejectedReviewMessage);
+    await expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Offen");
+    await expect(canvas.getByRole("combobox", { name: "Status ändern" })).toHaveTextContent("Offen");
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+    await userEvent.click(capture);
+    await expect(page.getByRole("heading", { name: "Nachweis vor Review" })).toBeVisible();
+    await expect(page.getByText("Für die Review-Anfrage braucht dieses Deliverable einen Nachweis.")).toBeVisible();
+    await expect(page.queryByText(/Nachweis fehlt/)).not.toBeInTheDocument();
+    await userEvent.type(page.getByRole("textbox", { name: /Begründung/ }), "Das Ergebnis wurde gemeinsam nachvollziehbar abgenommen.");
+    await userEvent.click(page.getByRole("button", { name: "In Review verschieben" }));
+    await waitFor(() => expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Review"));
+    await expect(canvas.getByLabelText("Review command calls")).toHaveTextContent("2");
+    await expect(args.onUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ status: "Review", reviewStatus: "requested", reviewEvidenceExceptionNote: "Das Ergebnis wurde gemeinsam nachvollziehbar abgenommen." }));
+    await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
+  },
+};
+
+export const LateUnknownReviewRejectCannotOfferEvidenceForAnotherTask: Story = {
+  args: { ...unknownReviewArgs, onUpdate: fn(async () => ({ ok: false as const, error: rejectedReviewMessage, kind: "rejected" as const })) },
+  render: args => <UnknownReviewHarness {...args} held />,
+  play: async ({ canvasElement, args }) => {
+    releaseUnknownReview = undefined;
+    const { canvas, page } = await requestUnknownReview(canvasElement);
+    await waitFor(() => expect(releaseUnknownReview).toBeDefined());
+    await expect(args.onUpdate).toHaveBeenCalledTimes(1);
+    await userEvent.click(canvas.getByRole("button", { name: "Anderes Deliverable öffnen" }));
+    await expect(canvas.getByRole("heading", { name: "Neu ausgewähltes Deliverable", level: 1 })).toBeVisible();
+    await releaseUnknownReview?.();
+    await waitFor(() => expect(canvas.getByRole("alert")).toHaveTextContent(rejectedReviewMessage));
+    await expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Offen");
+    await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+  },
+};
+
+export const UnknownReopenRejectUsesTheExistingEvidenceDialog: Story = {
+  args: { ...unknownReviewArgs, task: { ...unknownReviewParent, status: "Erledigt", reviewStatus: "accepted" },
+    onReopenReview: fn((_subject: Task, submission?: ReviewEvidenceSubmission) => Boolean(submission?.evidenceExceptionNote)) },
+  render: args => <UnknownReviewHarness {...args} />,
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement), page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole("button", { name: "Review wieder öffnen" }));
+    const capture = await canvas.findByRole("button", { name: "Nachweis ergänzen" });
+    await expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Erledigt");
+    await expect(args.onReopenReview).toHaveBeenCalledTimes(1);
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+    await userEvent.click(capture);
+    await userEvent.type(page.getByRole("textbox", { name: /Begründung/ }), "Ergebnis und erneute Prüfung wurden dokumentiert.");
+    await userEvent.click(page.getByRole("button", { name: "In Review verschieben" }));
+    await waitFor(() => expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Review"));
+    await expect(args.onReopenReview).toHaveBeenCalledTimes(2);
+    await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
+  },
+};
+
+export const UnknownVoidResultIsNotARejectedReview: Story = {
+  args: { ...unknownReviewArgs, onUpdate: fn() },
+  render: args => <UnknownReviewHarness {...args} initialError="Unveränderte frühere Meldung." />,
+  play: async ({ canvasElement, args }) => {
+    const { canvas, page } = await requestUnknownReview(canvasElement);
+    await expect(args.onUpdate).toHaveBeenCalledWith({ status: "Review" });
+    await expect(canvas.getByLabelText("Review task status")).toHaveTextContent("Offen");
+    await expect(canvas.getByRole("alert")).toHaveTextContent("Unveränderte frühere Meldung.");
+    await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
+    await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+  },
 };

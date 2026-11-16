@@ -257,7 +257,9 @@ function HydratedTaskDetailSurface({
   const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
   const [evidenceRetry, setEvidenceRetry] = useState<{ taskId: string; scope: object; intent: "request" | "reopen" } | null>(null);
-  const evidenceView = useMemo(() => ({}), [task.id, task.updatedAt, task.detailAvailability, currentProfile?.id, currentProfile?.platformRole, detailOwner]);
+  const evidenceView = useMemo(() => ({ taskId: task.id, version: task.updatedAt, availability: task.detailAvailability,
+    actorId: currentProfile?.id, actorRole: currentProfile?.platformRole, hasOwner: Boolean(detailOwner) }),
+  [task.id, task.updatedAt, task.detailAvailability, currentProfile?.id, currentProfile?.platformRole, detailOwner]);
   const activeEvidenceView = useRef<object | null>(null);
   const evidenceAttempt = useRef(0);
   useEffect(() => {

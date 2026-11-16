@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import { taskHasValidReviewEvidence } from "@/features/reviews/model/review-evidence";
+import { taskHasValidReviewEvidence, taskReviewEvidenceStatus } from "@/features/reviews/model/review-evidence";
 
 it("groups unique evidence by direct active Sub-Issue and retains every source", () => {
   const parent = taskDetailStoryTask({ id: "parent" });
@@ -73,4 +73,16 @@ it("evidence availability keeps current positive evidence while other direct chi
   expect(summary).toMatchObject({ count: null, coverage: "partial", knownCount: 1 });
   expect(summary.groups[0].entries[0].url).toBe("https://example.com/current-proof");
   expect(taskHasValidReviewEvidence(parent, [known, compact])).toBe(true);
+});
+
+
+it("review evidence status separates current positive, confirmed absence and unknown supporting data", () => {
+  const parent = taskDetailStoryTask({ id: "review-state-parent" });
+  const compact = taskDetailStoryTask({ id: "review-state-child", taskType: "sub_issue", parentTaskId: parent.id, detailAvailability: "summary" });
+  Reflect.deleteProperty(compact, "evidenceLinks"); Reflect.deleteProperty(compact, "linkedPullRequests");
+  expect(taskReviewEvidenceStatus(parent, [])).toBe("absent");
+  expect(taskReviewEvidenceStatus(parent, [], { membershipComplete: false })).toBe("unknown");
+  expect(taskReviewEvidenceStatus(parent, [compact])).toBe("unknown");
+  expect(taskReviewEvidenceStatus({ ...parent, evidenceLinks: ["https://example.com/current-root"] }, [compact])).toBe("present");
+  expect(taskReviewEvidenceStatus({ ...parent, detailAvailability: "stale", evidenceLinks: ["https://example.com/retained-root"] }, [compact])).toBe("unknown");
 });

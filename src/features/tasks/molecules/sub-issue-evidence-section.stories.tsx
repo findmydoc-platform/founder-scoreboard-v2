@@ -56,3 +56,20 @@ export const Empty: Story = {
     await expect(within(canvasElement).queryByText("Nachweise aus Sub-Issues")).not.toBeInTheDocument();
   },
 };
+
+
+export const CurrentAndRetainedEvidenceStayDistinct: Story = {
+  args: { count: null, coverage: "partial", knownCount: 1,
+    groups: [{ ...summary.groups[0], entries: [summary.groups[0].entries[0]] }], retainedGroups: [summary.groups[1]] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Der aktuelle Stand der Nachweise aus Sub-Issues ist noch nicht vollständig bestätigt.")).toBeVisible();
+    const current = canvas.getByLabelText("Nachweise aus Sub-Issues: Mindestens 1");
+    await expect(current).toBeVisible();
+    await expect(canvas.queryByLabelText("Nachweise aus Sub-Issues: 3")).not.toBeInTheDocument();
+    await userEvent.click(current);
+    await expect(canvas.getByText("Kontaktformular anbinden")).toBeVisible();
+    await userEvent.click(canvas.getByText("Zuvor geladene Nachweise – Aktualität unbestätigt"));
+    await expect(canvas.getAllByRole("link").some(link => link.getAttribute("href") === "https://example.com/redirect-test")).toBe(true);
+  },
+};
