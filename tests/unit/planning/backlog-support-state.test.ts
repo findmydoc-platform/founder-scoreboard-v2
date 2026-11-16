@@ -121,3 +121,40 @@ test("a known source replacement prevents a held support reply from publishing o
     expect(owner.planning.backlog().model.controls).toBeUndefined();
   } finally { owner.internal.dispose(); }
 });
+
+test("a fresh support source invalidates older selected membership without clearing retained canonical fields", async () => {
+  const deadline = Date.now() + 60_000;
+  const freshControls = controls(deadline); freshControls.backlogControls = { ...freshControls.backlogControls!, sourceRevision: "support-source-two" };
+  const owner = createPlanningState({ userId, initialData: { ...emptyPlanningShellState, tasks: [selected] }, initialCurrentProfile: actor,
+    initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (Date.now() + 3_600_000) / 1000 }, adapter: {
+      saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async () => selectedFrame(deadline), ...{ readBacklogSupport: async () => freshControls },
+    } });
+  try {
+    const port = owner.planning as typeof owner.planning & SupportPort;
+    expect(await owner.planning.loadBacklogSelection(selectedQuery)).toBe(true);
+    expect(await port.loadBacklogSupport?.(controlsQuery)).toBe(true);
+    expect(owner.planning.backlog()).toMatchObject({ readStatus: "stale", model: { controls: { sourceRevision: "support-source-two" } } });
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.taskDetail(selected.id).task?.note).toBe(selected.note);
+  } finally { owner.internal.dispose(); }
+});
+
+test("an older held membership response cannot replace the source already verified by a newer support read", async () => {
+  const deadline = Date.now() + 60_000, held = deferred<PlanningWorkspaceRead>();
+  const freshControls = controls(deadline); freshControls.backlogControls = { ...freshControls.backlogControls!, sourceRevision: "support-source-two" };
+  const owner = createPlanningState({ userId, initialData: emptyPlanningShellState, initialCurrentProfile: actor,
+    initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (Date.now() + 3_600_000) / 1000 }, adapter: {
+      saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async () => held.promise, ...{ readBacklogSupport: async () => freshControls },
+    } });
+  try {
+    const port = owner.planning as typeof owner.planning & SupportPort;
+    const pending = owner.planning.loadBacklogSelection(selectedQuery);
+    expect(await port.loadBacklogSupport?.(controlsQuery)).toBe(true);
+    held.resolve(selectedFrame(deadline)); expect(await pending).toBe(false);
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.backlog().model.controls?.sourceRevision).toBe("support-source-two");
+    expect(owner.planning.taskDetail(selected.id).task).toBeNull();
+  } finally { owner.internal.dispose(); }
+});
