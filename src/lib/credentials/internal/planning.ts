@@ -1,3 +1,4 @@
+import { loadPlanningBacklogSupport } from "@/features/planning-items/server/planning-backlog-support-read-source";
 import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import { loadPlanningBacklogSelection } from "@/features/planning-items/server/planning-backlog-read-source";
 import "server-only";
@@ -322,15 +323,16 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (result.ok && result.status === "committed") reviewCommitted = true;
       return result;
     },
-    async loadBacklog(query?: BacklogSelectionQuery, options?: { signal?: AbortSignal }) {
+    async loadBacklog(query?: BacklogSelectionQuery | import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }) {
       if (action !== "planning.backlog.read" || await current()) return { status: "forbidden" as const };
       if (!query) return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
       const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
       const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
-      const result = await loadPlanningBacklogSelection(service, { authorized: true, actorProfileId: profile?.id || null,
+      const context = { authorized: true, actorProfileId: profile?.id || null,
         authorityDeadline: readAuthority?.deadline, publicationSource, signal,
         authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
-          .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+          .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") };
+      const result = query.view === "backlog-support" ? await loadPlanningBacklogSupport(service, context, query) : await loadPlanningBacklogSelection(service, context, query);
       try { assertKnown(); } catch { return { status: "forbidden" as const }; }
       return result.status === "ready" && readAuthority ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline) } } : result;
     },

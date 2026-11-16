@@ -237,3 +237,32 @@ For each consumer, record evidence owner, source commit, fixture identity/size, 
 An exception record must name consumer ID or exact dependency edge, violated rule, concrete reason, responsible maintainer, substitute evidence and expiry condition or fixed review date. A verifier exception allows only that edge and includes an accepted example plus a rejected neighboring bypass. There are no blanket directory exemptions or general disable switches. An exception cannot weaken authorization, call partial complete or silently revise another approved guarantee.
 
 Every stage gate remains in specification #641. Stage 0 requires complete accounting, independent expectations and a current isolated stage-1 baseline. Stage 1 requires no immediate redundant complete read after accepted hydration and repeatably shorter entry/return. Stage 2 requires real SQL parity/traversal/totals/off-page evidence and bounded card output as history grows. Stage 3 requires identity/candidate/child/Backlog/Gantt evidence. Stage 4 requires independent areas and complete metrics/counts/release matches. Stage 5 requires complete authorized decisions. Stage 6 requires machine compatibility and final reader retirement. A failed gate stops advancement. Revert only to an already verified compatible authorized path; otherwise retain an explicit stale/unavailable basis.
+
+### Independent Backlog controls and Sprint basis
+
+`GET /api/backlog-data` accepts an explicit `backlog-support` scope with either
+`controls` or `sprints` and a validated local calendar day. These are independent
+read classes, not selected Item membership or a complete workspace. Controls
+contain complete scalar level totals, per-level status choices, assignee labels,
+and Epic/Initiative options. They contain no profile roles or canonical Tasks.
+Sprint support contains at most five open buckets starting at the current Sprint
+(date containment, then active, then planning/review, then first in date order).
+Its planned hours include every approved unfinished Deliverable in each bucket,
+regardless of the selected Item page or filters. Capacity uses only existing
+Sprint commitments when any exist; otherwise it uses the full team capacity.
+Invalid capacity inputs remain unknown.
+
+Each support response carries its own source/scope revision, original authority
+budget and mapped read Actor, with a final user-bound publication check. The
+service-only `planning_backlog_support` RPC has no user-credential execution
+grant. Empty Item or directory arrays in its transport envelope are explicitly
+partial; they do not prove absence or complete supporting context. Legacy and
+selected Item readers retain their separate contracts. The browser Backlog
+consumer is not migrated merely by the existence of these server capabilities.
+
+The shared monotonic Planning source now also covers team-readable Sprint
+commitments. An explicit commitment trigger branch advances it in the same
+transaction for insertions, deletions and changed commitment records; rollback
+preserves the published revision. This conservatively invalidates other readers
+of the shared source. It adds no commitment write permission and changes neither
+Founder self-edit checks nor CEO/Deputy operations.

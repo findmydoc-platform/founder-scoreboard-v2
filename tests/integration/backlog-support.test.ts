@@ -67,3 +67,24 @@ test("a permitted commitment mutation invalidates the published Planning source 
   } finally { await f.db.query("rollback"); }
   expect(await source()).toBe(changed);
 }), 120_000);
+
+test("Backlog metadata preserves mapped read roles and rejects unmapped and direct-user RPC access", () => withPlanningCredentialDatabase(async f => {
+  const { GET } = await importTestModule("src/app/api/backlog-data/route.ts", { "server-only": {} });
+  for (const area of ["controls", "sprints"] as const) {
+    const scope = { view: "backlog-support", area, day: "2026-01-10" };
+    for (const actor of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
+      const response = await GET(f.request(actor, `/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.readActor).toEqual({ profileId: f.actors[actor].profileId, platformRole: actor === "administrator" ? "founder" : actor });
+      expect((body.model.controls || body.model.sprintBasis).coverage).toBe("complete");
+      expect(body.model.items).toEqual([]);
+    }
+    const denied = await GET(f.request("unmapped", `/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(denied.status).toBe(403); expect(await denied.json()).not.toHaveProperty("model");
+    for (const actor of ["founder", "unmapped", "anonymous"] as const) {
+      const response = await f.rpc("planning_backlog_support", { p_actor_profile_id: f.actors.founder.profileId, p_area: area, p_day: scope.day }, actor);
+      expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
+    }
+  }
+}), 120_000);

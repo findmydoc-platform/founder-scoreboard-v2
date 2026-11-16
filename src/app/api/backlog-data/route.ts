@@ -1,3 +1,4 @@
+import { normalizeBacklogSupport } from "@/features/backlog/model/backlog-support";
 import { normalizeBacklogSelection } from "@/features/backlog/model/backlog-selection";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError } from "@/lib/api-response";
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
   let query;
   if (scope !== null) {
     if (scope.length > 16000) return apiError("Ungültige Backlog-Auswahl.", 400);
-    try { query = normalizeBacklogSelection(JSON.parse(scope)); } catch { return apiError("Ungültige Backlog-Auswahl.", 400); }
+    try { const input = JSON.parse(scope); query = normalizeBacklogSelection(input) || normalizeBacklogSupport(input); } catch { return apiError("Ungültige Backlog-Auswahl.", 400); }
     if (!query) return apiError("Ungültige Backlog-Auswahl.", 400);
   }
   const result = await apiContext.planning.loadBacklog(query, { signal: request.signal });
