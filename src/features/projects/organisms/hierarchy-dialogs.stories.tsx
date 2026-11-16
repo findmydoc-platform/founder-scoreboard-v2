@@ -142,7 +142,7 @@ export const OriginalEpicBasisNeedsConsciousResave: Story = { args: { scenario: 
 async function changeParent(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await userEvent.click(canvas.getByRole("combobox", { name: "Epic *" }));
-  await userEvent.click(within(canvasElement.ownerDocument.body).getByRole("option", { name: "Other milestone" }));
+  await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole("option", { name: "Other milestone" }));
   await userEvent.click(canvas.getByRole("button", { name: "Speichern" }));
   return canvas;
 }
