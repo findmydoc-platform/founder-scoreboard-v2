@@ -322,7 +322,7 @@ function DeliverableForm({
         </section>
 
         <UiField>
-          Zusätzlicher Kontext <span className="font-normal text-slate-400">(optional)</span>
+          Zusätzlicher Kontext <span className="font-normal text-slate-500">(optional)</span>
           <TaskMentionTextArea profiles={data.profiles}
             value={draft.description}
             onValueChange={(value) => setDraft((current) => ({ ...current, description: value }))}
