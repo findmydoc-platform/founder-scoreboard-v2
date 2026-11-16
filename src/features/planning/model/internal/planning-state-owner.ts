@@ -1,3 +1,4 @@
+import { taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
 import { createDecisionLogState } from "./decision-log-state";
@@ -332,7 +333,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
 
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
-  const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
+  const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus; coverage?: "complete" | "partial"; progress?: ReturnType<typeof taskChildProgress> }>();
   const scopedDetailIds = new Set<string>();
   const detailReceipts = new Map<string, { taskId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; ids: string[]; deadline: number; validUntil: string | null; sourceRevision: string }>();
   function rememberDetailReceipt(taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority) {
@@ -1119,6 +1120,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       removed: lifecycle.isRemoved({ id: taskId } as Task),
       children: deniedTaskReads.has(taskId) || childList?.readStatus === "forbidden" ? [] : visible.tasks.filter(task => task.parentTaskId === taskId && (childList?.ids.has(task.id) || (childList && (taskConfirmedAt.get(task.id) || 0) > childList.started))),
       childrenReadStatus: childList?.readStatus || "not-loaded",
+      childrenCoverage: !childList ? "not-loaded" : childList.readStatus === "unavailable" ? "failed" : childList.readStatus === "current" ? childList.coverage === "complete" ? childList.ids.size ? "complete" : "complete-empty" : "partial" : childList.readStatus,
+      childProgress: !deniedTaskReads.has(taskId) && childList?.readStatus === "current" ? childList.progress || null : null,
       scopedRead: scopedDetailIds.has(taskId),
       areaReadStatus: { discussion: detailAreaStatuses.get(taskId+":discussion") || "not-loaded", timeline: detailAreaStatuses.get(taskId+":timeline") || "not-loaded", relationships: detailAreaStatuses.get(taskId+":relationships") || "not-loaded" },
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
@@ -1193,6 +1196,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (options?.signal?.aborted || !isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
       const area = options?.area;
       const key = area ? taskId+":"+area : taskId;
+      const acceptedChildren = childLists.get(taskId);
+      if (area === "children" && !options?.refresh && acceptedChildren?.readStatus === "current" && acceptedChildren.coverage === "complete" && detailReceipts.has(key)) return Promise.resolve({ ok: true });
       const includesDiscussion = !area || area === "discussion";
       const includesTimeline = !area || area === "timeline";
       const includesRelationships = !area;
@@ -1204,7 +1209,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const readTaskDetail = adapter.readTaskDetail;
       if (!area || area === "target") detailStatuses.set(taskId, "loading");
       if (area && area !== "target") detailAreaStatuses.set(key, "loading");
-      if (includesChildren) childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
+      if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId), ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
       if (includesRelationships) detailAreaStatuses.set(taskId+":relationships", "loading");
       if (includesDiscussion) commentCreations.beginRead(taskId);
       publish();
@@ -1294,7 +1299,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         if (includesRelationships) blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
-        if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
+        if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current",
+          coverage: result.model.coverage?.children || (!area ? "complete" : "partial"),
+          progress: result.model.childProgress || (!area ? taskChildProgress(result.model.children) : undefined) });
         for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
