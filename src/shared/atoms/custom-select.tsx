@@ -92,14 +92,15 @@ export function CustomSelect({
     closeMenu(true);
   };
 
+  const menuReady = Boolean(menuPosition);
   useEffect(() => {
-    if (!open) return;
+    if (!open || !menuReady) return;
     const frame = requestAnimationFrame(() => {
       if (searchable && document.activeElement === triggerRef.current) searchRef.current?.focus();
       else if (!searchable || document.activeElement !== searchRef.current) optionRefs.current[activeIndex]?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeIndex, open, searchable, triggerRef]);
+  }, [activeIndex, open, searchable, triggerRef, menuReady]);
 
   useEffect(() => {
     if (open && searchable && document.activeElement === document.body) searchRef.current?.focus();
