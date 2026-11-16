@@ -47,7 +47,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     expandedInitiatives,
     filters: requestedFilters,
     filtersAvailable,
-    openTaskPanel,
+    startTaskPanel: openTaskPanel,
     planningLevel: requestedLevel,
     planningParentFilterId: requestedParentId,
     selectedTaskId,
