@@ -182,6 +182,20 @@ export type BacklogOverviewActiveFilter = {
   reset: Partial<BacklogTableFilters>;
 };
 
+export function backlogUsesGlobalRank(filters: BacklogTableFilters) {
+  return filters.level === "deliverable"
+    && filters.sort === "rank"
+    && filters.direction === "asc"
+    && filters.scope === "all"
+    && !filters.query.trim()
+    && filters.status === "Alle"
+    && filters.readiness === "all"
+    && filters.priority === "Alle"
+    && filters.epic === "Alle"
+    && filters.initiative === "Alle"
+    && filters.assignee === "Alle";
+}
+
 export function buildBacklogOverviewViewModel(
   model: BacklogModel,
   filters: BacklogTableFilters,
@@ -206,18 +220,7 @@ export function buildBacklogOverviewViewModel(
       const matchesEpic = filters.level !== "initiative" || filters.epic === "Alle" || task.parentTaskId === filters.epic;
       return matchesQuery && matchesStatus && matchesPriority && matchesAssignee && matchesEpic;
     });
-  const rankEditingEnabled = canManageBacklog
-    && filters.level === "deliverable"
-    && filters.sort === "rank"
-    && filters.direction === "asc"
-    && filters.scope === "all"
-    && !filters.query.trim()
-    && filters.status === "Alle"
-    && filters.readiness === "all"
-    && filters.priority === "Alle"
-    && filters.epic === "Alle"
-    && filters.initiative === "Alle"
-    && filters.assignee === "Alle";
+  const rankEditingEnabled = canManageBacklog && backlogUsesGlobalRank(filters);
   const activeFilters: BacklogOverviewActiveFilter[] = [
     ...(filters.level === "deliverable" && filters.scope !== "all" ? [{
       id: "scope",

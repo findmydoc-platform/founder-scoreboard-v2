@@ -6,7 +6,7 @@ import { sessionAuthority } from "@/features/administrator-access/model/administ
 
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
-import { requestBacklogModel, requestBacklogSelection, requestBacklogSupport } from "@/features/backlog/model/backlog-api-client";
+import { requestBacklogModel, requestBacklogSelection, requestBacklogSupport, requestBacklogRankTarget } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
 import { supportingReadCoverage, supportingOmittedFields } from "./supporting-read-coverage";
 import { hierarchyReadCoverage, hierarchyOmittedFields } from "./hierarchy-read-coverage";
@@ -485,6 +485,14 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
+      async readBacklogRankTarget(query, options) {
+        const { response, body } = await requestBacklogRankTarget(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model?.rankTarget) throw Object.assign(new Error(body?.error || "Backlog-Ziel konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        return { data: backlogModelToPlanningShellState(body.model), readAuthority: body.readAuthority, readActor: body.readActor, backlogRankTarget: body.model.rankTarget,
+          coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+          taskCoverage: "partial", taskOmittedFields: backlogOmittedFields(body.model) };
       },
       async readBacklogSupport(query, options) {
         const { response, body } = await requestBacklogSupport(ownedApiClient, query, options?.signal);

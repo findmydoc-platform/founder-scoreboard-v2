@@ -92,14 +92,16 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   planningInteraction(): Readonly<PlanningInteraction>;
   rememberPlanningInteraction(patch: Partial<PlanningInteraction>): void;
   currentProfile(): import("@/lib/types").AuthenticatedProfile | null;
-  beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
+  beginBacklogOrder(tasks: readonly Task[], options?: { complete?: boolean }): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;
   beginBacklogAssignment(tasks: readonly Task[], sprints: readonly import("@/lib/types").Sprint[], bulk: boolean): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor;
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
+  moveBacklogRelative(source: Task, action: import("@/features/backlog/model/backlog-ordering").BacklogMoveAction, options?: { signal?: AbortSignal }): Promise<import("@/features/backlog/model/backlog-ordering").BacklogOrderResult | null>;
+  loadLegacyBacklog(): Promise<boolean>;
   loadBacklogSupport(query: import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean>;
-  loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal }): Promise<boolean>;
+  loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
   backlog(): { supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;

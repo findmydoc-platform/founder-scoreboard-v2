@@ -1,3 +1,6 @@
+import { backlogUsesGlobalRank } from "@/features/backlog/model/backlog-view-model";
+import { normalizeBacklogRank, type BacklogRankQuery, type BacklogRankTarget } from "@/features/backlog/model/backlog-rank-target";
+import type { BacklogMoveAction, BacklogOrderResult } from "@/features/backlog/model/backlog-ordering";
 import { normalizeBacklogSupport, validBacklogControls, validBacklogBuckets, type BacklogControls, type BacklogSprintBasis, type BacklogSupportQuery } from "@/features/backlog/model/backlog-support";
 import { normalizeBacklogSelection, type BacklogSelection, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import { taskChildProgress } from "@/features/tasks/model/task-card-presentation";
@@ -56,7 +59,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 type PlanningTableResult = import("../planning-table-result").PlanningTableResult;
 
-export type PlanningWorkspaceRead = { backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { backlogRankTarget?: BacklogRankTarget; backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
@@ -97,6 +100,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt>;
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
+  readBacklogRankTarget?: (query: BacklogRankQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readBacklogSupport?: (query: BacklogSupportQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readBacklogSelection?: (query: BacklogSelectionQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
@@ -184,6 +188,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function invalidatePlanningSource(invalidateChildren = true) {
     candidateReads.invalidate();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearBacklogSupport();
+    for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
     if (invalidateChildren) for (const [id, list] of childLists) {
       if (list.readStatus === "current" || list.readStatus === "loading") childLists.set(id, { ...list, readStatus: "stale" });
     }
@@ -268,14 +273,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   type SupportPending = { key: string; result: Promise<boolean>; controller: AbortController; consumers: Set<symbol> };
   const backlogSupport = new Map<BacklogSupportQuery["area"], SupportEntry>();
   const backlogSupportReads = new Map<BacklogSupportQuery["area"], SupportPending>();
-  const backlogSupportSequences = new Map<BacklogSupportQuery["area"], number>();
-  const backlogSupportStatuses = new Map<BacklogSupportQuery["area"], PlanningReadStatus>();
+  type BacklogReadClass = BacklogSupportQuery["area"] | "rank";
+  const backlogSupportSequences = new Map<BacklogReadClass, number>();
+  const backlogSupportStatuses = new Map<BacklogReadClass, PlanningReadStatus>();
   let backlogSourceReceipt: { revision: string; started: number; generation: number; session: string | undefined; epoch: number; actorId: string; actorRole: string } | undefined;
   function clearBacklogSupport() {
     backlogSourceReceipt = undefined;
     for (const read of backlogSupportReads.values()) read.controller.abort();
     backlogSupportReads.clear(); backlogSupport.clear(); backlogSupportSequences.clear(); backlogSupportStatuses.clear();
   }
+  let backlogSelectionQuery: BacklogSelectionQuery | undefined;
+  const relativeBacklogMoves = new Map<string, { result: Promise<BacklogOrderResult | null>; controller: AbortController; consumers: Set<symbol>; writing: boolean }>();
   let selectedBacklog: { selection: BacklogSelection; generation: number; session: string | undefined; epoch: number; deadline: number } | undefined;
   let selectedBacklogRead: { key: string; result: Promise<boolean>; controller: AbortController; consumers: Set<symbol> } | undefined;
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
@@ -1017,6 +1025,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginBacklogAssignment: backlogAssignments.begin,
     backlogAssignments: backlogAssignments.views,
     resumeBacklogAssignment: backlogAssignments.resume,
+    moveBacklogRelative,
+    loadLegacyBacklog() {
+      backlogSelectionQuery = undefined; selectedBacklog = undefined; selectedBacklogRead?.controller.abort();
+      for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
+      return planning.refreshWorkspace("backlog");
+    },
     loadBacklogSupport,
     loadBacklogSelection,
     backlog: () => { const controls = currentBacklogSupport("controls") as BacklogControls | undefined; const sprintBasis = currentBacklogSupport("sprints") as BacklogSprintBasis | undefined; const selection = currentBacklogSelection(); const view = planning.workspace("backlog"); return { supportReadStatus: { controls: backlogSupportStatuses.get("controls") || "not-loaded", sprints: backlogSupportStatuses.get("sprints") || "not-loaded" }, model: { ...(controls ? { controls } : {}), ...(sprintBasis ? { sprintBasis } : {}), ...(selection ? { selection } : {}), revision: selectedBacklog?.selection.sourceRevision || "", coverage: { ...(view.tasks.some(task => taskEffectsPending(task.id)) || backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage), ...(commitments.pending() ? { commitments: "partial" as const } : {}), ...(scoreObjections.scoresUnconfirmed()?{scores:"partial" as const}:{} ) }, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
@@ -1456,6 +1470,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     refreshWorkspace(workspace) {
       if (!isActive()) return Promise.resolve(false);
+      if (workspace === "backlog" && backlogSelectionQuery) return loadBacklogSelection({ ...backlogSelectionQuery, continuation: undefined }, { immediate: true, refresh: true });
       if (workspace === "planning") clearAutomaticRefresh();
       if (workspace === "planning" && queuedQuery) return planning.ensureBoardQuery(queuedQuery.query);
       if (workspace === "planning" && boardRead && boardRead.sequence === acceptedRead.get("planning") && boardRead.sourceEpoch === planningSourceEpoch) return boardRead.result;
@@ -1500,6 +1515,64 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     columnReads.set(column, { key, result });
     void result.finally(() => { if (columnReads.get(column)?.result === result) columnReads.delete(column); }).catch(() => undefined);
     return result;
+  }
+  function moveBacklogRelative(source: Task, action: BacklogMoveAction, options: { signal?: AbortSignal } = {}): Promise<BacklogOrderResult | null> {
+    const selection = currentBacklogSelection(), shown = structuredClone(source);
+    const failure = (phase: BacklogOrderResult["phase"], error: string): BacklogOrderResult => ({ phase, affectedCount: 0, error });
+    if (!selection || !backlogUsesGlobalRank(selection.query.filters) || !selectedBacklog || !actorIdentity || !sessionRevision || options.signal?.aborted)
+      return Promise.resolve(failure("blocked", "Die aktuelle Backlog-Rangfolge muss zuerst geladen werden."));
+    const query = normalizeBacklogRank({ view: "backlog-rank", sourceId: shown.id, sourceUpdatedAt: shown.updatedAt, sourceRevision: selection.sourceRevision, action });
+    if (!query || !adapter.readBacklogRankTarget) return Promise.resolve(failure("rejected", "Backlog-Ziel konnte nicht geladen werden."));
+    if (confirmed.tasks.find(task => task.id === shown.id)?.updatedAt !== shown.updatedAt) return Promise.resolve(failure("conflict", "Quelle oder Ziel wurde zwischenzeitlich geändert. Deine gewünschte Reihenfolge bleibt erhalten."));
+    const key = JSON.stringify(query);
+    let move = relativeBacklogMoves.get(key);
+    if (!move || move.controller.signal.aborted) {
+      const token = beginWorkspaceRead("backlog", undefined, "rank"), controller = new AbortController();
+      const actor = { id: actorIdentity.id, role: actorIdentity.platformRole }, deadline = selectedBacklog.deadline;
+      const bindingCurrent = () => !controller.signal.aborted && readIsCurrent("backlog", token) && actorIdentity?.id === actor.id && actorIdentity.platformRole === actor.role
+        && deadline > (adapter.now?.() ?? Date.now()) && currentBacklogSelection()?.sourceRevision === query.sourceRevision
+        && Boolean(backlogSelectionQuery && backlogUsesGlobalRank(backlogSelectionQuery.filters));
+      const consumers = new Set<symbol>(), entry = { writing: false };
+      const dispatched = adapter.readBacklogRankTarget(query, { signal: controller.signal });
+      let onAbort!: () => void;
+      const aborted = new Promise<null>(resolve => { onAbort = () => resolve(null); controller.signal.addEventListener("abort", onAbort, { once: true }); });
+      const result = Promise.race([dispatched, aborted]).then(async read => {
+        if (!bindingCurrent()) return failure("ended", "Die Backlog-Auswahl ist nicht mehr aktuell.");
+        const target = read?.backlogRankTarget, now = adapter.now?.() ?? Date.now();
+        if (!read || !target || target.sourceId !== shown.id || target.sourceUpdatedAt !== shown.updatedAt || target.sourceRevision !== query.sourceRevision || target.action !== action
+          || !target.scopeRevision || !Number.isFinite(Date.parse(target.observedAt)) || !Number.isFinite(Date.parse(target.validUntil)) || Date.parse(target.validUntil) <= now
+          || read.readAuthority?.userId !== userId || !Number.isFinite(read.readAuthority.deadline) || read.readAuthority.deadline <= now
+          || read.readActor?.profileId !== actor.id || read.readActor.platformRole !== actor.role
+          || typeof target.noop !== "boolean" || target.noop !== (target.targetId === null)
+          || read.data.tasks.length !== (target.noop ? 0 : 1) || !target.noop && (read.data.tasks[0].id !== target.targetId || target.targetId === shown.id
+            || read.data.tasks[0].taskType !== "deliverable" || target.placement !== (action === "top" || action === "up" ? "before" : "after")))
+          return failure("rejected", "Backlog-Ziel konnte nicht verifiziert werden.");
+        if (confirmed.tasks.find(task => task.id === shown.id)?.updatedAt !== shown.updatedAt) return failure("conflict", "Quelle oder Ziel wurde zwischenzeitlich geändert. Deine gewünschte Reihenfolge bleibt erhalten.");
+        if (!acceptBacklogSource(target.sourceRevision, token) || !acceptWorkspaceRead("backlog", read, token) || backlogSupportStatuses.get("rank") !== "current")
+          return failure("conflict", "Die Backlog-Grundlage hat sich geändert. Bitte neu laden.");
+        if (target.noop) return null;
+        const targetTask = confirmed.tasks.find(task => task.id === target.targetId);
+        if (!bindingCurrent() || !targetTask || !target.placement) return failure("ended", "Die Backlog-Auswahl ist nicht mehr aktuell.");
+        entry.writing = true;
+        const outcome = await backlogOrdering.begin([shown, structuredClone(targetTask)], { complete: false, refreshAfterReceipt: false }).move(shown.id, targetTask.id, target.placement);
+        if (outcome.phase === "saved" || outcome.phase === "unconfirmed") {
+          invalidatePlanningSource(false);
+          void planning.refreshWorkspace("backlog");
+        }
+        return outcome;
+      }).catch(error => {
+        if (!bindingCurrent()) return failure("ended", "Die Backlog-Auswahl ist nicht mehr aktuell.");
+        workspaceStatuses.set("backlog", "stale"); publish();
+        return failure(typeof error === "object" && error !== null && "status" in error && error.status === 409 ? "conflict" : "rejected",
+          error instanceof Error ? error.message : "Backlog-Ziel konnte nicht geladen werden.");
+      }).finally(() => { controller.signal.removeEventListener("abort", onAbort); if (relativeBacklogMoves.get(key)?.result === result) relativeBacklogMoves.delete(key); });
+      move = { result, controller, consumers, get writing() { return entry.writing; } }; relativeBacklogMoves.set(key, move);
+    }
+    const lease = move, consumer = Symbol(); lease.consumers.add(consumer); let aborted = false;
+    const release = () => { aborted = true; lease.consumers.delete(consumer); if (!lease.consumers.size && !lease.writing) lease.controller.abort(); };
+    options.signal?.addEventListener("abort", release, { once: true });
+    return lease.result.then(outcome => aborted ? failure("ended", "Die Backlog-Auswahl wurde geschlossen.") : outcome)
+      .finally(() => { options.signal?.removeEventListener("abort", release); lease.consumers.delete(consumer); });
   }
   function acceptBacklogSource(revision: string, token: ReturnType<typeof beginWorkspaceRead>) {
     if (!actorIdentity) return false;
@@ -1598,11 +1671,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     return selectedBacklog.selection;
   }
-  function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal } = {}): Promise<boolean> {
+  function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean } = {}): Promise<boolean> {
     const query = normalizeBacklogSelection(input);
     if (!query || !isActive() || !sessionRevision || !actorIdentity || !adapter.readBacklogSelection || options.signal?.aborted) return Promise.resolve(false);
+    backlogSelectionQuery = query;
     const key = JSON.stringify(query), current = currentBacklogSelection();
-    if (current && JSON.stringify(current.query) === key) return Promise.resolve(true);
+    if (!options.refresh && current && JSON.stringify(current.query) === key) return Promise.resolve(true);
     let pending = selectedBacklogRead;
     if (!pending || pending.key !== key || pending.controller.signal.aborted) {
       pending?.controller.abort();
@@ -2016,7 +2090,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     summaryReads.set(request.token, { result, controller });
     return result;
   }
-  function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput, backlogArea?: BacklogSupportQuery["area"]) {
+  function beginWorkspaceRead(workspace: AppWorkspace, query?: PlanningBoardQueryInput, backlogArea?: BacklogReadClass) {
     const tablePage = query?.view === "table" && tableResult ? { queryKey: tableResult.queryKey, revision: tableResult.revision, baseRead: acceptedRead.get(workspace) } : undefined;
     const page = query?.column && boardResult ? { column: query.column, queryKey: boardResult.queryKey, revision: boardResult.revision, baseRead: acceptedRead.get(workspace), continuation: query.continuation } : undefined;
     const token = {
@@ -2204,7 +2278,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       project: {...sprintRead.data.project,githubProjectOwner:projectRead.project.githubProjectOwner,githubProjectNumber:projectRead.project.githubProjectNumber},
       tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...incoming.filter(task => !known.has(task.id))],
     };
-    if (taskCoverage) {
+    if (taskCoverage && !token.backlogArea) {
       const members = taskCoverage === "complete" ? new Set<string>() : new Set(memberships.get(workspace));
       incoming.forEach(task => members.add(task.id));
       for (const id of protectedIds) if (memberships.get(workspace)?.has(id)) members.add(id);
@@ -2236,6 +2310,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return true;
   }
   function suspendProtected() {
+    backlogSelectionQuery = undefined;
+    for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
     candidateReads.clear();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearBacklogSupport();
     failedQueryDemand = undefined;
@@ -2467,6 +2543,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { clearBacklogSupport(); selectedBacklogRead?.controller.abort(); candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); selectedBacklogRead?.controller.abort(); candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
   } };
 }
