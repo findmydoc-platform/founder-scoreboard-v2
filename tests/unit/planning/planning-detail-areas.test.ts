@@ -98,3 +98,23 @@ test("visible direct children become usable independently without completing tar
     areaReadStatus: { discussion: "not-loaded", timeline: "not-loaded" } });
   expect(planning.taskDetail(child.id).task).toMatchObject({ id: child.id, title: "Open direct child" });
 });
+
+test("compact child refresh retains full target and child draft content without certifying omitted fields", async () => {
+  const child = { ...task, id: "retained-child", taskType: "sub_issue" as const, parentTaskId: task.id, description: "Retained child evidence", updatedAt: "child-before" };
+  const fullTarget = { ...task, description: "Complete editable target" };
+  const childSummary = { id: child.id, title: "New child title", taskType: child.taskType, parentTaskId: task.id, updatedAt: "child-after", detailAvailability: "summary" } as Task;
+  let saves = 0;
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...emptyPlanningShellState, tasks: [fullTarget, child] }, adapter: {
+    readWorkspace: async () => null, saveTask: async () => { saves++; return { task: child }; },
+    readTaskDetail: async (_id, options) => ({ model: options?.area === "children"
+      ? { ...target, item: { ...task, detailAvailability: "summary" }, readArea: "children", children: [childSummary], taskOmittedFields: ["description"], coverage: { children: "complete" } }
+      : { ...target, item: fullTarget }, readAuthority: { userId: "user-a", deadline: target.authorityDeadline! } }),
+  } });
+  await planning.loadTaskDetail(task.id, { area: "target" });
+  const editor = planning.beginTaskEdit(child.id);
+  await planning.loadTaskDetail(task.id, { area: "children" });
+  expect(planning.taskDetail(task.id)).toMatchObject({ readStatus: "current", task: { description: "Complete editable target" } });
+  expect(planning.taskDetail(child.id).task).toMatchObject({ title: "New child title", description: "Retained child evidence", detailAvailability: "stale" });
+  expect(await editor.save({ description: "Unsaved child draft" })).toMatchObject({ ok: false, kind: "versionConflict" });
+  expect(saves).toBe(0);
+});
