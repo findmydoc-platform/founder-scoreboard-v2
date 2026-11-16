@@ -80,3 +80,21 @@ test("an accepted detail retains its original deadline and clears protected fiel
   expect(planning.taskDetail(task.id).task).toBeNull();
   expect(planning.taskDetail(task.id).readStatus).not.toBe("current");
 });
+
+
+test("visible direct children become usable independently without completing target or secondary detail", async () => {
+  const child = { ...task, id: "direct-child", title: "Open direct child", taskType: "sub_issue" as const, parentTaskId: task.id };
+  const model = { ...target, readArea: "children", children: [child] } as unknown as TaskDetailModel;
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...emptyPlanningShellState, tasks: [task] },
+    adapter: { readWorkspace: async () => null, saveTask: async () => ({ task }),
+      readTaskDetail: async (_id, options) => {
+        if (options?.area !== ("children" as string)) throw new Error("Independent child demand required");
+        return { model, readAuthority: { userId: "user-a", deadline: model.authorityDeadline! } };
+      } },
+  });
+  const result = await Reflect.apply(planning.loadTaskDetail, planning, [task.id, { area: "children" }]);
+  expect(result).toMatchObject({ ok: true });
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [child], childrenReadStatus: "current", readStatus: "not-loaded",
+    areaReadStatus: { discussion: "not-loaded", timeline: "not-loaded" } });
+  expect(planning.taskDetail(child.id).task).toMatchObject({ id: child.id, title: "Open direct child" });
+});
