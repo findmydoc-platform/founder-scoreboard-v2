@@ -10,7 +10,7 @@ test("independent direct children enumerate above provider limits with complete 
   const firstChild = `${f.prefix}-child-0001`, lastChild = `${f.prefix}-child-1008`;
   await f.db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner)
     values($1,'findmydoc-founder-execution','Synthetic descendant','sub_issue',$2,'Offen','P2',$3)`,
-  [`${f.prefix}-grandchild`, firstChild, f.actors.founder.profileId]);
+  [`${f.prefix}-grandchild`, lastChild, f.actors.founder.profileId]);
   const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
   const read = (id: string, area: string) => GET(f.request("founder", `/api/tasks/${id}/detail-data?area=${area}`), { params: Promise.resolve({ id }) });
   const legacy: Response = await read(f.initiativeId, "complete");
