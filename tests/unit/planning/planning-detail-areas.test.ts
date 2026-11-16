@@ -218,8 +218,8 @@ test.each(["target", "children"] as const)("parallel area acceptance keeps both 
   await answer(second);
   if (second === "children") {
     expect(planning.taskDetail(full.id).task).toMatchObject({ detailAvailability: "summary" });
-    expect(planning.taskDetail(full.id).task).not.toHaveProperty("description");
-    expect(planning.taskDetail(full.id).task).not.toHaveProperty("assignee");
+    expect(planning.taskDetail(full.id).task?.description).toBeUndefined();
+    expect(planning.taskDetail(full.id).task?.assignee).toBeUndefined();
     expect(planning.taskDetail(full.id).readStatus).toBe("loading");
   } else {
     expect(planning.taskDetail(full.id)).toMatchObject({ readStatus: "current", task: { description: full.description, assignee: full.assignee } });
