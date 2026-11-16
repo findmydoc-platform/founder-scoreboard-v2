@@ -11,7 +11,7 @@ const userId = "backlog-support-user";
 const controlsQuery: BacklogSupportQuery = { view: "backlog-support", area: "controls", day: "2026-11-17" };
 const sprintsQuery: BacklogSupportQuery = { ...controlsQuery, area: "sprints" };
 const selectedQuery = normalizeBacklogSelection({ view: "backlog", filters: DEFAULT_BACKLOG_FILTERS, limit: 20 })!;
-const selected = taskDetailStoryTask({ id: "support-selected-row", title: "Selected row", updatedAt: "2026-11-01T12:00:00Z" });
+const selected = taskDetailStoryTask({ id: "support-selected-row", title: "Selected row", note: "Retained canonical note", updatedAt: "2026-11-01T12:00:00Z" });
 type SupportRead = PlanningWorkspaceRead & { backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis };
 type SupportPort = { loadBacklogSupport?(query: BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean> };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
