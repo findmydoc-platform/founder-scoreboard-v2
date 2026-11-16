@@ -4,6 +4,7 @@ export type BacklogReadCoverage = Partial<Record<"items" | "people" | "sprints" 
 
 export type BacklogModel = Readonly<{
   revision: string;
+  rankTarget?: import("./backlog-rank-target").BacklogRankTarget;
   controls?: import("./backlog-support").BacklogControls;
   sprintBasis?: import("./backlog-support").BacklogSprintBasis;
   selection?: import("./backlog-selection").BacklogSelection;

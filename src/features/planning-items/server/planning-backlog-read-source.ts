@@ -51,44 +51,19 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       || typeof selected.source_revision !== "string" || !selected.source_revision || !Number.isFinite(Date.parse(selected.observed_at)) || !Number.isFinite(Date.parse(selected.valid_until))) return { status: "unavailable" };
     if (cursor && (selected.source_revision !== cursor.source || selected.observed_at !== cursor.observedAt || selected.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
     const selectedIds: string[] = [...selected.item_ids, ...selected.context_ids];
-    const taskRows: DbTask[] = [];
-    for (let from = 0; from < selectedIds.length; from += 50) {
-      const read = supabase.from("active_tasks").select(taskRowSelect).eq("project_id", "findmydoc-founder-execution").in("id", selectedIds.slice(from, from + 50)).returns<DbTask[]>();
-      const rows = await (context.signal ? read.abortSignal(context.signal) : read);
-      if (rows.error || !rows.data) return { status: "unavailable" };
-      taskRows.push(...rows.data);
-    }
-    const rowById = new Map(taskRows.map(row => [row.id, row]));
-    if (taskRows.length !== selectedIds.length || rowById.size !== selectedIds.length || selectedIds.some((id: string) => !rowById.has(id))
-      || selected.item_ids.some((id: string) => rowById.get(id)?.task_type !== "deliverable")) return { status: "unavailable" };
-    const peopleIds = [...new Set(taskRows.flatMap(row => [row.assignee, row.owner, row.created_by]).filter((id): id is string => Boolean(id)))];
-    const sprintIds = [...new Set(taskRows.map(row => row.sprint_id).filter((id): id is string => Boolean(id)))];
-    const peopleRows: DbProfile[] = [], sprintRows: DbSprint[] = [];
-    for (let from = 0; from < peopleIds.length; from += 50) {
-      const read = supabase.from("profiles").select(profileSelect).in("id", peopleIds.slice(from, from + 50)).returns<DbProfile[]>();
-      const rows = await (context.signal ? read.abortSignal(context.signal) : read);
-      if (rows.error) return { status: "unavailable" };
-      peopleRows.push(...rows.data || []);
-    }
-    for (let from = 0; from < sprintIds.length; from += 50) {
-      const read = supabase.from("sprints").select(sprintSelect).in("id", sprintIds.slice(from, from + 50)).returns<DbSprint[]>();
-      const rows = await (context.signal ? read.abortSignal(context.signal) : read);
-      if (rows.error) return { status: "unavailable" };
-      sprintRows.push(...rows.data || []);
-    }
+    const hydrated = await hydrateBacklogItems(supabase, context, selectedIds);
+    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== "deliverable")) return { status: "unavailable" };
     const publication = await context.publicationSource.read(context.signal);
     if (publication.status !== "ready") return { status: publication.status };
     if (context.signal?.aborted) return { status: "unavailable" };
     if (deadline <= Date.now()) return { status: "forbidden" };
     if (publication.revision !== selected.source_revision || Date.parse(selected.valid_until) <= Date.now()) return { status: "staleContinuation" };
-    const people = peopleRows.map(mapProfile);
-    const items = selectedIds.map(id => compactPlanningCard(mapTaskRow(rowById.get(id)!, people)));
     const offset = (cursor?.offset ?? 0) + selected.item_ids.length;
     const next = { offset, source: selected.source_revision, observedAt: selected.observed_at, validUntil: selected.valid_until, deadline };
     return { status: "ready", authorityDeadline: deadline, model: {
       revision: selected.source_revision, taskOmittedFields: planningCardOmittedFields,
       coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial", strategies: "partial", raci: "partial", links: "partial" },
-      items, people, sprints: sprintRows.map(mapSprint), commitments: [],
+      ...hydrated, commitments: [],
       selection: { query, itemIds: selected.item_ids, contextIds: selected.context_ids, rankById: selected.rank_by_id, total: selected.total,
         coverage: offset >= selected.total ? "complete" : "partial", continuation: offset >= selected.total ? null : Buffer.from(JSON.stringify({ ...next, binding: signature(context, query, next) })).toString("base64url"),
         sourceRevision: selected.source_revision, observedAt: selected.observed_at, validUntil: selected.valid_until,
@@ -96,4 +71,33 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       },
     } };
   } catch { return { status: "unavailable" }; }
+}
+
+export async function hydrateBacklogItems(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selectedIds: string[]) {
+  const taskRows: DbTask[] = [];
+  for (let from = 0; from < selectedIds.length; from += 50) {
+    const read = supabase.from("active_tasks").select(taskRowSelect).eq("project_id", "findmydoc-founder-execution").in("id", selectedIds.slice(from, from + 50)).returns<DbTask[]>();
+    const rows = await (context.signal ? read.abortSignal(context.signal) : read);
+    if (rows.error || !rows.data) return null;
+    taskRows.push(...rows.data);
+  }
+  const rowById = new Map(taskRows.map(row => [row.id, row]));
+  if (taskRows.length !== selectedIds.length || rowById.size !== selectedIds.length || selectedIds.some((id: string) => !rowById.has(id))) return null;
+  const peopleIds = [...new Set(taskRows.flatMap(row => [row.assignee, row.owner, row.created_by]).filter((id): id is string => Boolean(id)))];
+  const sprintIds = [...new Set(taskRows.map(row => row.sprint_id).filter((id): id is string => Boolean(id)))];
+  const peopleRows: DbProfile[] = [], sprintRows: DbSprint[] = [];
+  for (let from = 0; from < peopleIds.length; from += 50) {
+    const read = supabase.from("profiles").select(profileSelect).in("id", peopleIds.slice(from, from + 50)).returns<DbProfile[]>();
+    const rows = await (context.signal ? read.abortSignal(context.signal) : read);
+    if (rows.error) return null;
+    peopleRows.push(...rows.data || []);
+  }
+  for (let from = 0; from < sprintIds.length; from += 50) {
+    const read = supabase.from("sprints").select(sprintSelect).in("id", sprintIds.slice(from, from + 50)).returns<DbSprint[]>();
+    const rows = await (context.signal ? read.abortSignal(context.signal) : read);
+    if (rows.error) return null;
+    sprintRows.push(...rows.data || []);
+  }
+  const people = peopleRows.map(mapProfile);
+  return { items: selectedIds.map(id => compactPlanningCard(mapTaskRow(rowById.get(id)!, people))), people, sprints: sprintRows.map(mapSprint) };
 }

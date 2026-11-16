@@ -266,3 +266,23 @@ transaction for insertions, deletions and changed commitment records; rollback
 preserves the published revision. This conservatively invalidates other readers
 of the shared source. It adds no commitment write permission and changes neither
 Founder self-edit checks nor CEO/Deputy operations.
+
+### Explicit relative Backlog rank targets
+
+An explicit `backlog-rank` read resolves `up`, `down`, `top` or `bottom` against
+the complete unfinished Deliverable class. It shares the existing global rank
+order (numeric `sort_order`, then German ID comparison), including unapproved
+Deliverables. Completed Items are excluded. The existing UI permits these
+commands only in the unfiltered ascending global rank view; this is not a
+filtered-page ordering operation. Boundary actions return a no-op and no Task.
+Other actions hydrate at most one known target through the same bounded
+Backlog context hydrator used by selected pages.
+
+The request fixes the displayed source identity/version and the accepted source
+revision. Changed source data produces a conflict rather than substituting a
+fresh source version. A mapped Actor, service-only RPC execution, final
+user-bound publication and the original request deadline remain required.
+The response proves the relative target, not full Item membership or a complete
+optimistic renumbering basis. Existing writes and source/target version checks
+remain unchanged. Consumer adoption must not derive global targets or complete
+pending rank values from the selected page.

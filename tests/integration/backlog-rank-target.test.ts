@@ -49,3 +49,25 @@ test("explicit Backlog rank actions resolve global neighbors and boundaries befo
   expect((await read(20, "bottom", await version())).status).toBe(409);
   expect(freshSource).not.toBe(sourceRevision);
 }), 120_000);
+
+test("rank target reads preserve mapped readers and deny unmapped or direct user RPC calls", () => withPlanningCredentialDatabase(async f => {
+  const id = `${f.prefix}-rank-source`;
+  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,approval_status,owner)
+    values($1,'findmydoc-founder-execution','Single rank source','deliverable',$2,'Offen','P2','approved',$3)`, [id, f.initiativeId, f.actors.founder.profileId]);
+  const row = (await f.db.query("select updated_at::text as version,public.planning_source_version() as revision from public.tasks where id=$1", [id])).rows[0];
+  const scope = { view: "backlog-rank", sourceId: id, sourceUpdatedAt: row.version, sourceRevision: row.revision, action: "top" };
+  const { GET } = await importTestModule("src/app/api/backlog-data/route.ts", { "server-only": {} });
+  for (const actor of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
+    const response = await GET(f.request(actor, `/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(response.status).toBe(200); const body = await response.json();
+    expect(body.model.rankTarget).toMatchObject({ sourceId: id, targetId: null, noop: true });
+    expect(body.readActor).toEqual({ profileId: f.actors[actor].profileId, platformRole: actor === "administrator" ? "founder" : actor });
+  }
+  const denied = await GET(f.request("unmapped", `/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+  expect(denied.status).toBe(403); expect(await denied.json()).not.toHaveProperty("model");
+  for (const actor of ["founder", "unmapped", "anonymous"] as const) {
+    const response = await f.rpc("planning_backlog_rank_target", { p_actor_profile_id: f.actors.founder.profileId, p_source_id: id,
+      p_source_updated_at: row.version, p_source_revision: row.revision, p_action: "top" }, actor);
+    expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
+  }
+}), 120_000);
