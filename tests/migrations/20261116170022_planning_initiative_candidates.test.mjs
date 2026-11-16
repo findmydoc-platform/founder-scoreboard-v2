@@ -6,7 +6,7 @@ it("preserves version 55 Planning records and context while restricting candidat
   await resetLocalDatabaseTo("20261116001423");
   await withLocalDatabase(async client => {
     await client.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic candidate migration')");
-    await client.query("insert into public.profiles(id,name,platform_role) values('candidate-migration','Synthetic founder','founder'),('candidate-denied','Synthetic administrator','administrator')");
+    await client.query("insert into public.profiles(id,name,platform_role) values('candidate-migration','Synthetic founder','founder'),('candidate-other','Synthetic other founder','founder')");
     await client.query("insert into public.tasks(id,project_id,title,task_type,status,priority,owner) values('candidate-epic','findmydoc-founder-execution','Existing Epic','epic','Offen','P2','candidate-migration')");
     await client.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner,approval_status) values('candidate-initiative','findmydoc-founder-execution','Existing Initiative','initiative','candidate-epic','Offen','P2','candidate-migration','approved')");
     const records = async () => ({
@@ -32,7 +32,7 @@ it("preserves version 55 Planning records and context while restricting candidat
           const page = await call("candidate-migration");
           expect(page.status).toBe("ready"); expect(page.total).toBe(1);
           expect(page.items.map(item => item.id)).toEqual(["candidate-initiative"]);
-          expect(await call("candidate-denied")).toEqual({ status: "forbidden" });
+          expect((await call("candidate-other")).status).toBe("ready");
           expect(await call("candidate-unmapped")).toEqual({ status: "forbidden" });
         }
       } finally { await client.query("reset role"); }

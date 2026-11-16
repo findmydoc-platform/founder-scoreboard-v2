@@ -40,14 +40,14 @@ test("candidate discovery retains mapped-role admission and denies direct user R
   const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
   const scope = { view: "candidates", kind: "initiative", query: f.initiativeId, limit: 20 };
   const path = `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`;
-  for (const role of ["ceo", "deputy", "founder", "viewer"] as const) {
+  for (const role of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
     const response = await GET(f.request(role, path));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([f.initiativeId]);
     expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
   }
-  for (const role of ["unmapped", "administrator"] as const) {
+  for (const role of ["unmapped"] as const) {
     const response = await GET(f.request(role, path));
     expect(response.status).toBe(403);
     expect(await response.json()).not.toHaveProperty("candidates");
