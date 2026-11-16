@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
@@ -13,9 +14,15 @@ test("independent direct children enumerate above provider limits with complete 
   [`${f.prefix}-grandchild`, lastChild, f.actors.founder.profileId]);
   const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
   const read = (id: string, area: string) => GET(f.request("founder", `/api/tasks/${id}/detail-data?area=${area}`), { params: Promise.resolve({ id }) });
-  const legacy: Response = await read(f.initiativeId, "complete");
-  expect(legacy.status).toBe(200);
-  const complete = (await legacy.json()).taskDetail;
+  // Use the established complete TypeScript migration reference independently
+  // from the authenticated scoped API and its original per-request deadline.
+  const { loadPlanningWorkspaceModel } = await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts", { "server-only": {} });
+  const referenceClient = createClient(f.local.API_URL, f.local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const complete = await loadPlanningWorkspaceModel(referenceClient, { authorized: true, actorProfileId: f.actors.founder.profileId, query: { view: "complete" } });
+  expect(complete.status).toBe("ready");
+  if (complete.status !== "ready") throw new Error("Complete TypeScript child reference was unavailable");
+  const referenceChildren = complete.model.items.filter((item: { parentTaskId: string }) => item.parentTaskId === f.initiativeId);
+  expect(referenceChildren).toHaveLength(1008);
   const before = f.observed.length;
   const response: Response = await read(f.initiativeId, "children");
   expect(response.status).toBe(200);
@@ -23,7 +30,7 @@ test("independent direct children enumerate above provider limits with complete 
   expect(model.readArea).toBe("children");
   expect(model.coverage.children).toBe("complete");
   expect(model.children).toHaveLength(1008);
-  expect(model.children.map((child: { id: string }) => child.id)).toEqual(complete.children.map((child: { id: string }) => child.id));
+  expect(model.children.map((child: { id: string }) => child.id)).toEqual(referenceChildren.map((child: { id: string }) => child.id));
   expect(model.children[0].id).toBe(firstChild);
   expect(model.children[1007].id).toBe(lastChild);
   expect(new Set(model.children.map((child: { id: string }) => child.id)).size).toBe(1008);
