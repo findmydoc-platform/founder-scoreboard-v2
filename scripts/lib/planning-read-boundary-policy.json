@@ -8,7 +8,8 @@
     "src/features/planning-items/server/planning-detail-source.ts",
     "src/features/planning-items/server/planning-children-read-source.ts",
     "src/features/planning-items/server/planning-item-candidates-read-source.ts",
-    "src/features/planning-items/server/planning-backlog-read-source.ts"
+    "src/features/planning-items/server/planning-backlog-read-source.ts",
+    "src/features/planning-items/server/planning-backlog-support-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -157,6 +158,13 @@
       "reason": "The fixed credential-bound Backlog scope selects unfinished Deliverable membership, full-scope ranks, existing filters/order and required ancestor identities before page limits. Known-ID batches hydrate only selected/context records and needed profile/Sprint identities. Source/Actor publication and original deadline remain required. Partial supporting, child, rollup and Sprint decision bases are not certified by a selected page. The no-scope capped Backlog path remains explicitly unmigrated under BACKLOG; it is not a fallback for this query.",
       "evidence": "tests/integration/backlog-selection.test.ts; tests/migrations/20261116222312_planning_backlog_selection.test.mjs",
       "expiresWhen": "Revalidate when selected Backlog scope, field coverage, ordering, context, continuation or authority changes."
+    },
+    "BACKLOG-SUPPORT": {
+      "consumer": "Independent Backlog scalar controls and five Sprint buckets",
+      "owner": "Backlog and Planning Item feature owners",
+      "reason": "The fixed credential-bound service-only RPC returns complete scalar control options or exact five-bucket Sprint aggregates independently of selected Item membership. Full planned hours and commitment-only versus complete-team capacity use the shared transactional source, fresh mapped Actor publication and original deadline. No Task, directory, child or relationship completeness follows from these metadata responses.",
+      "evidence": "tests/integration/backlog-support.test.ts; tests/migrations/20261116225650_planning_backlog_support.test.mjs",
+      "expiresWhen": "Revalidate when scalar population, bucket selection, capacity, planned hours, source dependencies or authority changes."
     }
   },
   "allowedEdges": [
@@ -259,6 +267,11 @@
       "from": "src/features/planning-items/server/planning-backlog-read-source.ts",
       "to": "src/features/planning-items/server/planning-card-summary.ts",
       "contract": "BACKLOG-SELECTED"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-backlog-support-read-source.ts",
+      "contract": "BACKLOG-SUPPORT"
     }
   ],
   "readSites": [
