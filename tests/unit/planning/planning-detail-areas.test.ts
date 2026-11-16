@@ -235,17 +235,18 @@ test.each(["target", "children"] as const)("parallel area acceptance keeps both 
 });
 
 
-test.each(["different-source", "different-version", "missing-version"] as const)("a %s peer cannot release an older target's field protection", async boundary => {
-  const now = Date.now(), version = boundary === "missing-version" ? undefined : "2026-11-16T12:00:00.000Z";
+test.each(["different-source", "different-version", "missing-version", "expired-peer", "unrelated-newer-receipt"] as const)("an incompatible peer (%s) cannot release an older target's field protection", async boundary => {
+  let now = Date.now();
+  const version = boundary === "missing-version" ? undefined : "2026-11-16T12:00:00.000Z";
   const summary = { ...task, updatedAt: version, detailAvailability: "summary" as const };
   const full = { ...summary, detailAvailability: undefined, description: "Older protected canonical content" };
   const common = { observedAt: new Date(now).toISOString(), validUntil: null, readActor: { profileId: actor.id, platformRole: actor.platformRole } };
-  const originalDeadline = now + 45_000;
+  const originalDeadline = now + (boundary === "expired-peer" ? 65_000 : 45_000);
   const canonical: TaskDetailModel = { ...target, ...common, item: full, authorityDeadline: originalDeadline, sourceRevision: "original-peer-source" };
   const childContext: TaskDetailModel = { ...common, revision: "child-peer", readArea: "children", supportingData: "omitted",
     sourceRevision: boundary === "different-source" ? "different-peer-source" : canonical.sourceRevision,
-    authorityDeadline: now + 55_000, item: { ...summary, updatedAt: boundary === "different-version" ? "2026-11-16T12:01:00.000Z" : version },
-    ancestors: [], children: [], relatedItems: [], taskOmittedFields: ["description", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
+    authorityDeadline: now + 55_000, item: { ...summary, ...(boundary === "unrelated-newer-receipt" ? { id: "another-child-scope", taskType: "sub_issue" as const, parentTaskId: task.id } : {}), updatedAt: boundary === "different-version" ? "2026-11-16T12:01:00.000Z" : version },
+    ancestors: boundary === "unrelated-newer-receipt" ? [summary] : [], children: [], relatedItems: [], taskOmittedFields: ["description", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
     childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 },
     discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
   };
@@ -262,9 +263,10 @@ test.each(["different-source", "different-version", "missing-version"] as const)
     },
   });
   const first = planning.loadTaskDetail(task.id, { area: "target" });
-  const second = planning.loadTaskDetail(task.id, { area: "children" });
+  const second = planning.loadTaskDetail(childContext.item.id, { area: "children" });
   answerChildren({ model: childContext, readAuthority: { userId: "user-a", deadline: childContext.authorityDeadline! } });
   expect(await second).toMatchObject({ ok: true });
+  if (boundary === "expired-peer") now = childContext.authorityDeadline! + 1;
   answerTarget({ model: canonical, readAuthority: { userId: "user-a", deadline: originalDeadline } });
   expect(await first).toMatchObject({ ok: true });
   expect(planning.taskDetail(task.id).task?.description).toBeUndefined();
