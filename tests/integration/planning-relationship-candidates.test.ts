@@ -50,7 +50,7 @@ test("Relationship discovery retains all mapped reader roles and denies unmapped
   const invalidSource = await GET(f.request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ ...scope, sourceId: `${f.prefix}-missing-source` }))}`));
   expect(invalidSource.status).toBe(403); expect(await invalidSource.json()).not.toHaveProperty("candidates");
   for (const actor of ["founder", "unmapped", "anonymous"] as const) {
-    const response = await f.rpc("planning_item_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_kind: "relationship", sourceId: f.initiativeId, p_query: "", p_limit: 20 }, actor);
+    const response = await f.rpc("planning_item_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_kind: "relationship", p_source_id: f.initiativeId, p_query: "", p_limit: 20, p_offset: 0, p_source_revision: null, p_evaluated_at: null, p_valid_until: null }, actor);
     expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
   }
 }), 120_000);
