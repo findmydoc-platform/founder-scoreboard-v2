@@ -131,7 +131,8 @@ export const RankDragKeepsDisplayedSourceAndTargetBasis: Story = { globals: { vi
 
 const childAreaParent = taskDetailStoryTask({ id:"selected-backlog-initiative",title:"Ausgewählte Backlog-Initiative",taskType:"initiative",parentTaskId:"",approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
 const childAreaPreview = taskDetailStoryTask({ id:"backlog-preview-deliverable",title:"Sichtbares Vorschau-Deliverable",parentTaskId:childAreaParent.id,approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
-const childAreaOffPage = taskDetailStoryTask({ id:"backlog-off-page-deliverable",title:"Vollständig geladenes Backlog-Kind",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Erledigt",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaOffPage = taskDetailStoryTask({ id:"backlog-off-page-deliverable",title:"Vollständig geladenes Backlog-Kind",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Offen",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaCompleted = taskDetailStoryTask({ id:"backlog-completed-context",title:"Erledigtes Kind nur für Rollup",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Erledigt",updatedAt:"2026-11-01T12:00:00Z" });
 const childAreaControls = new Map<string,{fail():void;resolve():void}>();
 function IndependentBacklogChildrenStory() {
  const [requests,setRequests]=useState(0);
@@ -144,7 +145,7 @@ function IndependentBacklogChildrenStory() {
   const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason","dependsOn","evidenceLink","assignee","owner","createdBy"];
   const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
   const childResponse=()=>({response:new Response(null),body:{readAuthority:{userId,deadline},taskDetail:{revision:childAreaParent.updatedAt,sourceRevision:JSON.stringify(["backlog-selected-source","0",null,null]),observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString(),authorityDeadline:deadline,readActor:{profileId:profile.id,platformRole:profile.platformRole},readArea:"children",supportingData:"omitted",taskOmittedFields:omitted,
-    item:compact(childAreaParent),ancestors:[],children:[childAreaPreview,childAreaOffPage].map(compact),childProgress:{completed:1,total:2,unfinished:1,percentage:50},coverage:{children:"complete"},relatedItems:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}}});
+    item:compact(childAreaParent),ancestors:[],children:[childAreaPreview,childAreaOffPage,childAreaCompleted].map(compact),childProgress:{completed:1,total:3,unfinished:2,percentage:33},coverage:{children:"complete"},relatedItems:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}}});
   let childReads=0;
   const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
     const url=new URL(String(input),"http://localhost:3000");
@@ -181,7 +182,8 @@ export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingIt
   await waitFor(()=>expect(canvas.getByLabelText("Backlog child requests")).toHaveTextContent("2"));
   childAreaControls.get("independent")!.resolve();
   await expect(await area.findByRole("link",{name:childAreaOffPage.title})).toBeVisible();
-  await expect(area.getByRole("progressbar",{name:"1 von 2 Deliverables erledigt"})).toBeVisible();
+  await expect(area.getByRole("progressbar",{name:"1 von 3 Deliverables erledigt"})).toBeVisible();
   await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await expect(area.queryByRole("link",{name:childAreaCompleted.title})).not.toBeInTheDocument();
  },
 };
