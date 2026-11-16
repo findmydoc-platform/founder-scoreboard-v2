@@ -1291,8 +1291,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const omittedFields = result.model.taskOmittedFields || [];
         const returnedIds = new Set(returnedTasks.map(task => task.id));
         for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task, omittedFields);
+        const previousTasksById = new Map<string, Task>();
+        // Preserve the previous first-match selection even for duplicate IDs.
+        for (const task of confirmed.tasks) if (!previousTasksById.has(task.id)) previousTasksById.set(task.id, task);
         const acceptedDetailTask = (task: Task) => {
-          const previous = confirmed.tasks.find(item => item.id === task.id);
+          const previous = previousTasksById.get(task.id);
           if (protectedIds.has(task.id)) return previous!;
           if (!previous || !returnedIds.has(task.id) || !omittedFields.length) return task;
           const merged = { ...previous, ...task };
