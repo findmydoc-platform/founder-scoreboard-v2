@@ -1133,6 +1133,13 @@
       "fingerprint": "29681c8d9a2ed6aa7fd2571353db743079f919ac0dd612db087a649a76c16c0c",
       "contract": "DETAIL",
       "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-item-candidates-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_initiative_candidates",
+      "fingerprint": "350179df229d3671611ab36b3dca3d1fcb3df2c742bd780bb31e36fb7b340044",
+      "contract": "CANDIDATES"
     }
   ]
 }
