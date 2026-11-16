@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
@@ -54,3 +54,28 @@ test("Relationship discovery retains all mapped reader roles and denies unmapped
     expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
   }
 }), 120_000);
+
+test("stored relationship endpoints use one bounded identity batch independently of candidate membership", () => withPlanningCredentialDatabase(async f => {
+  const source = `${f.prefix}-context-source`, endpoints = [`${f.prefix}-context-left`, `${f.prefix}-context-right`];
+  for (const [index,id] of [source,...endpoints].entries()) await f.db.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner,approval_status) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'Offen','P2',$4,'approved')", [id, `Stored endpoint ${index}`, f.initiativeId, f.actors.founder.profileId]);
+  await f.db.query("insert into public.task_relationship_edges(task_id,related_task_id,relation_type,note) values($1,$2,'blocked_by','Outgoing stored note'),($3,$1,'blocked_by','Incoming stored note')", [source,...endpoints]);
+  const original = globalThis.fetch, batches: string[][] = [];
+  vi.stubGlobal("fetch", async (input:RequestInfo|URL,init?:RequestInit)=>{
+    const request = new Request(input,init),url = new URL(request.url);
+    if(url.pathname.endsWith("/active_tasks")) { const ids=url.searchParams.get("id"); if(ids?.startsWith("in.(")) batches.push(ids.slice(4,-1).split(",")); }
+    return original(request);
+  });
+  try {
+    const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", {"server-only":{}});
+    const response=await GET(f.request("founder",`/api/tasks/${source}/detail-data`),{params:Promise.resolve({id:source})});expect(response.status).toBe(200);
+    const body=await response.json();
+    expect(body.taskDetail.relatedItems.map((item:{id:string})=>item.id).sort()).toEqual([...endpoints].sort());
+    expect(body.taskDetail.relationships.map((edge:{note:string})=>edge.note).sort()).toEqual(["Incoming stored note","Outgoing stored note"]);
+    expect(batches).toEqual([expect.arrayContaining(endpoints)]);expect(batches[0]).toHaveLength(2);
+    expect(body.taskDetail.coverage.relationships).toBe("complete");
+    const {GET:candidates}=await importTestModule("src/app/api/planning-board-data/route.ts",{"server-only":{}});
+    const page=await candidates(f.request("founder",`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({view:"candidates",kind:"relationship",sourceId:source,query:"no stored endpoints match",limit:20}))}`));
+    expect(page.status).toBe(200);expect((await page.json()).candidates.items).toEqual([]);
+    expect(body.taskDetail.relatedItems).toHaveLength(2);expect(body.taskDetail.relationships).toHaveLength(2);
+  } finally { vi.stubGlobal("fetch",original); }
+}),120_000);

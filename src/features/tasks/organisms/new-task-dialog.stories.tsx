@@ -9,7 +9,7 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { useTaskCreateCommand } from "../hooks/use-task-create-command";
 import { taskDetailStoryTask } from "../molecules/task-detail-story-fixtures";
 import { NewTaskDialog } from "./new-task-dialog";
-import { createEpicParentBrowserFixture, storedParentEpic, searchedParentEpic, storedParentDeliverable, searchedParentDeliverable } from "../../../../tests/helpers/epic-parent-browser-fixture";
+import { createEpicParentBrowserFixture, storedParentEpic, searchedParentEpic, storedParentDeliverable, searchedParentDeliverable, storedRelationshipTarget, searchedRelationshipTarget, epicDetailInitiative } from "../../../../tests/helpers/epic-parent-browser-fixture";
 
 const profile = { id: "ceo", name: "CEO", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "", weeklyCapacity: 40 };
 const parent = taskDetailStoryTask({ id: "initiative", title: "Freigegebene Initiative", taskType: "initiative", approvalStatus: "approved", updatedAt: "opaque/parent" });
@@ -285,3 +285,33 @@ export const SubIssueDiscoversUnapprovedDeliverablesAndRetainsStoredContext: Sto
     await waitFor(() => expect(canvas.getByLabelText("Sub-Issue submitted parent")).toHaveTextContent(searchedParentDeliverable.id));
   },
 };
+
+function CreationRelationshipDiscoveryStory({ subIssue }: { subIssue: boolean }) {
+  const [submitted,setSubmitted] = useState("");
+  const [fixture] = useState(()=>createEpicParentBrowserFixture({parentKind:"relationship"}));
+  useEffect(()=>()=>fixture.state.owner.internal.dispose(),[fixture]);
+  const data=useSyncExternalStore(fixture.state.owner.planning.subscribe,fixture.state.owner.internal.getSnapshot,fixture.state.owner.internal.getSnapshot);
+  return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}>
+    <output aria-label="Submitted relationship draft">{submitted}</output>
+    <NewTaskDialog defaults={{taskType:subIssue?"sub_issue":"deliverable",title:"Unveränderter Beziehungsentwurf",description:"Ein gültiger Arbeitsschritt.",parentTaskId:subIssue?storedParentDeliverable.id:epicDetailInitiative.id,relatedTaskId:storedRelationshipTarget.id}}
+      data={data} pending={false} currentProfileId={fixture.data.profiles[0].id} onClose={()=>{}} onCreate={draft=>{setSubmitted(JSON.stringify({target:draft.relatedTaskId,type:draft.relationType,note:draft.relationNote,parent:draft.parentTaskId,title:draft.title}));}} />
+  </PlanningBusinessStateContext.Provider>;
+}
+async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:boolean) {
+  const canvas=within(canvasElement),page=within(document.body),trigger=canvas.getByRole("combobox",{name:"Verknüpfte Aufgabe"});
+  await waitFor(()=>expect(trigger).toHaveTextContent(storedRelationshipTarget.title));
+  await userEvent.type(canvas.getByPlaceholderText("Optionaler Hinweis zur Abhängigkeit"),"Mein erhaltener Hinweis");
+  await userEvent.click(canvas.getByRole("combobox",{name:"Beziehungstyp"}));
+  await userEvent.click(await page.findByRole("option",{name:"Blockiert"}));
+  await userEvent.click(trigger);
+  const search=await page.findByRole("searchbox",{name:"Item suchen"});await userEvent.type(search,"Fern");await userEvent.keyboard("{Enter}");
+  await userEvent.click(await page.findByRole("option",{name:"Fernes verknüpftes Item · CEO"}));
+  await userEvent.click(trigger);const replacement=page.getByRole("searchbox",{name:"Item suchen"});await userEvent.clear(replacement);await userEvent.type(replacement,"Kein Treffer");await userEvent.keyboard("{Enter}");
+  await expect(await page.findByText("Keine Items gefunden.")).toBeVisible();await expect(trigger).toHaveTextContent(searchedRelationshipTarget.title);
+  await expect(canvas.getByPlaceholderText("Optionaler Hinweis zur Abhängigkeit")).toHaveValue("Mein erhaltener Hinweis");
+  await expect(canvas.getByRole("textbox",{name:/Titel/})).toHaveValue("Unveränderter Beziehungsentwurf");
+  await userEvent.keyboard("{Escape}");await userEvent.click(canvas.getByRole("button",{name:subIssue?"Sub-Issue erstellen":"Deliverable vorschlagen"}));
+  await waitFor(()=>expect(canvas.getByLabelText("Submitted relationship draft")).toHaveTextContent(JSON.stringify({target:searchedRelationshipTarget.id,type:"blocks",note:"Mein erhaltener Hinweis",parent:subIssue?storedParentDeliverable.id:epicDetailInitiative.id,title:"Unveränderter Beziehungsentwurf"})));
+}
+export const NewDeliverableDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue={false}/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,false)};
+export const NewSubIssueDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,true)};

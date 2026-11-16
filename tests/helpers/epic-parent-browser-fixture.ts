@@ -22,12 +22,16 @@ export const parentDetailSubIssue = taskDetailStoryTask({ id: "parent-detail-sub
 export const parentDetailDeliverable = { ...storedParentDeliverable, id: "parent-detail-deliverable", parentTaskId: epicDetailInitiative.id };
 export const searchedParentInitiative = { ...epicDetailInitiative, id: "searched-parent-initiative", title: "Ferne Initiative", approvalStatus: "approved" as const };
 
+export const storedRelationshipTarget = { ...loadedParentEpic, id: "stored-relationship-target", title: "Gespeicherter Beziehungskontext", assignee: "CEO" };
+export const searchedRelationshipTarget = { ...storedRelationshipTarget, id: "searched-relationship-target", title: "Fernes verknüpftes Item" };
+
 export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask }: {
-  parentKind?: "epic" | "initiative" | "deliverable"; detailTask?: Task; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
+  parentKind?: "epic" | "initiative" | "deliverable" | "relationship"; detailTask?: Task; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
 } = {}) {
   const epicRows = [loadedParentEpic, ...Array.from({ length: 19 }, (_, index) => epic(`epic-decoy-${index}`, `Weiteres Epic ${index + 1}`)), activeDefaultEpic, searchedParentEpic, storedParentEpic];
   const rows = parentKind === "epic" ? epicRows : parentKind === "initiative"
     ? [epicDetailInitiative, ...Array.from({ length: 20 }, (_, index) => ({ ...epicDetailInitiative, id: `initiative-choice-${index}`, title: `Weitere Initiative ${index}` })), searchedParentInitiative]
+    : parentKind === "relationship" ? [loadedParentEpic, ...Array.from({ length: 20 }, (_, index) => ({ ...loadedParentEpic, id: `relation-choice-${index}`, title: `Weiteres verknüpftes Item ${index}` })), storedRelationshipTarget, searchedRelationshipTarget]
     : [storedParentDeliverable, ...Array.from({ length: 20 }, (_, index) => ({ ...storedParentDeliverable, id: `deliverable-choice-${index}`, title: `Weiteres Deliverable ${index}` })), searchedParentDeliverable];
   const selectedTask = detailTask || epicDetailInitiative;
   const data = { ...emptyPlanningShellState, profiles: [epicParentProfile], tasks: [loadedParentEpic, epicDetailInitiative, ...(detailTask ? [detailTask] : [])] };
@@ -50,7 +54,7 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
     initialTaskDetailRead: { itemId: selectedTask.id, model: detailModel(selectedTask), readAuthority, session } });
   let released = !holdDefault, writeSequence = 0, currentInitiative = selectedTask;
   const waiting: Array<() => void> = [];
-  const scalar = (task: Task) => ({ id: task.id, title: task.title, taskType: parentKind, parentTaskId: task.parentTaskId, ...(parentKind === "deliverable" ? { parentTitle: epicDetailInitiative.title } : {}), approvalStatus: task.approvalStatus || "proposed", updatedAt: task.updatedAt! });
+  const scalar = (task: Task) => ({ id: task.id, title: task.title, taskType: task.taskType, ...(parentKind === "relationship" ? { assigneeLabel: task.assignee || "Nicht zugeordnet" } : {}), parentTaskId: task.parentTaskId, ...(parentKind === "deliverable" ? { parentTitle: epicDetailInitiative.title } : {}), approvalStatus: task.approvalStatus || "proposed", updatedAt: task.updatedAt! });
   const client: BrowserApiClient = {
     async requestJson<T>(input: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) {
       const url = new URL(String(input), "http://localhost:3000");
@@ -66,7 +70,7 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
         const scope = JSON.parse(url.searchParams.get("scope") || "{}") as PlanningItemCandidateQuery;
         if (scope.view !== "candidates" || scope.kind !== parentKind) throw new Error("Epic discovery must use its explicit candidate intent");
         onRead?.(scope);
-        const matching = rows.filter(row => row.title.toLocaleLowerCase("de").includes(scope.query));
+        const matching = rows.filter(row => (parentKind !== "relationship" || row.id !== scope.sourceId) && row.title.toLocaleLowerCase("de").includes(scope.query));
         const offset = scope.continuation ? 20 : 0;
         const response = () => ({ response: new Response(null), body: { readAuthority, readActor, candidates: {
           kind: parentKind, items: matching.slice(offset, offset + 20).map(scalar), total: matching.length,

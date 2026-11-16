@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { TaskRelationshipsSection } from "./task-relationships-section";
@@ -10,6 +10,8 @@ import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-stor
 import { buildTaskRelationshipRows } from "@/features/tasks/model/task-detail-state";
 import type { TaskRelationshipDraft } from "@/features/tasks/molecules/task-relationship-form";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { PlanningBusinessStateContext } from "@/features/planning/hooks/use-planning-business-state";
+import { createEpicParentBrowserFixture, parentDetailDeliverable, searchedRelationshipTarget, storedRelationshipTarget } from "../../../../tests/helpers/epic-parent-browser-fixture";
 import type { Profile, TaskRelation } from "@/lib/types";
 const source=taskDetailStoryTask({id:"source",title:"Source",updatedAt:"2026-10-28T00:00:00Z"}),target=taskDetailStoryTask({id:"target",title:"Target",updatedAt:"2026-10-28T00:00:00Z"});
 const profile:Profile={id:"author",name:"Author",platformRole:"ceo",orgRole:"CEO",githubLogin:"author",weeklyCapacity:40};
@@ -49,3 +51,48 @@ export const UnknownRemovalChecksAbsenceWithoutDeletingAgain:Story={args:{scenar
 export const RejectedRemovalRestoresOnlyItsRelationship:Story={args:{scenario:"remove-rejected"},play:async({canvasElement})=>{const canvas=within(canvasElement);await userEvent.click(canvas.getByRole("button",{name:"Beziehung zu Target entfernen"}));await waitFor(()=>expect(canvas.getByText("Die Verknüpfung wurde nicht geändert.")).toBeVisible());await expect(canvas.getByRole("button",{name:"Beziehung zu Target entfernen"})).toBeVisible();expect(controls.get("remove-rejected")!.reads()).toBe(0);}};
 export const OpenFormRetainsItsOriginalShownTaskBasis:Story={args:{scenario:"stale-basis"},play:async({canvasElement})=>{const canvas=await openForm(canvasElement);await userEvent.click(canvas.getByRole("button",{name:"Serverstand laden"}));await userEvent.click(canvas.getByRole("button",{name:"Abhängigkeit hinzufügen"}));await expect(canvas.getByText("Die Aufgabe wurde seit dem Öffnen geändert. Schließe das Formular und öffne es erneut; die Eingaben bleiben erhalten.")).toBeVisible();await expect(canvas.getByRole("textbox",{name:"Optionaler Beziehungshinweis"})).toHaveValue(note);expect(controls.get("stale-basis")!.writes()).toBe(0);}};
 export const PendingAddPublishesAfterViewRemount:Story={args:{scenario:"pending"},play:async({canvasElement})=>{const canvas=await add(canvasElement);await expect(canvas.getByText("Verknüpfung wird hinzugefügt …")).toBeVisible();await userEvent.click(canvas.getByRole("button",{name:"Ansicht wechseln"}));controls.get("pending")!.finish();await userEvent.click(canvas.getByRole("button",{name:"Ansicht wechseln"}));await waitFor(()=>expect(canvas.getByRole("button",{name:"Beziehung zu Target entfernen"})).toBeVisible());expect(controls.get("pending")!.writes()).toBe(1);}};
+
+function RelationshipDiscoverySectionStory({stored=false}:{stored?:boolean}) {
+ const [fixture]=useState(()=>createEpicParentBrowserFixture({parentKind:"relationship",detailTask:parentDetailDeliverable}));
+ useEffect(()=>()=>fixture.state.owner.internal.dispose(),[fixture]);
+ useSyncExternalStore(fixture.state.owner.planning.subscribe,fixture.state.owner.internal.getSnapshot,fixture.state.owner.internal.getSnapshot);
+ const [draft,setDraft]=useState<TaskRelationshipDraft>({relationType:"blocked_by",relatedTaskId:storedRelationshipTarget.id,note:"Erhaltener Detailhinweis"});
+ const [submitted,setSubmitted]=useState(""),[removed,setRemoved]=useState(0);
+ const source=parentDetailDeliverable;
+ const edges:TaskRelation[]=stored?[
+  {...relation,id:101,taskId:source.id,relatedTaskId:searchedRelationshipTarget.id,relationType:"blocked_by"},
+  {...relation,id:102,taskId:searchedRelationshipTarget.id,relatedTaskId:source.id,relationType:"blocks"},
+  {...relation,id:103,taskId:source.id,relatedTaskId:searchedRelationshipTarget.id,relationType:"relates_to"},
+  {...relation,id:104,taskId:source.id,relatedTaskId:"unavailable-stored-endpoint",relationType:"relates_to",note:"Gespeicherter unbekannter Kontext"},
+ ]:[];
+ const groups=buildTaskRelationshipRows(source,[source,{...searchedRelationshipTarget,status:"Erledigt",assignee:"CEO"}],edges);
+ return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}><output aria-label="Submitted detail relationship">{submitted}</output><output aria-label="Removed canonical edge">{removed}</output>
+  <TaskRelationshipsSection task={source} profiles={fixture.data.profiles} {...groups} relationDraft={draft} relationTargetOptions={[]} allowedRelationTypes={["blocked_by","blocks","relates_to"]} pending={false} onOpenTask={()=>{}} onRemoveRelation={edge=>setRemoved(edge.id)} canRemoveRelation={()=>true} onRelationDraftChange={patch=>setDraft(current=>({...current,...patch}))}
+    onAddRelation={async basis=>{setSubmitted(JSON.stringify({source:basis.id,version:basis.updatedAt,...draft}));return {ok:true};}}/>
+ </PlanningBusinessStateContext.Provider>;
+}
+export const DetailRelationshipDiscoversOffPageTargetsWithinItsSourceScope:Story={render:()=> <RelationshipDiscoverySectionStory/>,play:async({canvasElement})=>{
+ const canvas=within(canvasElement),page=within(document.body);await userEvent.click(canvas.getByRole("button",{name:"Beziehung hinzufügen"}));
+ const trigger=canvas.getByRole("combobox",{name:"Verknüpftes Item"});await waitFor(()=>expect(trigger).toHaveTextContent(storedRelationshipTarget.title));
+ await userEvent.click(trigger);await page.findByRole("searchbox",{name:"Item suchen"});
+ await userEvent.click(await page.findByRole("button",{name:"Weitere Items laden"}));
+ await userEvent.click(await page.findByRole("option",{name:"Fernes verknüpftes Item · CEO"}));
+ await userEvent.click(trigger);const search=page.getByRole("searchbox",{name:"Item suchen"});await userEvent.type(search,"Kein Treffer");await userEvent.keyboard("{Enter}");
+ await expect(await page.findByText("Keine Items gefunden.")).toBeVisible();await expect(trigger).toHaveTextContent(searchedRelationshipTarget.title);await userEvent.keyboard("{Escape}");
+ await expect(canvas.getByRole("textbox",{name:"Optionaler Beziehungshinweis"})).toHaveValue("Erhaltener Detailhinweis");
+ await userEvent.click(canvas.getByRole("button",{name:"Abhängigkeit hinzufügen"}));
+ await waitFor(()=>expect(canvas.getByLabelText("Submitted detail relationship")).toHaveTextContent(JSON.stringify({source:parentDetailDeliverable.id,version:parentDetailDeliverable.updatedAt,relationType:"blocked_by",relatedTaskId:searchedRelationshipTarget.id,note:"Erhaltener Detailhinweis"})));
+}};
+export const StoredEndpointContextSurvivesDiscoveryAndKeepsCanonicalEdges:Story={render:()=> <RelationshipDiscoverySectionStory stored/>,play:async({canvasElement})=>{
+ const canvas=within(canvasElement),page=within(document.body);
+ await expect(canvas.getAllByRole("link",{name:searchedRelationshipTarget.title})).toHaveLength(1);
+ await expect(canvas.getByText("Erledigt · CEO")).toBeVisible();
+ await expect(canvas.getByText("Aufgabenkontext nicht verfügbar")).toBeVisible();
+ await expect(canvas.getByText("Gespeicherter unbekannter Kontext")).toBeVisible();
+ await userEvent.click(canvas.getByRole("button",{name:"Beziehung hinzufügen"}));const trigger=canvas.getByRole("combobox",{name:"Verknüpftes Item"});await userEvent.click(trigger);
+ const search=await page.findByRole("searchbox",{name:"Item suchen"});await userEvent.type(search,"Kein Treffer");await userEvent.keyboard("{Enter}");
+ await expect(await page.findByText("Keine Items gefunden.")).toBeVisible();await userEvent.keyboard("{Escape}");
+ await expect(canvas.getAllByRole("link",{name:searchedRelationshipTarget.title})).toHaveLength(1);
+ await userEvent.click(canvas.getByRole("button",{name:`Beziehung zu ${searchedRelationshipTarget.title} entfernen`}));
+ await expect(canvas.getByLabelText("Removed canonical edge")).toHaveTextContent("101");
+}};
