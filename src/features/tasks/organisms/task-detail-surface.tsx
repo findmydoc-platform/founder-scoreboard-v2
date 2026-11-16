@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import type { PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
@@ -204,6 +205,16 @@ function HydratedTaskDetailSurface({
     if (requestedCommentTarget.startsWith("field:") || requestedCommentTarget.startsWith("blocker:")) return "overview";
     return requestedCommentTarget ? "activity" : "overview";
   });
+  const detailOwner = usePlanningBusinessState();
+  const scopedDetail = detailOwner?.taskDetail(task.id).scopedRead === true;
+  useEffect(() => {
+    if (!detailOwner || !scopedDetail || activeTab !== "activity") return;
+    const controller = new AbortController();
+    for (const area of ["discussion", "timeline"] as const) {
+      if (detailOwner.taskDetail(task.id).areaReadStatus?.[area] !== "current") void detailOwner.loadTaskDetail(task.id, { area, signal: controller.signal });
+    }
+    return () => controller.abort();
+  }, [detailOwner, scopedDetail, task.id, activeTab]);
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
@@ -273,6 +284,28 @@ function HydratedTaskDetailSurface({
     ? task.taskType === "sub_issue" ? "Parent-Deliverable ist noch nicht freigegeben." : "Deliverable ist noch nicht freigegeben."
     : !controller.permissions.canUpdateStatus ? "Deine Rolle darf diesen Status nicht ändern."
       : !canSelectNextStatus ? "Für deine Rolle ist kein weiterer Status verfügbar." : undefined;
+  const areaStatuses = detailOwner?.taskDetail(task.id).areaReadStatus;
+  const scopedView = detailOwner?.taskDetail(task.id);
+  const relationshipsUnknown = scopedDetail && areaStatuses?.relationships !== "current";
+  const relationshipsLoading = scopedDetail && areaStatuses?.relationships === "loading";
+  const childrenKnown = !scopedDetail || scopedView?.childrenReadStatus === "current";
+  const childrenLoading = scopedDetail && scopedView?.childrenReadStatus === "loading";
+  const loadRetainedDetail = () => { void detailOwner?.loadTaskDetail(task.id); };
+  const retryArea = async (area: "discussion" | "timeline", button: HTMLButtonElement) => {
+    const focused = document.activeElement === button;
+    const panel = button.closest('[role="tabpanel"]');
+    const labelledBy = panel?.getAttribute("aria-labelledby");
+    await detailOwner?.loadTaskDetail(task.id, { area });
+    window.requestAnimationFrame(() => {
+      if (!focused || document.activeElement !== document.body && document.activeElement !== button) return;
+      const retry = panel?.querySelector<HTMLElement>(`[data-detail-retry="${area}"]`);
+      const tab = labelledBy ? document.getElementById(labelledBy) : null;
+      (retry || tab)?.focus({ preventScroll: true });
+    });
+  };
+  const activityKnown = scopedDetail ? areaStatuses?.discussion === "current" && areaStatuses?.timeline === "current" : !detailDataLoading && !detailDataError;
+  const activityPending = scopedDetail && [areaStatuses?.discussion, areaStatuses?.timeline].some(status => !status || status === "not-loaded" || status === "loading");
+  const activityUnavailable = scopedDetail && [areaStatuses?.discussion, areaStatuses?.timeline].some(status => status === "unavailable" || status === "stale");
   const detailDataKnown = !detailDataLoading && !detailDataError;
   const detailDataUnavailable = Boolean(detailDataError);
   const canEditOverview = Object.values(controller.overviewPermissions).some(Boolean);
@@ -280,11 +313,11 @@ function HydratedTaskDetailSurface({
   const activityCount = visibleTaskActivityCount({ comments, externalComments, activities }) + reviews.length;
   const availableTabs = taskDetailAvailableTabs({
     activityCount: requestedCommentTarget ? Math.max(activityCount, 1) : activityCount,
-    activityKnown: detailDataKnown,
+    activityKnown,
     canAddRelationship: relationshipAccess.allowedRelationTypes.length > 0,
     canComment: controller.permissions.canComment,
     relationshipCount,
-    relationshipsKnown: detailDataKnown,
+    relationshipsKnown: detailDataKnown && !relationshipsUnknown,
   });
 
   const detailDirty = controller.overviewDirty || reviewDraftDirty;
@@ -471,7 +504,7 @@ function HydratedTaskDetailSurface({
           onChange={(patch) => controller.setOverviewDraft((current) => ({ ...current, ...patch }))}
           riskContent={!controller.overviewEditing ? (
             <>
-              {reviewActive ? (
+              {reviewActive && !relationshipsUnknown ? (
                 <TaskDetailDependencyBand
                   anchorId="task-review-dependencies"
                   waitsOn={relationshipGroups.waitsOn}
@@ -491,7 +524,7 @@ function HydratedTaskDetailSurface({
                   blockerDraft={controller.blockerDraft}
                   embedded={task.taskType === "sub_issue"}
                   loading={detailDataLoading}
-                  unavailable={detailDataUnavailable}
+                  unavailable={detailDataUnavailable || relationshipsUnknown}
                   pending={pending}
                   profiles={teamProfiles}
                   profileName={profileName}
@@ -505,6 +538,11 @@ function HydratedTaskDetailSurface({
       </>
     ),
     relationships: (
+      <>
+      {relationshipsUnknown ? <UiNotice tone="info" className="mb-2">
+        Beziehungen und Blocker noch nicht geladen.
+        <UiButton type="button" disabled={relationshipsLoading} onClick={loadRetainedDetail}>Beziehungen laden</UiButton>
+      </UiNotice> : null}
       <TaskRelationshipsSection
         task={task}
         profiles={teamProfiles}
@@ -518,8 +556,8 @@ function HydratedTaskDetailSurface({
         relationTargetOptions={relationTargetOptions}
         allowedRelationTypes={relationshipAccess.allowedRelationTypes}
         pending={pending}
-        loading={detailDataLoading}
-        unavailable={detailDataUnavailable}
+        loading={detailDataLoading || relationshipsLoading}
+        unavailable={detailDataUnavailable || relationshipsUnknown}
         onOpenTask={openTask}
         onRemoveRelation={onRemoveRelation}
         canRemoveRelation={relationshipAccess.canRemoveRelation}
@@ -538,8 +576,18 @@ function HydratedTaskDetailSurface({
           return result;
         }}
       />
+      </>
     ),
     activity: (
+      <>
+      {scopedDetail ? (["discussion", "timeline"] as const).map(area => areaStatuses?.[area] === "unavailable" || areaStatuses?.[area] === "stale" ? (
+        <UiNotice key={area} tone="danger" className="mb-2">
+          {area === "discussion" ? "Diskussion ist nicht verfügbar." : "Aktivität ist nicht verfügbar."}
+          <UiButton type="button" data-detail-retry={area} onClick={event => { void retryArea(area, event.currentTarget); }}>
+            {area === "discussion" ? "Diskussion erneut laden" : "Aktivität erneut laden"}
+          </UiButton>
+        </UiNotice>
+      ) : null) : null}
       <TaskCommentThread
         commentDraft={commentDraft}
         comments={comments}
@@ -561,8 +609,8 @@ function HydratedTaskDetailSurface({
         sprints={sprints}
         currentProfileId={currentProfile?.id || ""}
         requestedCommentTarget={requestedCommentTarget}
-        loading={detailDataLoading}
-        unavailable={detailDataUnavailable}
+        loading={detailDataLoading || activityPending}
+        unavailable={detailDataUnavailable || activityUnavailable}
         pending={pending}
         importPending={commentImportPending}
         readOnly={!controller.permissions.canComment}
@@ -573,6 +621,7 @@ function HydratedTaskDetailSurface({
         description={canSyncPlanningItemToGitHub(task) ? "Kommentare, GitHub-Updates und relevante Änderungen in einer gemeinsamen Timeline." : "Kommentare und relevante Änderungen in einer gemeinsamen Timeline."}
         footer={<TaskDetailHistorySummary task={task} profiles={teamProfiles} />}
       />
+      </>
     ),
   } satisfies Record<TaskDetailTabId, ReactNode>;
 
@@ -647,6 +696,9 @@ function HydratedTaskDetailSurface({
           <TaskDetailPanelChildrenSection
             canCreate={canCreateDirectChild}
             childItems={directChildren}
+            known={childrenKnown}
+            loading={childrenLoading}
+            onLoad={scopedDetail ? loadRetainedDetail : undefined}
             childType={directChildType}
             onCreateChild={onCreateSubIssue}
             onOpenTask={openTask}
@@ -654,7 +706,7 @@ function HydratedTaskDetailSurface({
         </div>
       ) : null}
 
-      {!reviewActive ? (
+      {!reviewActive && !relationshipsUnknown ? (
         <TaskDetailDependencyBand
           waitsOn={relationshipGroups.waitsOn}
           blocks={relationshipGroups.blocks}

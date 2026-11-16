@@ -7,6 +7,8 @@ import type { Task } from "@/lib/types";
 
 type UseTaskDetailDataLoaderOptions = {
   planningState: PlanningState;
+  scoped?: boolean;
+  initiallyCurrent?: boolean;
   selectedTask: Task | null;
   taskId?: string;
   initialError?: string;
@@ -16,6 +18,8 @@ type UseTaskDetailDataLoaderOptions = {
 
 export function useTaskDetailDataLoader({
   planningState,
+  scoped = false,
+  initiallyCurrent = false,
   selectedTask,
   taskId,
   initialError = "",
@@ -24,7 +28,7 @@ export function useTaskDetailDataLoader({
 }: UseTaskDetailDataLoaderOptions) {
   const selectedTaskId = taskId || selectedTask?.id || "";
   const selectedTaskIsSummary = (selectedTask?.detailAvailability === "summary" || selectedTask?.detailAvailability === "stale");
-  const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set());
+  const [loadedTaskIds, setLoadedTaskIds] = useState<Set<string>>(() => new Set(initiallyCurrent && selectedTaskId ? [selectedTaskId] : []));
   const [attempt, setAttempt] = useState(0);
   const [loadState, setLoadState] = useState({ taskId: selectedTaskId, loading: false, error: initialError });
   const retrySelectedTaskDetail = useCallback(() => {
@@ -44,13 +48,14 @@ export function useTaskDetailDataLoader({
     }
 
     let active = true;
+    const controller = new AbortController();
     window.queueMicrotask(() => {
       if (active) setLoadState({ taskId: selectedTaskId, loading: true, error: "" });
     });
 
     startTransition(async () => {
       try {
-        const result = await planningState.loadTaskDetail(selectedTaskId);
+        const result = await planningState.loadTaskDetail(selectedTaskId, scoped ? { area: "target", signal: controller.signal } : undefined);
         if (!active) return;
         if (!result.ok) {
           setLoadState({ taskId: selectedTaskId, loading: false, error: result.error || "Aufgabendetails konnten nicht geladen werden." });
@@ -79,8 +84,9 @@ export function useTaskDetailDataLoader({
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [planningState, attempt, loadedTaskIds, selectedTaskId, selectedTaskIsSummary, source, startTransition]);
+  }, [planningState, scoped, attempt, loadedTaskIds, selectedTaskId, selectedTaskIsSummary, source, startTransition]);
 
   const selectedStateMatches = loadState.taskId === selectedTaskId;
   const selectedTaskNeedsLoad = Boolean(

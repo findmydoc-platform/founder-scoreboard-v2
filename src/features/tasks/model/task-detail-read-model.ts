@@ -22,10 +22,18 @@ export const taskDetailReadLimits = {
   reviews: 100,
 } as const;
 
+export type TaskDetailReadArea = "target" | "discussion" | "timeline";
+
 export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeline";
 
 export type TaskDetailModel = Readonly<{
   revision: string;
+  sourceRevision?: string;
+  readArea?: TaskDetailReadArea;
+  observedAt?: string;
+  validUntil?: string | null;
+  authorityDeadline?: number;
+  readActor?: Readonly<{ profileId: string; platformRole: Profile["platformRole"] }>;
   coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
   project: Project;
   item: Task;
@@ -44,6 +52,13 @@ export type TaskDetailModel = Readonly<{
   reviews: readonly TaskReview[];
 }>;
 
+export type TaskDetailHydration = Readonly<{
+  itemId: string;
+  model: TaskDetailModel;
+  readAuthority: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
+  session: import("@/lib/credentials/session-types").ServerSessionView;
+}>;
+
 export type TaskDetailReadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
@@ -54,9 +69,10 @@ export type TaskDetailLoadResult =
   | { status: "degraded"; model: TaskDetailModel; unavailable: readonly TaskDetailUnavailableArea[] }
   | { status: "notFound"; people: readonly Profile[] }
   | { status: "forbidden" }
-  | { status: "unavailable" };
+  | { status: "unavailable" }
+  | { status: "staleContinuation" };
 
 export interface TaskDetailReadModel {
-  load(input: { itemId: string }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
+  load(input: { itemId: string; area?: TaskDetailReadArea | "complete" }, context: TaskDetailReadContext): Promise<TaskDetailLoadResult>;
 }
 

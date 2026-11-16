@@ -93,15 +93,16 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
-  readTaskDetail?: (taskId: string) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[] }>;
+  readTaskDetail?: (taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[]; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialTaskDetailRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
+  initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialSession?: BrowserSessionSnapshot;
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialHeaderData?: PlanningHeaderData;
@@ -113,6 +114,16 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   publishCache?: (data: PlanningShellState | null, workspace?: AppWorkspace) => void;
   acceptWorkspaceContext?: (result: PlanningWorkspaceRead) => void;
 }) {
+  function validDetailReceipt(model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority | undefined, actor = initialCurrentProfile) {
+    const now = adapter.now?.() ?? Date.now();
+    return Boolean((!actor || model.readActor?.profileId === actor.id && model.readActor?.platformRole === actor.platformRole)
+      && authority && authority.userId === userId && Number.isFinite(authority.deadline) && authority.deadline > now
+      && typeof model.authorityDeadline === "number" && Number.isFinite(model.authorityDeadline) && model.authorityDeadline > now
+      && typeof model.sourceRevision === "string" && model.sourceRevision.length && typeof model.observedAt === "string" && Number.isFinite(Date.parse(model.observedAt))
+      && (model.validUntil === null || typeof model.validUntil === "string" && Number.isFinite(Date.parse(model.validUntil)) && Date.parse(model.validUntil) > now));
+  }
+  if (initialTaskDetailRead && (initialTaskDetailRead.itemId !== initialTaskDetailRead.model.item.id || !validDetailReceipt(initialTaskDetailRead.model, initialTaskDetailRead.readAuthority)
+    || initialTaskDetailRead.session.userId !== userId || initialSession?.revision !== initialTaskDetailRead.session.revision)) initialData = emptyPlanningShellState;
   let actorIdentity = initialCurrentProfile || null;
   let confirmed = initialData;
   let visible = initialData;
@@ -322,7 +333,43 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
 
   const detailStatuses = new Map<string, PlanningReadStatus>(initialData.tasks.filter(task=>task.detailAvailability === "stale").map(task=>[task.id,"stale"]));
   const childLists = new Map<string, { ids: Set<string>; started: number; readStatus: PlanningReadStatus }>();
+  const scopedDetailIds = new Set<string>();
+  const detailReceipts = new Map<string, { taskId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; ids: string[]; deadline: number; validUntil: string | null; sourceRevision: string }>();
+  function rememberDetailReceipt(taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority) {
+    detailReceipts.set(taskId+":"+area, { taskId, area, ids: [model.item.id, ...model.ancestors.map(row => row.id)],
+      deadline: Math.min(authority.deadline, model.authorityDeadline!), validUntil: model.validUntil!, sourceRevision: model.sourceRevision! });
+  }
+  const detailAreaStatuses = new Map<string, PlanningReadStatus>();
   const detailReads = new Map<string, ReturnType<PlanningState["loadTaskDetail"]>>();
+  const detailDemands = new Map<string, { controller: AbortController; consumers: Set<symbol>; settled: boolean; previous: PlanningReadStatus }>();
+  function retainDetailRead(key: string, taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, promise: ReturnType<PlanningState["loadTaskDetail"]>, signal?: AbortSignal) {
+    const demand = detailDemands.get(key);
+    if (!demand) return promise;
+    const consumer = Symbol(key);
+    demand.consumers.add(consumer);
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      signal?.removeEventListener("abort", release);
+      demand.consumers.delete(consumer);
+      if (!demand.consumers.size && !demand.settled && detailDemands.get(key) === demand) {
+        demand.controller.abort();
+        detailDemands.delete(key);
+        detailReads.delete(key);
+        if (isActive()) {
+          const next = demand.previous === "current" ? "stale" : demand.previous;
+          if (area === "target") detailStatuses.set(taskId, next);
+          else detailAreaStatuses.set(key, next);
+          publish();
+        }
+      }
+    };
+    signal?.addEventListener("abort", release, { once: true });
+    if (signal?.aborted) release();
+    return promise.then(result => signal?.aborted ? { ok: false } : result).finally(release);
+  }
+
   const tails = new Map<string, { context: symbol; result: Promise<TaskUpdateResult> }>();
   const pending = new Map<symbol, { taskId: string; patch: Partial<Task>; submitted: Partial<Task>; phase: PlanningTaskSaveView["phase"] }>();
   const outcomeChecks = new Map<string, ReturnType<PlanningState["checkTaskSave"]>>();
@@ -333,6 +380,26 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const commentDrafts = new Map<string, { text: string }>();
   function isActive() {
     if (active && sessionExpiresAt !== undefined && sessionExpiresAt * 1000 <= (adapter.now?.() ?? Date.now())) suspendProtected();
+    if (active) {
+      const now = adapter.now?.() ?? Date.now();
+      const expired = [...detailReceipts].filter(([,read]) => read.deadline <= now || read.validUntil && Date.parse(read.validUntil) <= now);
+      for (const [key] of expired) detailReceipts.delete(key);
+      for (const [,read] of expired) {
+        if (read.area === "discussion") {
+          confirmed = { ...confirmed, taskComments: confirmed.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: confirmed.taskExternalComments.filter(row => row.taskId !== read.taskId) };
+          visible = { ...visible, taskComments: visible.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: visible.taskExternalComments.filter(row => row.taskId !== read.taskId) };
+          detailAreaStatuses.set(read.taskId+":discussion", "stale");
+        }
+        if (read.area === "timeline") {
+          confirmed = { ...confirmed, taskActivity: confirmed.taskActivity.filter(row => row.taskId !== read.taskId), taskReviews: confirmed.taskReviews.filter(row => row.taskId !== read.taskId) };
+          visible = { ...visible, taskActivity: visible.taskActivity.filter(row => row.taskId !== read.taskId), taskReviews: visible.taskReviews.filter(row => row.taskId !== read.taskId) };
+          detailAreaStatuses.set(read.taskId+":timeline", "stale");
+        }
+        for (const id of read.ids) if (![...detailReceipts.values()].some(other => other.ids.includes(id))) deniedTaskReads.add(id);
+        if (deniedTaskReads.has(read.taskId)) detailStatuses.set(read.taskId, "stale");
+      }
+      if (expired.length) { visible = protectedPublication(visible); publishCache?.(null); }
+    }
     if (active && planningAuthority && (planningAuthority.userId !== userId || !Number.isFinite(planningAuthority.deadline) || planningAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
       planningAuthority = undefined;
       const expired = memberships.get("planning") || new Set<string>();
@@ -521,18 +588,20 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   async function checkOrdering(): Promise<import("../planning-state").PlanningTaskSaveCheck> { const task = confirmed.tasks.find(task => backlogOrdering.blocksTask(task.id)); if (task) await backlogOrdering.checkTask(task.id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }
   function protectedPublication(data: PlanningShellState): PlanningShellState {
     const permitted = (id: string) => !deniedTaskReads.has(id);
+    const permittedArea = (id: string, area: "discussion" | "timeline") => permitted(id) && !(scopedDetailIds.has(id) && detailAreaStatuses.get(id+":"+area) === "stale" && !detailReceipts.has(id+":"+area));
     return { ...data,
       profiles: data.profiles.filter(profile => canPresentProfile(profile.id)),
       tasks: data.tasks.filter(task => permitted(task.id)),
-      taskComments: data.taskComments.filter(row => permitted(row.taskId)),
-      taskExternalComments: data.taskExternalComments.filter(row => permitted(row.taskId)),
+      taskComments: data.taskComments.filter(row => permittedArea(row.taskId, "discussion")),
+      taskExternalComments: data.taskExternalComments.filter(row => permittedArea(row.taskId, "discussion")),
       taskBlockers: data.taskBlockers.filter(row => permitted(row.taskId)),
       taskRelations: data.taskRelations.filter(row => permitted(row.taskId) && permitted(row.relatedTaskId)),
-      taskActivity: data.taskActivity.filter(row => permitted(row.taskId)),
-      taskReviews: data.taskReviews.filter(row => permitted(row.taskId)),
+      taskActivity: data.taskActivity.filter(row => permittedArea(row.taskId, "timeline")),
+      taskReviews: data.taskReviews.filter(row => permittedArea(row.taskId, "timeline")),
     };
   }
   function publish() {
+    isActive();
     confirmed = attendanceState.projectConfirmed(tools.projectConfirmed(events.projectConfirmed(notifications.projectConfirmed(lifecycle.projectConfirmed(relationshipChanges.projectConfirmed(attachmentUploads.projectConfirmed(githubImports.projectConfirmed(commentCreations.projectConfirmed(blockerReports.projectConfirmed(confirmed))))))))));
     if (boardResult && boardQuery && workspaceStatuses.get("planning") === "stale") {
       const byId = new Map(confirmed.tasks.map(task => [task.id, task]));
@@ -1050,6 +1119,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       removed: lifecycle.isRemoved({ id: taskId } as Task),
       children: deniedTaskReads.has(taskId) || childList?.readStatus === "forbidden" ? [] : visible.tasks.filter(task => task.parentTaskId === taskId && (childList?.ids.has(task.id) || (childList && (taskConfirmedAt.get(task.id) || 0) > childList.started))),
       childrenReadStatus: childList?.readStatus || "not-loaded",
+      scopedRead: scopedDetailIds.has(taskId),
+      areaReadStatus: { discussion: detailAreaStatuses.get(taskId+":discussion") || "not-loaded", timeline: detailAreaStatuses.get(taskId+":timeline") || "not-loaded", relationships: detailAreaStatuses.get(taskId+":relationships") || "not-loaded" },
       task: deniedTaskReads.has(taskId) ? null : visible.tasks.find(task => task.id === taskId) || null,
       saveStatus: githubSync.blocksTask(taskId) ? githubSync.view(taskId)?.phase === "syncing" ? "saving" : "unconfirmed" : taskReviews.blocksTask(taskId) ? taskReviews.blockingOperation(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : relationshipChanges.blocksTask(taskId) ? relationshipChanges.pendingViews(taskId).some(view => view.phase === "saving") ? "saving" : "unconfirmed" : attachmentUploads.blocksTask(taskId) ? attachmentUploads.views(taskId).some(view => view.phase === "uploading") ? "saving" : "unconfirmed" : githubImports.blocksTask(taskId) ? githubImports.view(taskId)?.phase === "saving" ? "saving" : "unconfirmed" : blockerReports.saveStatus(taskId) || backlogOrdering.saveStatus(taskId) || backlogAssignments.saveStatus(taskId) || status.get(taskId) || "saved", unavailable: detailUnavailable.get(taskId) || [], readStatus: detailStatuses.get(taskId) || "not-loaded",
       comments: deniedTaskReads.has(taskId) ? [] : visible.taskComments.filter(item => item.taskId === taskId),
@@ -1118,27 +1189,40 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     taskEdits: taskId => { isActive(); return editing.views(taskId); },
     beginTaskEdit: taskId => editing.begin(taskId),
     saveTask: (task, patch) => saveTaskWithContext(task, patch, Symbol(task.id)),
-    loadTaskDetail(taskId) {
-      if (!isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
-      const existing = detailReads.get(taskId);
-      if (existing) return existing;
+    loadTaskDetail(taskId, options) {
+      if (options?.signal?.aborted || !isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
+      const area = options?.area;
+      const key = area ? taskId+":"+area : taskId;
+      const includesDiscussion = !area || area === "discussion";
+      const includesTimeline = !area || area === "timeline";
+      const includesRelationships = !area;
+      const includesChildren = !area;
+      const existing = detailReads.get(key);
+      if (existing) return area ? retainDetailRead(key, taskId, area, existing, options?.signal) : existing;
+      const demand = area ? { controller: new AbortController(), consumers: new Set<symbol>(), settled: false, previous: (area === "target" ? detailStatuses.get(taskId) : detailAreaStatuses.get(key)) || "not-loaded" as PlanningReadStatus } : undefined;
+      if (demand) detailDemands.set(key, demand);
       const readTaskDetail = adapter.readTaskDetail;
-      detailStatuses.set(taskId, "loading");
-      childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
-      commentCreations.beginRead(taskId);
+      if (!area || area === "target") detailStatuses.set(taskId, "loading");
+      if (area && area !== "target") detailAreaStatuses.set(key, "loading");
+      if (includesChildren) childLists.set(taskId, { ids: childLists.get(taskId)?.ids || new Set(visible.tasks.filter(task => task.parentTaskId === taskId).map(task => task.id)), started: childLists.get(taskId)?.started || 0, readStatus: "loading" });
+      if (includesRelationships) detailAreaStatuses.set(taskId+":relationships", "loading");
+      if (includesDiscussion) commentCreations.beginRead(taskId);
       publish();
       const loaded = (async () => {
         const generation = sessionGeneration;
         const started = ++sequence;
         let result: Awaited<ReturnType<typeof readTaskDetail>>;
         try {
-          result = await readTaskDetail(taskId);
+          result = await readTaskDetail(taskId, area ? { area, signal: demand!.controller.signal } : options);
+          if (demand?.controller.signal.aborted) return { ok: false };
+          if (area && (result.model.readArea !== area || !validDetailReceipt(result.model, result.readAuthority, actorIdentity))) {
+            throw Object.assign(new Error("Die ursprüngliche Detailberechtigung ist nicht mehr gültig."), { status: 403 });
+          }
           if (result.model.item.id !== taskId) throw new Error("Die Detailantwort gehört zu einer anderen Aufgabe.");
         } catch (error) {
-          if (!isActive() || generation !== sessionGeneration) return { ok: false };
+          if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
           const failedStatus = readErrorStatus(error);
-          commentCreations.failed(taskId, failedStatus);
-          githubImports.failed(taskId, failedStatus);
+          if (includesDiscussion) { commentCreations.failed(taskId, failedStatus); githubImports.failed(taskId, failedStatus); }
           if (failedStatus === "forbidden") {
             deniedTaskReads.add(taskId);
             const deniedAt = ++sequence;
@@ -1148,13 +1232,16 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
             if (workspaceStatuses.get("planning") !== "forbidden") workspaceStatuses.set("planning", "stale");
             taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId);
           }
-          detailStatuses.set(taskId, failedStatus);
-          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
+          if (!area || area === "target" || failedStatus === "forbidden") detailStatuses.set(taskId, failedStatus);
+          if (area && area !== "target") detailAreaStatuses.set(key, failedStatus);
+          if (includesRelationships) detailAreaStatuses.set(taskId+":relationships", failedStatus);
+          if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: failedStatus });
           publish();
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
-        if (!isActive() || generation !== sessionGeneration) return { ok: false };
+        if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
         if ((taskDeniedAt.get(taskId) || 0) > started) return { ok: false };
+        if (area) { scopedDetailIds.add(taskId); rememberDetailReceipt(taskId, area, result.model, result.readAuthority!); }
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
         // A changed known record disproves retained aggregate freshness. New detail coverage alone does not.
         if (returnedTasks.some(task => {
@@ -1165,11 +1252,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const profileRead = profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
         const sprintRead = sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
         const next = sprintRead.data;
-        if (!result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
+        if (includesRelationships && !result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
         acceptProfileScope(`task:${taskId}`, result.model.people);
-        detailUnavailable.set(taskId, result.unavailable || []);
-        detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
+        detailUnavailable.set(taskId, area ? [...(detailUnavailable.get(taskId) || []).filter(value => value !== area), ...(result.unavailable || [])] : result.unavailable || []);
+        if (!area || area === "target") detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
+        for (const scope of ["discussion", "timeline", "relationships"] as const) if (!area || area === scope) detailAreaStatuses.set(taskId+":"+scope, result.unavailable?.includes(scope) ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started || (taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && Math.max(taskConfirmedAt.get(task.id) || 0, taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         confirmed = {
@@ -1177,19 +1265,21 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
           ...((taskConfirmedAt.get(taskId) || 0) > started ? { taskActivity: confirmed.taskActivity, taskReviews: confirmed.taskReviews } : {}),
         };
-        if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
-        else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
-        commentCreations.restore();
-        if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
-        else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
-        if (!result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
-        if (!result.unavailable?.includes("relationships")) relationshipChanges.acceptRead(result.model.relationships, started, result.model.coverage?.relationships === "complete", taskId);
+        if (includesDiscussion) {
+          if (result.unavailable?.includes("discussion")) commentCreations.failed(taskId, "unavailable");
+          else commentCreations.acceptRead(result.model.discussion.comments, started, result.model.coverage?.discussion === "complete", taskId);
+          commentCreations.restore();
+          if (result.unavailable?.includes("discussion")) githubImports.failed(taskId, "unavailable");
+          else githubImports.acceptRead(result.model.discussion.externalComments, started, result.model.coverage?.discussion === "complete", taskId);
+        }
+        if (includesTimeline && !result.unavailable?.includes("timeline")) attachmentUploads.acceptRead(result.model.activity, started, result.model.coverage?.timeline === "complete", taskId);
+        if (includesRelationships && !result.unavailable?.includes("relationships")) relationshipChanges.acceptRead(result.model.relationships, started, result.model.coverage?.relationships === "complete", taskId);
         relationshipChanges.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         attachmentUploads.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
-        blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
-        childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
+        if (includesRelationships) blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
+        if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
         for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
         for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
@@ -1198,14 +1288,19 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (profileRead.stale || sprintRead.stale || unresolvedIds.size || returnedTasks.some(task => protectedIds.has(task.id))) {
           freshness = "stale";
           if (!result.unavailable?.length) detailStatuses.set(taskId, "stale");
-          childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
+          if (includesChildren) childLists.set(taskId, { ...childLists.get(taskId)!, readStatus: "stale" });
         }
+        if (demand) demand.settled = true;
         publish();
         return { ok: true, unavailable: result.unavailable };
       })();
-      detailReads.set(taskId, loaded);
-      void loaded.finally(() => { if (detailReads.get(taskId) === loaded) detailReads.delete(taskId); }).catch(() => undefined);
-      return loaded;
+      detailReads.set(key, loaded);
+      void loaded.finally(() => {
+        if (demand) demand.settled = true;
+        if (detailReads.get(key) === loaded) detailReads.delete(key);
+        if (detailDemands.get(key) === demand) detailDemands.delete(key);
+      }).catch(() => undefined);
+      return area ? retainDetailRead(key, taskId, area, loaded, options?.signal) : loaded;
     },
     prepareWorkspaceHydration(workspace) {
       if (isActive() && sessionRevision && (workspace === "planning" || workspace === "projects")) hydrationRequests.set(workspace, beginWorkspaceRead(workspace));
@@ -1840,6 +1935,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     active = false;
     initialized = false;
     tails.clear();
+    for (const demand of detailDemands.values()) demand.controller.abort();
+    detailDemands.clear();
     detailReads.clear();
     outcomeChecks.clear();
     outcomeCheckStatus.clear();
@@ -1886,6 +1983,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     hydrationRequests.clear();
     backlogCoverage = {};
     detailStatuses.clear();
+    detailAreaStatuses.clear();
+    detailReceipts.clear();
+    scopedDetailIds.clear();
     childLists.clear();
     deniedTaskReads.clear();
     taskDeniedAt.clear();
@@ -1995,6 +2095,25 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     completeness.set(workspace, coverage.tasks || "none");
     publish();
   }
+  function acceptTaskDetailHydration(read: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration, notify = true) {
+    if (!isActive() || read.itemId !== read.model.item.id || read.session.userId !== userId || read.session.revision !== sessionRevision
+      || read.model.readArea !== "target" || !validDetailReceipt(read.model, read.readAuthority, actorIdentity)) return false;
+    const tasks = [read.model.item, ...read.model.ancestors];
+    if (tasks.some(task => {
+      const known = confirmed.tasks.find(row => row.id === task.id);
+      return (taskConfirmedAt.get(task.id) || 0) > 0 || Boolean(known && known.updatedAt !== task.updatedAt);
+    })) return false;
+    confirmed = applyTaskDetailModel(confirmed, read.model, [], {});
+    for (const task of tasks) { deniedTaskReads.delete(task.id); acceptTaskFieldCoverage(task); }
+    scopedDetailIds.add(read.model.item.id);
+    rememberDetailReceipt(read.model.item.id, "target", read.model, read.readAuthority);
+    detailStatuses.set(read.model.item.id, "current");
+    acceptProfileScope("task:"+read.model.item.id, read.model.people);
+    if (notify) publish();
+    else visible = confirmed;
+    return true;
+  }
+  if (initialTaskDetailRead) acceptTaskDetailHydration(initialTaskDetailRead, false);
   if (initialWorkspaceRead?.workspace === "planning" && initialWorkspaceRead.board?.delivery && initialWorkspaceRead.readAuthority
     && initialWorkspaceRead.session.userId === userId && initialWorkspaceRead.readAuthority.userId === userId
     && initialWorkspaceRead.readAuthority.deadline > (adapter.now?.() ?? Date.now())) {
@@ -2021,6 +2140,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateWorkweekCalendarAuthority: workweekCalendars.invalidateAuthority,
     invalidateNotificationAuthority: notifications.invalidateNotificationAuthority,
     acceptHydration,
+    acceptTaskDetailHydration,
     sessionChanged,
     bindSession,
     acceptDecisionLogHydration: decisionLog.hydrate,

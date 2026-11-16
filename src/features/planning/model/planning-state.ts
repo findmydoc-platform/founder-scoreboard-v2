@@ -50,6 +50,8 @@ export type PlanningTaskDetailView = {
   removed: boolean;
   children: readonly Task[];
   childrenReadStatus: PlanningReadStatus;
+  scopedRead?: boolean;
+  areaReadStatus?: Record<"discussion" | "timeline" | "relationships", PlanningReadStatus>;
   task: Task | null;
   saveStatus: PlanningTaskSaveStatus;
   readStatus: PlanningReadStatus;
@@ -158,7 +160,7 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   taskEdits(taskId: string): readonly PlanningTaskEditorView[];
   beginTaskEdit(task: Task | string): PlanningTaskEditor;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskUpdateResult>;
-  loadTaskDetail(taskId: string): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
+  loadTaskDetail(taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
   refreshWorkspace(workspace: AppWorkspace): Promise<boolean>;
   prepareWorkspaceHydration(workspace: AppWorkspace): void;
 }

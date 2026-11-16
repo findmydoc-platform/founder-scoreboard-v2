@@ -8,7 +8,7 @@ import type { PlanningCredentialInput } from "../types";
 import type { SessionPolicyAction } from "./session-policy-types";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure, rolePermitsAction } from "./session-policy";
 import { planningWorkweekOperations } from "./planning-workweek";
-import { planningService, planningPublicationSource, PlanningDispatchError } from "./planning-service";
+import { planningService, planningServiceEnvironmentGuard, planningPublicationSource, PlanningDispatchError } from "./planning-service";
 import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { WorkspaceAccessError } from "../../workspace-identity";
@@ -81,6 +81,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const readActions = ["planning.revision.read", "planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"];
   if (input.credential.kind !== "session-request" && !(input.credential.kind === "server-cookies" && readActions.includes(action))) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
   const strictService = action === "planning.approval.decide" || action.startsWith("planning.trash.") || action.startsWith("workweek.");
+  const detailEnvironmentCurrent = planningServiceEnvironmentGuard(strictService);
   const service = planningService(strictService, () => current(), () => assertKnown());
   const followup = planningService(strictService);
   if (!service && !strictService) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
@@ -161,7 +162,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
-  const serverHeaderRead = action === "planning.board.read" && readSession && readAuthority
+  const serverHeaderRead = (action === "planning.board.read" || action === "planning.task.read") && readSession && readAuthority
     ? { ...readAuthority, id: randomUUID(), timeoutAt: Math.min(readAuthority.deadline, Date.now() + 15_000), sessionRevision: readSession.revision } : undefined;
   return { ok: true as const, readAuthority, readSession, serverHeaderRead, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
     ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
@@ -325,9 +326,37 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
       return createSupabaseSprintReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
-    async loadDetail() {
+    async loadDetail(options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea | "complete"; signal?: AbortSignal }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
-      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId }, { authorized: true, actorProfileId: profile?.id || null });
+      if (!detailEnvironmentCurrent()) return { status: "unavailable" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const assertDetailCurrent = () => {
+        if (!detailEnvironmentCurrent()) throw new PlanningDispatchError(503, "workspace_access_unavailable", "Die Detailkonfiguration wurde ersetzt.");
+        assertKnown();
+      };
+      const detailService = signal ? planningService(strictService, () => current(), assertDetailCurrent, signal) : service;
+      if (!detailService) return { status: "unavailable" as const };
+      const result = await createSupabaseTaskDetailReadModel(detailService).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (signal?.aborted) return { status: "unavailable" as const };
+      if (options?.area && options.area !== "complete") {
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        if (result.status !== "ready" && result.status !== "degraded") {
+          const denial = await current();
+          if (denial && !("status" in denial && denial.status === 503)) return { status: "forbidden" as const };
+          if (denial) return { status: "unavailable" as const };
+        }
+      }
+      if (options?.area && options.area !== "complete" && (result.status === "ready" || result.status === "degraded")) {
+        const detailPublication = !localProfileOverride ? planningPublicationSource(resourceData, profile, assertDetailCurrent, { itemId: targetId, area: options.area }) : undefined;
+        const publication = detailPublication ? await detailPublication.read(signal) : await current() ? { status: "forbidden" as const } : await service.rpc("planning_detail_source", { p_item_id: targetId, p_area: options.area }).then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data?.source_revision });
+        if (publication.status === "forbidden") return { status: "forbidden" as const };
+        if (publication.status !== "ready") return { status: "unavailable" as const };
+        if (publication.revision !== result.model.sourceRevision || result.model.validUntil && Date.parse(result.model.validUntil) <= Date.now()) return { status: "staleContinuation" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        return { ...result, model: { ...result.model, authorityDeadline: readAuthority?.deadline, readActor: profile ? { profileId: profile.id, platformRole: profile.platformRole } : undefined } };
+      }
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;
     },
@@ -380,7 +409,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       return result;
     },
     startServerHeaderSlots() {
-      const admitted = action === "planning.board.read" && serverHeaderRead ? current() : Promise.resolve(forbidden());
+      const admitted = (action === "planning.board.read" || action === "planning.task.read") && serverHeaderRead ? current() : Promise.resolve(forbidden());
       const loaders = planningHeaderSlotLoaders(service);
       const start = (key: "quickLinks" | "calendarEvents") => {
         const execute = async () => {

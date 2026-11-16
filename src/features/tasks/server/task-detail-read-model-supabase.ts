@@ -1,4 +1,5 @@
 import "server-only";
+import { readPlanningDetailSource } from "@/features/planning-items/server/planning-detail-source";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAllSupabaseRows } from "@/features/planning-items/model/supabase-pagination";
@@ -138,13 +139,20 @@ function byIds(tasks: readonly Task[]) {
 
 export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): TaskDetailReadModel {
   return {
-    async load({ itemId }, context): Promise<TaskDetailLoadResult> {
+    async load({ itemId, area = "complete" }, context): Promise<TaskDetailLoadResult> {
       if (!context.authorized) return { status: "forbidden" };
       const normalizedItemId = itemId.trim();
       if (!normalizedItemId) return { status: "notFound", people: [] };
 
+      const source = area !== "complete" ? await readPlanningDetailSource(supabase, normalizedItemId, area) : null;
+      if (area !== "complete" && !source) return { status: "unavailable" };
+
+      const scopedIds = source ? source.descriptor.targetId ? [source.descriptor.targetId, ...source.descriptor.ancestorIds] : [] : null;
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
-        supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
+        scopedIds ? scopedIds.length
+          ? supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
+          : Promise.resolve({ data: [] as DbTask[], error: null })
+          : supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
         supabase.from("profiles").select(profileSelect).order("name"),
         supabase.from("projects").select(projectSelect).eq("id", projectId).single<ProjectRow>(),
         supabase.from("sprints").select(sprintSelect).order("start_date"),
@@ -153,9 +161,56 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         return { status: "unavailable" };
       }
       const people = ((profileResult.data || []) as DbProfile[]).map(mapProfile);
-      if (!targetResult.data) return { status: "notFound", people };
+      const selectedRows = Array.isArray(targetResult.data) ? targetResult.data : targetResult.data ? [targetResult.data] : [];
+      const target = selectedRows.find(row => row.id === normalizedItemId);
+      if (!target) return source?.descriptor.targetId ? { status: "unavailable" } : { status: "notFound", people };
 
-      const target = targetResult.data;
+      if (source) {
+        const byId = new Map(selectedRows.map(row => [row.id, row]));
+        if (selectedRows.length !== scopedIds!.length || byId.size !== scopedIds!.length
+          || selectedRows.some(row => !scopedIds!.includes(row.id))) return { status: "unavailable" };
+        const ancestors = source.descriptor.ancestorIds.map(id => byId.get(id)!);
+        if ((target.parent_task_id || null) !== (ancestors.at(-1)?.id || null)
+          || ancestors.some((row, index) => !row || (row.parent_task_id || null) !== (ancestors[index - 1]?.id || null))) return { status: "unavailable" };
+        const rows = [target, ...ancestors];
+        const supporting = await loadSupportingRows(supabase, rows.map(row => row.id));
+        if (supporting.error) return { status: "unavailable" };
+        const tasks = byIds(mapTasks(rows, people, supporting));
+        const item = tasks.get(normalizedItemId);
+        if (!item) return { status: "unavailable" };
+        const model: TaskDetailModel = {
+          revision: item.updatedAt || target.updated_at, sourceRevision: source.sourceRevision, observedAt: source.observedAt, validUntil: source.validUntil, readArea: area as "target" | "discussion" | "timeline", coverage: {},
+          project: project(projectResult.data), item,
+          ancestors: ancestors.flatMap(row => tasks.get(row.id) || []),
+          children: [], relatedItems: [], people,
+          sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
+          discussion: { comments: [], externalComments: [] },
+          blockers: [], relationships: [], activity: [], reviews: [],
+        };
+        if (area === "discussion") {
+          const [comments, externalComments] = await Promise.all([
+            supabase.from("task_comments").select("id,task_id,profile_id,comment,created_at,github_delivery_applicable,task_comment_submissions(id,submitted_at),task_comment_github_deliveries(status,github_comment_url)").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.comments),
+            supabase.from("task_external_comments").select("id,task_id,source,external_id,author_login,author_avatar_url,body,html_url,created_at,imported_at").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.externalComments),
+          ]);
+          if (comments.error || externalComments.error) return { status: "degraded", model, unavailable: ["discussion"] };
+          return { status: "ready", model: { ...model,
+            discussion: { comments: ((comments.data || []) as DbTaskComment[]).map(mapTaskComment), externalComments: ((externalComments.data || []) as DbTaskExternalComment[]).map(mapTaskExternalComment) },
+            coverage: { discussion: (comments.data?.length || 0) < taskDetailReadLimits.comments && (externalComments.data?.length || 0) < taskDetailReadLimits.externalComments ? "complete" : "partial" },
+          } };
+        }
+        if (area === "timeline") {
+          const [activity, reviews] = await Promise.all([
+            supabase.from("task_audit_timeline").select("id,task_id,action,actor_profile_id,message,payload,created_at").eq("task_id", normalizedItemId).order("created_at", { ascending: true }).limit(taskDetailReadLimits.activity),
+            supabase.from("task_reviews").select("id,task_id,sprint_id,reviewer_profile_id,decision,points,comment,checklist,created_at,task_review_github_deliveries(status,github_comment_url)").eq("task_id", normalizedItemId).order("created_at", { ascending: false }).limit(taskDetailReadLimits.reviews),
+          ]);
+          if (activity.error || reviews.error) return { status: "degraded", model, unavailable: ["timeline"] };
+          return { status: "ready", model: { ...model,
+            activity: ((activity.data || []) as DbTaskAuditActivity[]).map(mapTaskAuditActivity), reviews: ((reviews.data || []) as DbTaskReview[]).map(mapTaskReview),
+            coverage: { timeline: (activity.data?.length || 0) < taskDetailReadLimits.activity && (reviews.data?.length || 0) < taskDetailReadLimits.reviews ? "complete" : "partial" },
+          } };
+        }
+        return { status: "ready", model };
+      }
       const [ancestorsResult, childrenResult, outgoingResult, incomingResult] = await Promise.all([
         loadAncestors(supabase, target.parent_task_id),
         target.task_type === "sub_issue"

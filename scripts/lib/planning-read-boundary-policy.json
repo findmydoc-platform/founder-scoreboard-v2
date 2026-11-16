@@ -4,7 +4,8 @@
     "src/features/planning-items/server/planning-workspace-read-source.ts",
     "src/features/planning-items/server/planning-deliverable-read-source.ts",
     "src/features/planning-items/server/workspace-profile-avatars.ts",
-    "src/features/planning-items/server/planning-card-summary.ts"
+    "src/features/planning-items/server/planning-card-summary.ts",
+    "src/features/planning-items/server/planning-detail-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -29,11 +30,11 @@
       "expiresWhen": "Remove on accepted BACKLOG migration #652."
     },
     "DETAIL": {
-      "consumer": "DETAIL / CHILDREN / CANDIDATES",
+      "consumer": "DETAIL / DISCUSSION / TIMELINE identity reads and retained CHILDREN / CANDIDATES supporting access",
       "owner": "Tasks feature owner",
-      "reason": "Retain target, ancestor, child, related and lifecycle reads until identity and child contracts migrate.",
-      "evidence": "tests/unit/tasks/task-detail-read-model.test.mjs; tests/unit/planning/planning-task-lifecycle.test.ts",
-      "expiresWhen": "Remove on the corresponding accepted migration #649, #650 or #651."
+      "reason": "Canonical target and required ancestors are selected by a service-only source descriptor and hydrated in one bounded, project-constrained batch. The adapter validates the complete ID set and parent chain, restores root-first order and excludes the descriptor from public models. User-bound publication certificates exclude descriptor fields in SQL and preserve original actor/source/deadline checks. Discussion and timeline remain independently requested. Explicit complete child, relationship and lifecycle reads retain their existing path until their own migrations.",
+      "evidence": "tests/integration/task-detail-independent-areas.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/tasks/task-detail-server-page.test.tsx; tests/unit/tasks/task-detail-read-model.test.mjs; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
+      "expiresWhen": "Revalidate DETAIL area or authority changes; retire retained child/candidate statements only on accepted #650 or #651."
     },
     "STRATEGY": {
       "consumer": "STRATEGY",
@@ -204,6 +205,11 @@
       "from": "src/features/tools/server/tools-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
       "contract": "DIRECTORY"
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-detail-source.ts",
+      "contract": "DETAIL"
     }
   ],
   "readSites": [
@@ -1047,6 +1053,38 @@
       "target": "planning_table_risks",
       "fingerprint": "e817cfeab997856831c3098cbefd579bd41452c009814ba9b6e68581a69f68d1",
       "contract": "TABLE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-detail-source.ts",
+      "kind": "rpc",
+      "target": "planning_detail_source",
+      "fingerprint": "b7c32da70ed6a4136e2280bc233ecd217e890873d8f5b07ba13f2f89fa9fa09f",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-service.ts",
+      "kind": "rpc",
+      "target": "planning_detail_publication_context",
+      "fingerprint": "6439b169c7db347c8208dd791e2dfa5890dd47618b2c373c4d90080d0f6f214a",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "rpc",
+      "target": "planning_detail_source",
+      "fingerprint": "00fdac9f9a78ac37830e098ed8f951fab73349662e5e7bb442d0adc0b8b75f0d",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "29681c8d9a2ed6aa7fd2571353db743079f919ac0dd612db087a649a76c16c0c",
+      "contract": "DETAIL",
       "references": 1
     }
   ]

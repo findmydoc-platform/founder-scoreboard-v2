@@ -12,6 +12,7 @@ type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialWorkspaceRead,
+  initialTaskDetailRead,
   initialServerHeaderRead,
   initialDecisionLogResult,
   initialData,
@@ -29,6 +30,7 @@ export function usePlanningAppController({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialWorkspaceRead,
+    initialTaskDetailRead,
     initialServerHeaderRead,
     initialDecisionLogResult,
     initialData,
@@ -150,6 +152,7 @@ export function usePlanningAppController({
     selectedTask,
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
+    scoped: true,
     planningState,
     selectedTask,
     taskId: protectedDataLoaded && authUser ? selectedTaskId || undefined : undefined,

@@ -33,14 +33,35 @@ export async function mockItemPageBrowser({ administrator = false, headerData = 
   respond?: (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response> | undefined;
 } = {}) {
   const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: itemPageUser.email }, (input, init) => {
+    const requestUrl = new URL(String(input), window.location.origin);
+    const area = requestUrl.searchParams.get("area");
+    const deadline = Date.now() + 60_000;
+    const observedAt = new Date().toISOString();
+    const scopedDetail = async (response: Response) => {
+      if (!response.ok || !requestUrl.pathname.endsWith("/detail-data") || area !== "target" && area !== "discussion" && area !== "timeline") return response;
+      const body = await response.clone().json();
+      if (!body.taskDetail) return response;
+      const model: TaskDetailModel = body.taskDetail;
+      if (model.readArea !== undefined || model.sourceRevision !== undefined || model.authorityDeadline !== undefined || body.readAuthority !== undefined) return response;
+      const unavailable = (body.unavailable || []) as import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[];
+      const actor = model.people.find(profile => profile.id === itemPageProfile.id) || itemPageProfile;
+      const coverage = area !== "target" && !unavailable.includes(area) ? { [area]: model.coverage?.[area] || "complete" } : {};
+      return Response.json({ ...body, readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
+        ...model, readArea: area, sourceRevision: `fixture-detail:${model.item.id}:${model.revision}:${area}`, observedAt, validUntil: null,
+        authorityDeadline: deadline, readActor: { profileId: actor.id, platformRole: actor.platformRole }, coverage,
+        children: [], relatedItems: [], blockers: [], relationships: [],
+        discussion: area === "discussion" ? model.discussion : { comments: [], externalComments: [] },
+        activity: area === "timeline" ? model.activity : [], reviews: area === "timeline" ? model.reviews : [],
+      } });
+    };
     const response = respond?.(input, init);
-    if (response) return response;
+    if (response) return Promise.resolve(response).then(scopedDetail);
     const path = new URL(String(input), window.location.origin).pathname;
     if (path === "/api/auth/session") return Response.json({ session: { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
     if (path === "/api/auth/session/logout") return Response.json({ outcome: "cleared" });
     if (path === "/api/administrator-access") return Response.json({ administratorAccess: administrator ? { eligible: true, active: true, expiresAt: new Date(Date.now() + 600_000).toISOString() } : inactiveAdministratorAccess });
     if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 } });
-    if (path === `/api/tasks/${detailModel.item.id}/detail-data`) return Response.json({ taskDetail: detailModel, unavailable: [] });
+    if (path === `/api/tasks/${detailModel.item.id}/detail-data`) return scopedDetail(Response.json({ taskDetail: detailModel, unavailable: [] }));
     if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true } });
     if (path === "/api/team-workweek/team") return Response.json({ currentWorkweeks: [], calendarWorkweeks: [], calendarCoverage: "complete", referenceDate: "2026-11-02" });
     if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });

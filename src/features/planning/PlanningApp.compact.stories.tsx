@@ -32,6 +32,7 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
   const [ready, setReady] = useState(false);
   const [unscopedReads, setUnscopedReads] = useState(0);
   const [detailReads, setDetailReads] = useState(0);
+  const [detailAreas, setDetailAreas] = useState<string[]>([]);
   const [session] = useState(() => ({ user: itemPageUser, userId: itemPageUser.id, revision: "item-page-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 }));
   useEffect(() => {
     const key = `founderops.product-updates.seen.${itemPageProfile.id}`;
@@ -48,6 +49,7 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initialModel.board.workspaceRevision });
       if (url.pathname === `/api/tasks/${full.id}/detail-data`) {
         setDetailReads(value => value + 1);
+        setDetailAreas(value => [...value, url.searchParams.get("area") || "complete"]);
         return Response.json({ taskDetail: { ...itemPageModel("deliverable"), item: full, children: [] }, unavailable: [] });
       }
       return undefined;
@@ -56,7 +58,7 @@ function CompactBoardFlow({ bootstrap = false, paging = false }: { bootstrap?: b
     // The initial fixture is fixed for one mounted story.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <><output className="sr-only" aria-label="Unscoped reads">{unscopedReads}</output><output className="sr-only" aria-label="Detail reads">{detailReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", bootstrap ? { ...model, items: [], query: undefined, board: undefined } : initialModel, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={bootstrap ? { ...emptyPlanningShellState, profiles: [itemPageProfile] } : { ...emptyPlanningShellState, tasks: initialModel.items, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={!bootstrap} authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output className="sr-only" aria-label="Unscoped reads">{unscopedReads}</output><output className="sr-only" aria-label="Detail reads">{detailReads}</output><output className="sr-only" aria-label="Detail read areas">{detailAreas.join(",")}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", bootstrap ? { ...model, items: [], query: undefined, board: undefined } : initialModel, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={bootstrap ? { ...emptyPlanningShellState, profiles: [itemPageProfile] } : { ...emptyPlanningShellState, tasks: initialModel.items, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={!bootstrap} authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/Compact Board flow", component: CompactBoardFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof CompactBoardFlow>;
 export default meta;
@@ -71,6 +73,7 @@ export const CompactSignalsAndFullDetail: Story = { play: async ({ canvasElement
     const panel = await canvas.findByRole("dialog", { name: "Compact card" }, { timeout: 5000 });
   await expect(await within(panel).findByText("Full acceptance criteria")).toBeVisible();
   await expect(await within(panel).findByText("Full definition of done")).toBeVisible();
+  await expect(canvas.getByLabelText("Detail read areas")).toHaveTextContent(/^target$/);
   await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("1");
   await expect(canvas.getByLabelText("Unscoped reads")).toHaveTextContent("0");
 } };
