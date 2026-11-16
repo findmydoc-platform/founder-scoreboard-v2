@@ -14,6 +14,7 @@ type Props = {
   childType: Task["taskType"];
   loading?: boolean;
   known?: boolean;
+  progress?: { completed: number; total: number; percentage: number } | null;
   onLoad?: () => void;
   error?: string;
   onCreateChild: () => void;
@@ -49,6 +50,7 @@ export function TaskDetailPanelChildrenSection({
   childType,
   loading = false,
   known = true,
+  progress,
   onLoad,
   error = "",
   onCreateChild,
@@ -56,7 +58,7 @@ export function TaskDetailPanelChildrenSection({
 }: Props) {
   const open = childItems.filter((item) => normalizeStatus(item.status) !== "Erledigt");
   const completed = childItems.filter((item) => normalizeStatus(item.status) === "Erledigt");
-  const percentage = childItems.length ? Math.round((completed.length / childItems.length) * 100) : 0;
+  const summary = progress === undefined ? known ? { completed: completed.length, total: childItems.length, percentage: childItems.length ? Math.round((completed.length / childItems.length) * 100) : 0 } : null : progress;
   const singular = childLabel(childType);
   const plural = childLabel(childType, true);
 
@@ -79,27 +81,28 @@ export function TaskDetailPanelChildrenSection({
       </div>
 
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div> : null}
-      {loading ? (
+      {loading && !childItems.length ? (
         <div className="mt-5 grid gap-3" aria-label={`${plural} werden geladen`}>
           <div className="h-2 animate-pulse rounded-full bg-slate-100" />
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
         </div>
-      ) : !known ? (
+      ) : !known && !childItems.length ? (
         <UiNotice tone="info" className="mt-5">
           Unteraufgaben noch nicht geladen.
           {onLoad ? <UiButton type="button" onClick={onLoad}>{error ? "Unteraufgaben erneut laden" : "Unteraufgaben laden"}</UiButton> : null}
         </UiNotice>
       ) : (
         <>
-          {childItems.length ? (
+          {!known ? <UiNotice tone="info" className="mt-5">{loading ? "Unteraufgaben werden aktualisiert …" : "Unteraufgaben sind noch nicht vollständig bestätigt."}{onLoad && !loading ? <UiButton type="button" onClick={onLoad}>Unteraufgaben erneut laden</UiButton> : null}</UiNotice> : null}
+          {summary && summary.total > 0 ? (
             <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold text-slate-800">{completed.length} von {childItems.length} erledigt</span>
-                <span className="text-xs font-semibold text-slate-500">{percentage}%</span>
+                <span className="font-semibold text-slate-800">{summary.completed} von {summary.total} erledigt</span>
+                <span className="text-xs font-semibold text-slate-500">{summary.percentage}%</span>
               </div>
-              <div role="progressbar" aria-label={`${completed.length} von ${childItems.length} ${plural} erledigt`} aria-valuemin={0} aria-valuemax={childItems.length} aria-valuenow={completed.length} className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-blue-600" style={{ width: `${percentage}%` }} />
+              <div role="progressbar" aria-label={`${summary.completed} von ${summary.total} ${plural} erledigt`} aria-valuemin={0} aria-valuemax={summary.total} aria-valuenow={summary.completed} className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-blue-600" style={{ width: `${summary.percentage}%` }} />
               </div>
             </div>
           ) : null}
@@ -121,7 +124,7 @@ export function TaskDetailPanelChildrenSection({
             </details>
           ) : null}
 
-          {!childItems.length ? <UiEmptyState tone="muted" className="mt-5">Keine direkten {plural} vorhanden.</UiEmptyState> : null}
+          {known && !childItems.length ? <UiEmptyState tone="muted" className="mt-5">Keine direkten {plural} vorhanden.</UiEmptyState> : null}
         </>
       )}
     </section>

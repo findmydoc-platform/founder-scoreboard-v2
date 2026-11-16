@@ -169,7 +169,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     Kinder dürfen nicht geladen werden.
     <UiButton type="button" aria-disabled={deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")} onClick={() => {
       if (deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")) return;
-      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
+      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id, { area: "children" }))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
     }}>Kinder erneut laden</UiButton>
   </UiNotice>;
   if (controller.planningQueryReady === false && !controller.planningBoard.query) return <UiNotice role="status" tone="info">
@@ -214,7 +214,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       </UiNotice> : null}
       {deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
         Kinder dürfen nicht geladen werden.
-        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId); }}>Kinder erneut laden</UiButton>
+        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId, { area: "children" }); }}>Kinder erneut laden</UiButton>
       </UiNotice> : null}
       {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
         Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
@@ -240,7 +240,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
             attentionById={controller.planningBoard?.result?.attentionById}
             childListForTask={taskId => {
               const detail = controller.planningState.taskDetail(taskId);
-              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
+              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId, { area: "children" }); } };
             }}
             columns={controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],

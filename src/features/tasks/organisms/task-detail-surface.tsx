@@ -236,6 +236,12 @@ function HydratedTaskDetailSurface({
       : task.taskType === "deliverable"
         ? "sub_issue"
         : null;
+  useEffect(() => {
+    if (!detailOwner || !scopedDetail || activeTab !== "overview" || !directChildType) return;
+    const controller = new AbortController();
+    void detailOwner.loadTaskDetail(task.id, { area: "children", signal: controller.signal });
+    return () => controller.abort();
+  }, [detailOwner, scopedDetail, task.id, activeTab, directChildType]);
   const directChildren = directChildType
     ? subIssues.filter((item) => item.parentTaskId === task.id && item.taskType === directChildType)
     : [];
@@ -288,7 +294,7 @@ function HydratedTaskDetailSurface({
   const scopedView = detailOwner?.taskDetail(task.id);
   const relationshipsUnknown = scopedDetail && areaStatuses?.relationships !== "current";
   const relationshipsLoading = scopedDetail && areaStatuses?.relationships === "loading";
-  const childrenKnown = !scopedDetail || scopedView?.childrenReadStatus === "current";
+  const childrenKnown = !scopedDetail || scopedView?.childrenCoverage === "complete" || scopedView?.childrenCoverage === "complete-empty";
   const childrenLoading = scopedDetail && scopedView?.childrenReadStatus === "loading";
   const loadRetainedDetail = () => { void detailOwner?.loadTaskDetail(task.id); };
   const retryArea = async (area: "discussion" | "timeline", button: HTMLButtonElement) => {
@@ -484,6 +490,8 @@ function HydratedTaskDetailSurface({
         <TaskOverviewPanel
           task={task}
           subIssues={directChildren}
+      subIssuesKnown={!scopedDetail || Boolean(scopedView?.childProgress)}
+      childProgress={scopedDetail ? scopedView?.childProgress || null : undefined}
           onOpenTask={openTask}
           profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}
@@ -632,6 +640,8 @@ function HydratedTaskDetailSurface({
       parentTask={parentTask}
       profiles={teamProfiles}
       subIssues={directChildren}
+      subIssuesKnown={!scopedDetail || Boolean(scopedView?.childProgress)}
+      childProgress={scopedDetail ? scopedView?.childProgress || null : undefined}
       statusOptions={statusOptions}
       canChangeStatus={controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus}
       statusLockedReason={statusLockedReason}
@@ -698,7 +708,9 @@ function HydratedTaskDetailSurface({
             childItems={directChildren}
             known={childrenKnown}
             loading={childrenLoading}
-            onLoad={scopedDetail ? loadRetainedDetail : undefined}
+            progress={scopedDetail ? scopedView?.childProgress || null : undefined}
+            error={scopedDetail && scopedView?.childrenReadStatus === "unavailable" ? "Unteraufgaben konnten nicht geladen werden." : ""}
+            onLoad={scopedDetail ? () => { void detailOwner?.loadTaskDetail(task.id, { area: "children", refresh: true }); } : undefined}
             childType={directChildType}
             onCreateChild={onCreateSubIssue}
             onOpenTask={openTask}
