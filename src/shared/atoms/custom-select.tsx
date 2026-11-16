@@ -101,6 +101,10 @@ export function CustomSelect({
     return () => cancelAnimationFrame(frame);
   }, [activeIndex, open, searchable, triggerRef]);
 
+  useEffect(() => {
+    if (open && searchable && document.activeElement === document.body) searchRef.current?.focus();
+  }, [open, searchable, feedback, options.length]);
+
   return (
     <div ref={rootRef} className={`relative min-w-0 ${className}`}>
       <button
