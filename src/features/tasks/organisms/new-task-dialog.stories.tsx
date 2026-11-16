@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { act, useEffect, useState, useSyncExternalStore } from "react";
+import { vi } from "vitest";
+import { PlanningItemCandidateSelect } from "../molecules/planning-item-candidate-select";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
@@ -318,3 +320,38 @@ async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:b
 }
 export const NewDeliverableDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue={false}/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,false)};
 export const NewSubIssueDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,true)};
+
+function CandidateOpenSchedulingStory() {
+  const [queries,setQueries]=useState<string[]>([]),[selected,setSelected]=useState("");
+  const [fixture]=useState(()=>createEpicParentBrowserFixture({parentKind:"initiative",candidateTtlMs:500,onRead:query=>setQueries(current=>[...current,query.query])}));
+  useEffect(()=>()=>fixture.state.owner.internal.dispose(),[fixture]);
+  return <><output aria-label="Candidate dispatched queries">{JSON.stringify(queries)}</output>
+    <PlanningItemCandidateSelect owner={fixture.state.owner.planning} value={selected} onChange={setSelected}/></>;
+}
+export const ExplicitCandidateOpenIsImmediateWhileTypingAndClearingRemainDebounced:Story={
+  render:()=> <CandidateOpenSchedulingStory/>,
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement),page=within(canvasElement.ownerDocument.body);
+    vi.useFakeTimers();
+    const user=userEvent.setup({advanceTimers:ms=>vi.advanceTimersByTime(ms)});
+    try {
+      await act(async()=>{await user.click(canvas.getByRole("combobox",{name:"Initiative"}));});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('[""]');
+      const search=page.getByRole("searchbox",{name:"Initiative suchen"});
+      await act(async()=>{await user.type(search,"Fern");});
+      await act(async()=>{await vi.advanceTimersByTimeAsync(249);});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('[""]');
+      await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern"]');
+      // Expire query receipts while keeping the original Actor/session authority valid.
+      await act(async()=>{await vi.advanceTimersByTimeAsync(501);});
+      await act(async()=>{await user.clear(search);});
+      await act(async()=>{await vi.advanceTimersByTimeAsync(249);});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern"]');
+      await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern",""]');
+      await act(async()=>{await user.type(search,"Noch");await user.keyboard("{Enter}");});
+      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern","","noch"]');
+    } finally { vi.clearAllTimers();vi.useRealTimers(); }
+  },
+};

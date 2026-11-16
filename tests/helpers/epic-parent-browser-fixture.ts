@@ -25,8 +25,8 @@ export const searchedParentInitiative = { ...epicDetailInitiative, id: "searched
 export const storedRelationshipTarget = { ...loadedParentEpic, id: "stored-relationship-target", title: "Gespeicherter Beziehungskontext", assignee: "CEO" };
 export const searchedRelationshipTarget = { ...storedRelationshipTarget, id: "searched-relationship-target", title: "Fernes verknüpftes Item" };
 
-export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask, onTargetRead }: {
-  parentKind?: "epic" | "initiative" | "deliverable" | "relationship"; detailTask?: Task; onTargetRead?: (id: string) => void; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
+export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask, onTargetRead, candidateTtlMs }: {
+  parentKind?: "epic" | "initiative" | "deliverable" | "relationship"; detailTask?: Task; onTargetRead?: (id: string) => void; candidateTtlMs?: number; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
 } = {}) {
   const epicRows = [loadedParentEpic, ...Array.from({ length: 19 }, (_, index) => epic(`epic-decoy-${index}`, `Weiteres Epic ${index + 1}`)), activeDefaultEpic, searchedParentEpic, storedParentEpic];
   const rows = parentKind === "epic" ? epicRows : parentKind === "initiative"
@@ -75,7 +75,7 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
         const response = () => ({ response: new Response(null), body: { readAuthority, readActor, candidates: {
           kind: parentKind, items: matching.slice(offset, offset + 20).map(scalar), total: matching.length,
           coverage: offset + 20 >= matching.length ? "complete" : "partial", continuation: offset + 20 >= matching.length ? null : "epic-parent-next",
-          sourceRevision, observedAt, validUntil: new Date(deadline).toISOString(), ...(parentKind === "epic" ? { defaultCandidate: scalar(activeDefaultEpic) } : {}),
+          sourceRevision, observedAt, validUntil: new Date(Math.min(deadline, candidateTtlMs === undefined ? deadline : Date.now() + candidateTtlMs)).toISOString(), ...(parentKind === "epic" ? { defaultCandidate: scalar(activeDefaultEpic) } : {}),
         } } as T });
         if (!released && !scope.query) return new Promise<ReturnType<typeof response>>(resolve => { waiting.push(() => resolve(response())); });
         return response();
