@@ -9,7 +9,8 @@
     "src/features/planning-items/server/planning-children-read-source.ts",
     "src/features/planning-items/server/planning-item-candidates-read-source.ts",
     "src/features/planning-items/server/planning-backlog-read-source.ts",
-    "src/features/planning-items/server/planning-backlog-support-read-source.ts"
+    "src/features/planning-items/server/planning-backlog-support-read-source.ts",
+    "src/features/planning-items/server/planning-backlog-rank-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -165,6 +166,13 @@
       "reason": "The fixed credential-bound service-only RPC returns complete scalar control options or exact five-bucket Sprint aggregates independently of selected Item membership. Full planned hours and commitment-only versus complete-team capacity use the shared transactional source, fresh mapped Actor publication and original deadline. No Task, directory, child or relationship completeness follows from these metadata responses.",
       "evidence": "tests/integration/backlog-support.test.ts; tests/migrations/20261116225650_planning_backlog_support.test.mjs",
       "expiresWhen": "Revalidate when scalar population, bucket selection, capacity, planned hours, source dependencies or authority changes."
+    },
+    "BACKLOG-RANK": {
+      "consumer": "Explicit relative Backlog rank actions",
+      "owner": "Backlog and Planning Item feature owners",
+      "reason": "The service-only fixed resolver selects at most one relative target from the complete unfinished Deliverable class before any page limit. It retains numeric rank and German ID ties, original displayed source version, source revision, fresh mapped Actor publication and original deadline. Boundary no-ops hydrate nothing; the shared bounded context hydrator reads only the known target. This is not full membership, canonical source replacement, optimistic renumbering authority or a write permission.",
+      "evidence": "tests/integration/backlog-rank-target.test.ts; tests/migrations/20261116230848_planning_backlog_rank_target.test.mjs",
+      "expiresWhen": "Revalidate when relative actions, eligibility, ordering, source/target versions, authority or bounded hydration changes."
     }
   },
   "allowedEdges": [
@@ -272,6 +280,21 @@
       "from": "src/lib/credentials/internal/planning.ts",
       "to": "src/features/planning-items/server/planning-backlog-support-read-source.ts",
       "contract": "BACKLOG-SUPPORT"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
+      "contract": "BACKLOG-RANK"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
+      "to": "src/features/planning-items/server/planning-backlog-read-source.ts",
+      "contract": "BACKLOG-RANK"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "BACKLOG-RANK"
     }
   ],
   "readSites": [
