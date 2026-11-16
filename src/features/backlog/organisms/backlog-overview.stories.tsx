@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { BacklogOverview } from "./backlog-overview";
@@ -8,7 +8,7 @@ import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-client";
 import type { BacklogModel } from "../model/backlog-read-model";
-import type { AuthenticatedProfile, Sprint } from "@/lib/types";
+import type { AuthenticatedProfile, Sprint, Task } from "@/lib/types";
 const sprint: Sprint = { id: "sprint-1", name: "Sprint 1", status: "active", startDate: "2026-10-26", endDate: "2026-11-01", reviewDueAt: "2026-11-03", scoreLocked: false, updatedAt: "s1" };
 const tasks = [taskDetailStoryTask({ id: "a", title: "Deliverable Alpha", taskType: "deliverable", approvalStatus: "approved", parentTaskId: "initiative", parentApprovalStatus: "approved", assigneeId: "founder", ownerId: "founder", sprintId: "", updatedAt: "r1", order: 10 }), taskDetailStoryTask({ id: "b", title: "Deliverable Beta", taskType: "deliverable", approvalStatus: "approved", parentTaskId: "initiative", parentApprovalStatus: "approved", assigneeId: "founder", ownerId: "founder", sprintId: "", updatedAt: "r1", order: 20 }), taskDetailStoryTask({ id: "initiative", title: "Approved Initiative", taskType: "initiative", approvalStatus: "approved", parentTaskId: "", updatedAt: "i1" })];
 const model: BacklogModel = { revision: "initial", items: tasks, people: [], sprints: [sprint], commitments: [], coverage: { items: "complete", people: "complete", sprints: "complete", commitments: "complete", strategies: "complete", raci: "complete", links: "complete" } };
@@ -128,3 +128,60 @@ export const RankDragKeepsDisplayedSourceAndTargetBasis: Story = { globals: { vi
  await waitFor(() => expect(canvas.getByText("Detail Alpha version: foreign-r2")).toBeVisible()); const rank = within(canvasElement.querySelector('[data-tour-id="backlog-rank-table"]') as HTMLElement); const target = rank.getAllByText("Deliverable Alpha").map(element => element.closest("tr")).find(Boolean)!; const bounds = target.getBoundingClientRect(); target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.top + 1 })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.top + 1 })); source.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer }));
  await waitFor(() => expect(canvas.getAllByText(/Quelle oder Ziel wurde zwischenzeitlich geändert/)[0]).toBeVisible()); expect(controls.get("order-drag-basis")!.writes()).toBe(0);
 } };
+
+const childAreaParent = taskDetailStoryTask({ id:"selected-backlog-initiative",title:"Ausgewählte Backlog-Initiative",taskType:"initiative",parentTaskId:"",approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaPreview = taskDetailStoryTask({ id:"backlog-preview-deliverable",title:"Sichtbares Vorschau-Deliverable",parentTaskId:childAreaParent.id,approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaOffPage = taskDetailStoryTask({ id:"backlog-off-page-deliverable",title:"Vollständig geladenes Backlog-Kind",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Erledigt",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaControls = new Map<string,{fail():void;resolve():void}>();
+function IndependentBacklogChildrenStory() {
+ const [requests,setRequests]=useState(0);
+ const [bundle]=useState(()=>{
+  const profile={id:"backlog-child-founder",name:"Synthetic Founder",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
+  const source=[childAreaParent,childAreaPreview],data={...emptyPlanningShellState,tasks:source,profiles:[profile]};
+  const initial:BacklogModel={revision:"backlog-selected-source",items:source,people:[profile],sprints:[],commitments:[],coverage:{items:"partial",people:"complete",sprints:"complete",commitments:"complete",strategies:"complete",raci:"complete",links:"complete"}};
+  const deadline=Date.now()+60_000,userId="backlog-child-user";
+  let fail=()=>{},resolve=()=>{};
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason","dependsOn","evidenceLink","assignee","owner","createdBy"];
+  const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
+  const childResponse=()=>({response:new Response(null),body:{readAuthority:{userId,deadline},taskDetail:{revision:childAreaParent.updatedAt,sourceRevision:JSON.stringify(["backlog-selected-source","0",null,null]),observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString(),authorityDeadline:deadline,readActor:{profileId:profile.id,platformRole:profile.platformRole},readArea:"children",supportingData:"omitted",taskOmittedFields:omitted,
+    item:compact(childAreaParent),ancestors:[],children:[childAreaPreview,childAreaOffPage].map(compact),childProgress:{completed:1,total:2,unfinished:1,percentage:50},coverage:{children:"complete"},relatedItems:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}}});
+  let childReads=0;
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+    const url=new URL(String(input),"http://localhost:3000");
+    if(url.pathname==="/api/backlog-data")return{response:new Response(null),body:{model:initial} as T};
+    if(url.pathname===`/api/tasks/${childAreaParent.id}/detail-data`&&url.searchParams.get("area")==="children"){
+      setRequests(++childReads);
+      return new Promise<BrowserApiJsonResult<T>>(done=>{fail=()=>done({response:new Response(null,{status:503}),body:{error:"Synthetic child read unavailable"} as T});resolve=()=>done(childResponse() as BrowserApiJsonResult<T>);});
+    }
+    throw new Error("Unexpected Backlog child demand");
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const browser=createBrowserPlanningState({initialData:data,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile});
+  browser.runtime.session={userId,revision:"backlog-child-session",expiresAt:deadline/1000,user:{id:userId}};browser.runtime.apiClient=client;
+  return{browser,fail:()=>fail(),resolve:()=>resolve()};
+ });
+ useEffect(()=>()=>bundle.browser.owner.internal.dispose(),[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ childAreaControls.set("independent",bundle);
+ return <><output aria-label="Backlog child requests">{requests}</output><BacklogOverview planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></>;
+}
+export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingItsParent:Story={
+ render:()=> <IndependentBacklogChildrenStory/>,
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog child requests")).toHaveTextContent("1"));
+  const group=canvas.getByRole("region",{name:childAreaParent.title}),area=within(group);
+  await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await expect(area.getByText("Fortschritt noch nicht verfügbar.")).toBeVisible();
+  await expect(area.queryByRole("progressbar")).not.toBeInTheDocument();
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});await userEvent.click(search);
+  childAreaControls.get("independent")!.fail();
+  await expect(await area.findByText("Unteraufgaben konnten nicht geladen werden.")).toBeVisible();
+  await expect(search).toHaveFocus();await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await userEvent.click(area.getByRole("button",{name:"Erneut laden"}));
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog child requests")).toHaveTextContent("2"));
+  childAreaControls.get("independent")!.resolve();
+  await expect(await area.findByRole("link",{name:childAreaOffPage.title})).toBeVisible();
+  await expect(area.getByRole("progressbar",{name:"1 von 2 Deliverables erledigt"})).toBeVisible();
+  await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+ },
+};
