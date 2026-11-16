@@ -14,7 +14,12 @@ import { itemPageModel, itemPageProfile, itemPageUser, itemPageHeaderData, mockI
 
 let completeChildRead: (() => void) | undefined;
 let completeSummaryRead: (() => void) | undefined;
-function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure = false }: { level?: "epic" | "initiative" | "deliverable"; failure?: "none" | "unavailable" | "forbidden"; summaryFailure?: boolean }) {
+let completeOpenedTarget: (() => void) | undefined;
+let completeOpenedChildren: (() => void) | undefined;
+let openedTargetSignal: AbortSignal | null | undefined;
+let openedChildrenSignal: AbortSignal | null | undefined;
+const openedAreas: string[] = [];
+function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure = false, parallelOpen = false }: { level?: "epic" | "initiative" | "deliverable"; failure?: "none" | "unavailable" | "forbidden"; summaryFailure?: boolean; parallelOpen?: boolean }) {
   const [ready, setReady] = useState(false);
   const [detailReads, setDetailReads] = useState(0);
   const [boardReads, setBoardReads] = useState(0);
@@ -39,13 +44,15 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
   useEffect(() => {
     completeChildRead = undefined;
     completeSummaryRead = undefined;
+    completeOpenedTarget = undefined; completeOpenedChildren = undefined;
+    openedTargetSignal = undefined; openedChildrenSignal = undefined; openedAreas.splice(0);
     let reads = 0;
     const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`;
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let restore: (() => void) | undefined;
     let active = true;
-    void mockItemPageBrowser({ respond: input => {
+    void mockItemPageBrowser({ respond: (input, init) => {
       const url = new URL(String(input), window.location.origin), path = url.pathname;
       if (path === "/api/planning-board-data") {
         if (url.searchParams.get("summaries")) {
@@ -58,6 +65,7 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
       }
       if (path === "/api/planning-revision") return Response.json({ revision: model.board.workspaceRevision });
       if (path === `/api/tasks/${parent.id}/detail-data`) {
+        if (parallelOpen && url.searchParams.get("area") === "target") return Response.json({ taskDetail: { ...base, item: { ...parent, detailAvailability: undefined } }, unavailable: [] });
         if (url.searchParams.get("area") !== "children") return Response.json({ error: "Independent child demand required" }, { status: 400 });
         setDetailReads(value => value + 1);
         if (++reads === 1 && failure !== "none") return Response.json({ error: failure === "forbidden" ? "Kein Zugriff auf diese Aufgabe." : "Details sind vorübergehend nicht erreichbar." }, { status: failure === "forbidden" ? 403 : 503 });
@@ -82,6 +90,33 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
       }
       if (path === `/api/tasks/${children[0].id}/detail-data`) {
         setDetailReads(value => value + 1);
+        if (parallelOpen) {
+          const area = url.searchParams.get("area") || "complete";
+          openedAreas.push(area);
+          const signal = input instanceof Request ? input.signal : init?.signal;
+          if (area === "target") {
+            openedTargetSignal = signal;
+            return new Promise<Response>(resolve => { completeOpenedTarget = () => resolve(Response.json({ taskDetail: { ...base,
+              item: { ...children[0], detailAvailability: undefined, description: "Canonical opened child", problemStatement: "Canonical opened child" },
+              ancestors: [{ ...parent, detailAvailability: "summary" }], children: [] }, unavailable: [] })); });
+          }
+          if (area === "children") {
+            openedChildrenSignal = signal;
+            const deadline = Date.now() + 60_000, observedAt = new Date().toISOString();
+            const compact = (row: Task) => ({ id: row.id, title: row.title, taskType: row.taskType, parentTaskId: row.parentTaskId,
+              updatedAt: row.updatedAt, status: row.status, order: row.order, assigneeId: row.assigneeId, ownerId: row.ownerId, detailAvailability: "summary" });
+            const child = taskDetailStoryTask({ id: "early-visible-sub-issue", taskType: "sub_issue", title: "Early complete child membership", parentTaskId: children[0].id, status: "Offen" });
+            return new Promise<Response>(resolve => { completeOpenedChildren = () => resolve(Response.json({ readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
+              revision: base.revision, readArea: "children", sourceRevision: "early-child-source", observedAt, validUntil: null, authorityDeadline: deadline,
+              readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, supportingData: "omitted",
+              taskOmittedFields: ["description", "problemStatement", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
+              item: compact(children[0]), ancestors: [compact(parent)], children: [compact(child)], relatedItems: [],
+              childProgress: { completed: 0, total: 1, unfinished: 1, percentage: 0 },
+              discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+            }, unavailable: [] })); });
+          }
+          return Response.json({ error: "Independent scoped demand required" }, { status: 400 });
+        }
         return Response.json({ taskDetail: { ...base, item: { ...children[0], problemStatement: "The child detail is loaded independently.", description: "The child detail is loaded independently." }, ancestors: [{ ...parent, detailAvailability: "summary" }], children: [] }, unavailable: [] });
       }
       return undefined;
@@ -176,3 +211,68 @@ export const DeniedChildListKeepsASafeOutcome: Story = { args: { failure: "forbi
   await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
   await expect(canvas.getByLabelText("Child Board reads")).toHaveTextContent("0");
 } };
+
+
+async function openHeldChild(canvasElement: HTMLElement) {
+  const { canvas } = await expandChildren(canvasElement);
+  await waitFor(() => expect(completeChildRead).toBeDefined());
+  completeChildRead?.();
+  await userEvent.click(await canvas.findByRole("link", { name: "On-demand child, Status Offen" }));
+  await waitFor(() => expect(completeOpenedTarget).toBeDefined());
+  return { canvas, panel: await canvas.findByRole("dialog", { name: "On-demand child" }) };
+}
+
+export const ChildrenStartWhileTargetIsHeldWithoutUnlockingTheEditor: Story = {
+  args: { level: "initiative", parallelOpen: true },
+  play: async ({ canvasElement }) => {
+    const { panel } = await openHeldChild(canvasElement), detail = within(panel);
+    await waitFor(() => expect(openedAreas.filter(area => area === "children")).toHaveLength(1));
+    completeOpenedChildren?.();
+    await expect(detail.queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument();
+    await expect(detail.queryByText("Canonical opened child")).not.toBeInTheDocument();
+    await expect(openedTargetSignal?.aborted).toBe(false);
+    await expect(openedAreas.filter(area => area === "target")).toHaveLength(1);
+    completeOpenedTarget?.();
+    await expect(await detail.findByText("Canonical opened child")).toBeVisible();
+    await expect(await detail.findByRole("link", { name: /Early complete child membership/ })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Bearbeiten" })).toBeEnabled();
+    await expect(openedAreas.filter(area => area === "target")).toHaveLength(1);
+  },
+};
+
+export const FirstTargetBecomesEditableWhileChildrenAreHeld: Story = {
+  args: { level: "initiative", parallelOpen: true },
+  play: async ({ canvasElement }) => {
+    const { panel } = await openHeldChild(canvasElement), detail = within(panel);
+    completeOpenedTarget?.();
+    await expect(await detail.findByText("Canonical opened child")).toBeVisible();
+    await waitFor(() => expect(completeOpenedChildren).toBeDefined());
+    await expect(detail.getByRole("button", { name: "Bearbeiten" })).toBeEnabled();
+    await userEvent.click(detail.getByRole("button", { name: "Bearbeiten" }));
+    const title = await detail.findByRole("textbox", { name: "Titel" });
+    await userEvent.clear(title); await userEvent.type(title, "Current target draft");
+    completeOpenedChildren?.();
+    await expect(await detail.findByRole("link", { name: /Early complete child membership/ })).toBeVisible();
+    await expect(title).toHaveValue("Current target draft");
+    await expect(title).toHaveFocus();
+    await expect(openedAreas.filter(area => area === "target")).toHaveLength(1);
+  },
+};
+
+export const SelectionChangeAbortsEarlyChildrenAndRejectsLateResults: Story = {
+  args: { level: "initiative", parallelOpen: true },
+  play: async ({ canvasElement }) => {
+    const { canvas, panel } = await openHeldChild(canvasElement);
+    await waitFor(() => expect(completeOpenedChildren).toBeDefined());
+    await userEvent.click(within(panel).getByRole("button", { name: "Detailpanel schließen" }));
+    await waitFor(() => expect(openedChildrenSignal?.aborted).toBe(true));
+    await expect(openedTargetSignal?.aborted).toBe(true);
+    await userEvent.click(canvas.getByRole("link", { name: "Parent initiative" }));
+    const current = await canvas.findByRole("dialog", { name: "Parent initiative" });
+    completeOpenedChildren?.(); completeOpenedTarget?.();
+    await expect(within(current).queryByText("Early complete child membership")).not.toBeInTheDocument();
+    await expect(within(current).queryByText("Canonical opened child")).not.toBeInTheDocument();
+    await expect(current).toBeVisible();
+    await expect(openedAreas.filter(area => area === "target")).toHaveLength(1);
+  },
+};
