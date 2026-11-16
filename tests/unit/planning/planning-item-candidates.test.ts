@@ -182,3 +182,27 @@ test("an old-session target denial cannot invalidate a verified replacement-sess
   expect(owner.planning.candidates(query)).toMatchObject({ readStatus: "current", total: 1, items: [item] });
   expect(owner.planning.candidate(item.id)?.title).toBe(item.title);
 });
+
+test("relationship source scopes cannot coalesce or reuse each other's candidate authority", async () => {
+  const reads: Array<string | null | undefined> = [];
+  const first = deferred<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt>();
+  const { planning, internal } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor,
+    adapter: { saveTask: async () => ({ task }), readWorkspace: async () => null, readCandidates: async scope => {
+      reads.push(scope.sourceId);
+      const value = { ...receipt(), candidates: { ...receipt().candidates, kind: "relationship" as const, items: [{ ...item, assigneeLabel: "Reader" }] } };
+      if (scope.sourceId === "first-source") return first.promise;
+      return value;
+    } } });
+  try {
+    const a: PlanningItemCandidateQuery = { view: "candidates", kind: "relationship", sourceId: "first-source", query: "", limit: 20 };
+    const b = { ...a, sourceId: "second-source" };
+    const pending = planning.loadCandidates(a, { immediate: true });
+    expect(await planning.loadCandidates(b, { immediate: true })).toEqual({ ok: true });
+    expect(reads).toEqual(["first-source", "second-source"]);
+    expect(planning.candidates(a).readStatus).toBe("loading");
+    expect(planning.candidates(b).readStatus).toBe("current");
+    first.resolve({ ...receipt(), candidates: { ...receipt().candidates, kind: "relationship", items: [{ ...item, assigneeLabel: "Reader" }] } });
+    expect(await pending).toEqual({ ok: true });
+    expect(planning.candidates(b).query.sourceId).toBe("second-source");
+  } finally { internal.dispose(); }
+});

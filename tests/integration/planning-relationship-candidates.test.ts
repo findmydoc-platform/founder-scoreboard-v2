@@ -33,3 +33,24 @@ test("Relationship discovery excludes its bound source and Sub-Issues before pag
   expect(createBody.candidates.total).toBe(1009);expect(createBody.candidates.items[0].id).toBe(f.initiativeId);
   expect(f.observed.slice(before).some(entry=>/\/(active_tasks|tasks)$/.test(entry.path))).toBe(false);
 }),120_000);
+
+test("Relationship discovery retains all mapped reader roles and denies unmapped or direct user RPC access", () => withPlanningCredentialDatabase(async f => {
+  await f.db.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner,approval_status) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'Offen','P2',$4,'proposed')", [`${f.prefix}-permitted-deliverable`, `${f.prefix} permitted Deliverable`, f.initiativeId, f.actors.founder.profileId]);
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const scope = { view: "candidates", kind: "relationship", sourceId: f.initiativeId, query: f.prefix, limit: 20 };
+  for (const actor of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
+    const response = await GET(f.request(actor, `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(response.status).toBe(200);
+    const body = await response.json(); expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([`${f.prefix}-permitted-deliverable`]);
+    expect(body.readActor).toEqual({ profileId: f.actors[actor].profileId, platformRole: actor === "administrator" ? "founder" : actor });
+    expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  const denied = await GET(f.request("unmapped", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+  expect(denied.status).toBe(403); expect(await denied.json()).not.toHaveProperty("candidates");
+  const invalidSource = await GET(f.request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ ...scope, sourceId: `${f.prefix}-missing-source` }))}`));
+  expect(invalidSource.status).toBe(403); expect(await invalidSource.json()).not.toHaveProperty("candidates");
+  for (const actor of ["founder", "unmapped", "anonymous"] as const) {
+    const response = await f.rpc("planning_item_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_kind: "relationship", sourceId: f.initiativeId, p_query: "", p_limit: 20 }, actor);
+    expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
+  }
+}), 120_000);

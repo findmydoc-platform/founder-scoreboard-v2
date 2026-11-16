@@ -13,7 +13,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   const entries = new Map<string, Entry>();
   const invalidView: PlanningItemCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: { status: "not-applicable" } };
   let sequence = 0, acceptedSequence = 0, acceptedSource: string | undefined;
-  const key = (query: PlanningItemCandidateQuery) => JSON.stringify([query.kind, query.query, query.limit]);
+  const key = (query: PlanningItemCandidateQuery) => JSON.stringify([query.kind, ...(query.kind === "relationship" ? [query.sourceId] : []), query.query, query.limit]);
   const unknownDefault = (query: PlanningItemCandidateQuery): PlanningCandidateDefault => ({ status: query.kind === "epic" ? "unknown" : "not-applicable" });
   const sameSession = (a: Binding, b: Binding) => b.active && a.generation === b.generation && a.sessionRevision === b.sessionRevision && a.userId === b.userId
     && a.actor?.id === b.actor?.id && a.actor?.platformRole === b.actor?.platformRole;
@@ -90,7 +90,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
         || !current.actor || receipt.readActor?.profileId !== current.actor.id || receipt.readActor.platformRole !== current.actor.platformRole
         || !page || typeof page.sourceRevision !== "string" || !page.sourceRevision || !Number.isFinite(Date.parse(page.observedAt)) || !Number.isFinite(Date.parse(page.validUntil)) || Date.parse(page.validUntil) <= now()
         || !Array.isArray(page.items) || !Number.isSafeInteger(page.total) || page.total < page.items.length || !["complete", "partial"].includes(page.coverage)
-        || page.items.some(item => item.taskType !== query.kind || item.taskType === "deliverable" && typeof item.parentTitle !== "string" && item.parentTitle !== null)
+        || page.items.some(item => query.kind === "relationship" ? !["epic", "initiative", "deliverable"].includes(item.taskType) || item.id === query.sourceId || typeof item.assigneeLabel !== "string" : item.taskType !== query.kind || item.taskType === "deliverable" && typeof item.parentTitle !== "string" && item.parentTitle !== null)
         || query.kind !== "epic" && page.kind === "epic"
         || query.kind === "epic" && (page.kind !== "epic" || page.defaultCandidate !== null && (page.defaultCandidate.taskType !== "epic" || !page.defaultCandidate.id || typeof page.defaultCandidate.title !== "string"))) {
         value.view = { ...value.view, readStatus: "unavailable", items: [], coverage: "unknown", continuation: null, defaultChoice: unknownDefault(query) }; value.receipt = undefined; return;

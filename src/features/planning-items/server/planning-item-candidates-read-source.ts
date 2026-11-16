@@ -9,13 +9,14 @@ type CandidateResult = { status: "ready"; candidates: PlanningItemCandidatePage;
   | { status: "forbidden" | "unavailable" | "staleContinuation" };
 
 function sign(context: PlanningWorkspaceLoadContext, query: PlanningItemCandidateQuery, cursor: Omit<Cursor, "binding">) {
-  return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["initiative-candidates-v1", context.actorProfileId, query.kind, query.query, query.limit, cursor])).digest("hex");
+  return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["initiative-candidates-v1", context.actorProfileId, query.kind, ...(query.kind === "relationship" ? [query.sourceId] : []), query.query, query.limit, cursor])).digest("hex");
 }
 
 function validCandidate(value: unknown, kind: PlanningItemCandidateQuery["kind"]): value is PlanningItemCandidate {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
-  return typeof item.id === "string" && typeof item.title === "string" && item.taskType === kind
+  return (kind !== "relationship" || ["epic", "initiative", "deliverable"].includes(String(item.taskType)) && typeof item.assigneeLabel === "string")
+    && typeof item.id === "string" && typeof item.title === "string" && (kind === "relationship" || item.taskType === kind)
     && (kind !== "deliverable" || typeof item.parentTitle === "string" || item.parentTitle === null)
     && typeof item.parentTaskId === "string" && typeof item.approvalStatus === "string" && typeof item.updatedAt === "string";
 }
@@ -39,7 +40,7 @@ export async function loadPlanningItemCandidates(supabase: SupabaseClient, conte
   if (deadline <= Date.now()) return { status: "forbidden" };
   try {
     const read = supabase.rpc("planning_item_candidates", { p_actor_profile_id: context.actorProfileId, p_kind: query.kind, p_query: query.query,
-      p_limit: query.limit, p_offset: cursor?.offset ?? 0, p_source_revision: cursor?.source ?? null,
+      p_source_id: query.kind === "relationship" ? query.sourceId : null, p_limit: query.limit, p_offset: cursor?.offset ?? 0, p_source_revision: cursor?.source ?? null,
       p_evaluated_at: cursor?.observedAt ?? null, p_valid_until: cursor?.validUntil ?? null });
     const result = await (context.signal ? read.abortSignal(context.signal) : read);
     if (result.error) return { status: result.status === 401 || result.status === 403 ? "forbidden" : "unavailable" };
@@ -65,6 +66,6 @@ export async function loadPlanningItemCandidates(supabase: SupabaseClient, conte
       continuation: offset >= page.total ? null : Buffer.from(JSON.stringify({ ...next, binding: sign(context, query, next) })).toString("base64url"),
       sourceRevision: page.source_revision, observedAt: page.observed_at, validUntil: page.valid_until };
     return { status: "ready", authorityDeadline: deadline, candidates: query.kind === "epic"
-      ? { ...common, kind: "epic", defaultCandidate: page.default_candidate } : query.kind === "deliverable" ? { ...common, kind: "deliverable" } : common };
+      ? { ...common, kind: "epic", defaultCandidate: page.default_candidate } : query.kind === "deliverable" ? { ...common, kind: "deliverable" } : query.kind === "relationship" ? { ...common, kind: "relationship" } : common };
   } catch { return { status: "unavailable" }; }
 }
