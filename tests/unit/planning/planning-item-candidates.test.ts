@@ -3,6 +3,7 @@ import { createPlanningState } from "@/features/planning/model/internal/planning
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { InitiativeCandidatePage, InitiativeCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
+import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 
 const actor = { id: "candidate-reader", name: "Reader", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 40 };
 const task = taskDetailStoryTask({ id: "loaded-deliverable" });
@@ -136,4 +137,48 @@ test("known source invalidation restarts candidate discovery without sending an 
   expect(reads.map(scope => scope.continuation)).toEqual([undefined, undefined]);
   expect(planning.candidates(query)).toMatchObject({ readStatus: "current", items: [item], coverage: "partial" });
   expect(planning.candidate(item.id)?.title).toBe(item.title);
+});
+
+function targetReceipt(id: string) {
+  const deadline = Date.now() + 60_000;
+  const model: TaskDetailModel = { revision: "2026-11-01T12:00:00Z", readArea: "target", sourceRevision: "independent-target-source",
+    observedAt: new Date().toISOString(), validUntil: new Date(deadline).toISOString(), authorityDeadline: deadline,
+    readActor: { profileId: actor.id, platformRole: actor.platformRole }, project: emptyPlanningShellState.project,
+    item: taskDetailStoryTask({ id, title: "Independent canonical context", parentTaskId: "", updatedAt: "2026-11-01T12:00:00Z" }),
+    people: [actor], sprints: [], ancestors: [], children: [], relatedItems: [], coverage: {},
+    discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] };
+  return { model, readAuthority: { userId: "candidate-user", deadline } };
+}
+
+test("a current target denial removes its candidate label and count while preserving independent canonical context", async () => {
+  const independentId = "independent-target";
+  const adapter = { readWorkspace: async () => null, saveTask: async () => ({ task }), readCandidates: async () => receipt(),
+    readTaskDetail: async (id: string) => { if (id === item.id) throw { status: 403 }; return targetReceipt(id); } };
+  const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
+  await planning.loadTaskDetail(independentId, { area: "target" });
+  await planning.loadCandidates(query, { immediate: true });
+  expect(planning.candidate(item.id)?.title).toBe(item.title);
+  expect(await planning.loadTaskDetail(item.id, { area: "target" })).toMatchObject({ ok: false });
+  expect(planning.candidate(item.id)).toBeNull();
+  expect(planning.candidates(query)).toMatchObject({ readStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null });
+  expect(planning.taskDetail(independentId)).toMatchObject({ readStatus: "current", task: { id: independentId, title: "Independent canonical context" } });
+});
+
+test("an old-session target denial cannot invalidate a verified replacement-session candidate receipt", async () => {
+  let rejectTarget!: (reason: unknown) => void;
+  const pending = new Promise<ReturnType<typeof targetReceipt>>((_resolve, reject) => { rejectTarget = reject; });
+  const session = { userId: "candidate-user", revision: "candidate-denial-old", expiresAt: Date.now() / 1000 + 3600, user: { id: "candidate-user" } };
+  const data = { ...emptyPlanningShellState, profiles: [actor], tasks: [task] };
+  const adapter = { saveTask: async () => ({ task }), readTaskDetail: async () => pending, readCandidates: async () => receipt(),
+    readWorkspace: async () => ({ data, scopeRevision: "candidate-source-one", taskCoverage: "partial" as const, currentProfile: actor,
+      readAuthority: { userId: session.userId, deadline: Date.now() + 60_000 } }) };
+  const owner = createPlanningState({ userId: session.userId, initialSession: session, initialData: data, initialCurrentProfile: actor, adapter });
+  const oldRead = owner.planning.loadTaskDetail(item.id, { area: "target" });
+  owner.internal.bindSession({ ...session, revision: "candidate-denial-new" });
+  await owner.planning.refreshWorkspace("planning");
+  await owner.planning.loadCandidates(query, { immediate: true });
+  expect(owner.planning.candidates(query)).toMatchObject({ readStatus: "current", items: [item] });
+  rejectTarget({ status: 403 }); expect(await oldRead).toMatchObject({ ok: false });
+  expect(owner.planning.candidates(query)).toMatchObject({ readStatus: "current", total: 1, items: [item] });
+  expect(owner.planning.candidate(item.id)?.title).toBe(item.title);
 });
