@@ -17,6 +17,7 @@ function StoryRenderer() {
   const [owner] = useState(() => createPlanningState({ userId: "deferred-views", initialData: { ...emptyPlanningShellState, tasks }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null } }));
   const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
   const [view, setView] = useState<ViewMode>("board");
+  const openTaskPanel = () => undefined;
   const controller = {
     canChangeTaskStatus: () => false,
     canManageFinalTaskStatus: false,
@@ -28,7 +29,8 @@ function StoryRenderer() {
     expandedInitiatives: {},
     filters: DEFAULT_PLANNING_FILTERS,
     filtersAvailable: true,
-    openTaskPanel: () => undefined,
+    openTaskPanel,
+    startTaskPanel: openTaskPanel,
     planningLevel: "deliverable",
     planningParentFilterId: "all",
     selectedTaskId: null,
