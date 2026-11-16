@@ -3,9 +3,9 @@ import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
 test("independent direct children enumerate above provider limits with complete progress and canonical navigation", () => withPlanningCredentialDatabase(async f => {
-  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,owner,sort_order)
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,owner,sort_order,approval_status)
     select $1||'-child-'||lpad(n::text,4,'0'),'findmydoc-founder-execution','Synthetic direct child','Private full child content','deliverable',$2,
-      case when n=1008 then 'Offen' else 'Erledigt' end,'P2',$3,0 from generate_series(1,1008) n`,
+      case when n=1008 then 'Offen' else 'Erledigt' end,'P2',$3,0,'approved' from generate_series(1,1008) n`,
   [f.prefix, f.initiativeId, f.actors.founder.profileId]);
   const firstChild = `${f.prefix}-child-0001`, lastChild = `${f.prefix}-child-1008`;
   await f.db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner)
