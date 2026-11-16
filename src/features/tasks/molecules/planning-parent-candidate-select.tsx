@@ -14,7 +14,8 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   kind?: "initiative" | "epic"; label?: string; chooseDefault?: boolean; disabled?: boolean; owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
 }) {
   const singular = kind === "epic" ? "Epic" : "Initiative", plural = kind === "epic" ? "Epics" : "Initiativen";
-  const [needsDefault, setNeedsDefault] = useState(chooseDefault && !value);
+  const [defaultEnabled, setDefaultEnabled] = useState(chooseDefault);
+  const needsDefault = defaultEnabled && !value;
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
   const normalizedSearch = normalizePlanningItemCandidateQuery({ view: "candidates", kind, query: search, limit: 20 })!.query;
   const query = useMemo(() => ({ view: "candidates" as const, kind, query: normalizedSearch, limit: 20 }), [kind, normalizedSearch]);
@@ -40,7 +41,6 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   }, [owner, open, query, needsDefault]);
   useEffect(() => {
     if (needsDefault && view.defaultChoice.status === "current") {
-      setNeedsDefault(false);
       if (!value && view.defaultChoice.item) onChange(view.defaultChoice.item.id);
     }
   }, [needsDefault, view.defaultChoice, value, onChange]);
@@ -64,7 +64,7 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   const loadFurther = () => {
     if (demand.current && view.continuation) void owner.loadCandidates({ ...query, continuation: view.continuation }, { immediate: true, signal: demand.current.signal });
   };
-  return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setNeedsDefault(false); onChange(id); }} onOpenChange={setOpen}
+  return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setDefaultEnabled(false); onChange(id); }} onOpenChange={setOpen}
     selectedOptionLabel={selected?.title || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
     options={[{ value: "", label: `Ohne ${singular} – als Vorschlag` }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: item.title })) : [])]}
     search={{ label: `${singular} suchen`, value: search, onChange: value => setSearch(value.slice(0, 2048)), onSubmit: () => submit() }}

@@ -26,7 +26,7 @@ function Fixture({ scenario = "epic-success" }: { scenario?: string }) {
     let serverTask: Task = scenario.startsWith("epic") || scenario.startsWith("delete") ? epic : initiative;
     const client: BrowserApiClient = {
       async requestJson<T>(path: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) {
-        if (options?.method) {
+        if (options?.method && options.method !== "GET") {
           writes.push({ path: String(path), payload: JSON.parse(JSON.stringify(options.json)) });
           const patch = JSON.parse(JSON.stringify(options.json)) as Partial<Task> & { expectedUpdatedAt?: string };
           if (options.method === "DELETE") return { response: new Response(null, { status: scenario === "delete-unknown" ? 503 : 200 }), body: (scenario === "delete-unknown" ? { error: "Missing deletion confirmation" } : { task: epic }) as T };
