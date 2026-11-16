@@ -47,6 +47,12 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   const context = owner.taskDetail(value);
   const contextBlocked = context.removed || context.readStatus === "forbidden";
   const contextualTask = !contextBlocked && context.task?.taskType === kind && context.task.detailAvailability !== "stale" ? context.task : null;
+  const contextNeedsRefresh = Boolean(value && !owner.candidate(value) && !contextualTask && !contextBlocked && ["not-loaded", "stale"].includes(context.readStatus));
+  useEffect(() => {
+    // A confirmed parent mutation can invalidate discovery without changing
+    // selection identity. Reuse its existing lease for authoritative context.
+    if (contextNeedsRefresh && contextDemand.current) void owner.loadTaskDetail(value, { area: "target", signal: contextDemand.current.signal });
+  }, [owner, value, contextNeedsRefresh]);
   const selected = owner.candidate(value) || (!contextBlocked ? view.items.find(item => item.id === value) || contextualTask : null);
   const contextUnavailable = Boolean(value && !selected && (context.removed || ["unavailable", "stale", "forbidden"].includes(context.readStatus)));
   const retryContext = () => {
