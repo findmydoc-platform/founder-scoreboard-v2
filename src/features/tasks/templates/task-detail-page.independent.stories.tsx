@@ -105,7 +105,7 @@ export const VisibleChildrenLoadWithoutACompleteDetailRead: Story = {
     await expect(await canvas.findByRole("link", { name: /Visible independent child/ })).toBeVisible();
     await expect(title).toHaveValue("Preserved child-loading draft");
     await expect(title).toHaveFocus();
-    await expect(canvas.getByRole("progressbar", { name: "0 von 1 Sub-Issues erledigt" })).toBeVisible();
+    await expect(within(canvas.getByRole("region", { name: "Sub-Issues" })).getByRole("progressbar", { name: "0 von 1 Sub-Issues erledigt" })).toBeVisible();
     await expect(areas).toEqual(["children"]);
   },
 };
