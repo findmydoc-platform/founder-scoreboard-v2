@@ -51,7 +51,7 @@ export function usePlanningTaskSelection({
   }, [planningState, setSelectedTaskId]);
 
   const openTaskPanel = useCallback((taskId: string, mode: TaskPanelOpenMode = "start") => {
-    if (mode === "start") return startTaskPanel(taskId);
+    if (mode !== "push") return startTaskPanel(taskId);
     if (planningState.taskDetail(taskId).removed) return;
     const normalizedHistory = normalizeTaskPanelHistory(taskPanelHistory, new Set(taskPanelHistory.filter(taskId => planningState.taskDetail(taskId).removed)));
     const nextHistory = pushTaskPanelHistory(normalizedHistory, taskId);
