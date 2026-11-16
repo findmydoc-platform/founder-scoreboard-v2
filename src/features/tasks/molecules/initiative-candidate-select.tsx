@@ -37,8 +37,9 @@ export function InitiativeCandidateSelect({ owner, value, selectedContext, onCha
     return () => { controller.abort(); if (demand.current === controller) demand.current = null; };
   }, [owner, open, query]);
   const context = owner.taskDetail(value);
-  const contextualTask = !context.removed && context.task?.taskType === "initiative" && context.task.detailAvailability !== "stale" ? context.task : null;
-  const selected = owner.candidate(value) || view.items.find(item => item.id === value) || contextualTask;
+  const contextBlocked = context.removed || context.readStatus === "forbidden";
+  const contextualTask = !contextBlocked && context.task?.taskType === "initiative" && context.task.detailAvailability !== "stale" ? context.task : null;
+  const selected = owner.candidate(value) || (!contextBlocked ? view.items.find(item => item.id === value) || contextualTask : null);
   const contextUnavailable = Boolean(value && !selected && (context.removed || ["unavailable", "stale", "forbidden"].includes(context.readStatus)));
   const retryContext = () => {
     if (contextDemand.current) void owner.loadTaskDetail(value, { area: "target", signal: contextDemand.current.signal });
@@ -50,7 +51,7 @@ export function InitiativeCandidateSelect({ owner, value, selectedContext, onCha
     if (demand.current && view.continuation) void owner.loadCandidates({ ...query, continuation: view.continuation }, { immediate: true, signal: demand.current.signal });
   };
   return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">Initiative</span><CustomSelect value={value} aria-label="Initiative" onChange={onChange} onOpenChange={setOpen}
-    selectedOptionLabel={selected?.title || (selectedContext?.id === value ? selectedContext.title : undefined)}
+    selectedOptionLabel={selected?.title || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
     options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: item.title })) : [])]}
     search={{ label: "Initiative suchen", value: search, onChange: value => setSearch(value.slice(0, 2048)), onSubmit: () => submit() }}
     feedback={<div className="px-2 py-2 text-xs text-slate-600">

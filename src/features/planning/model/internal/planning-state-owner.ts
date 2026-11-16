@@ -237,6 +237,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     for (const column of Object.keys(columnReadStatus) as TaskStatus[]) delete columnReadStatus[column];
   }
   function denyPlanningScope() {
+    candidateReads.deny();
     detachPlanningMetadata();
     for (const id of new Set([...confirmed.tasks.map(task => task.id), ...detailReads.keys()])) {
       deniedTaskReads.add(id);
@@ -1272,6 +1273,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           const failedStatus = readErrorStatus(error);
           if (includesDiscussion) { commentCreations.failed(taskId, failedStatus); githubImports.failed(taskId, failedStatus); }
           if (failedStatus === "forbidden") {
+            candidateReads.deny();
             deniedTaskReads.add(taskId);
             const deniedAt = ++sequence;
             taskDeniedAt.set(taskId, deniedAt);

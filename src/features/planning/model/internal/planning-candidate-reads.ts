@@ -9,7 +9,7 @@ type Entry = { view: InitiativeCandidateView; receipt?: InitiativeCandidateRecei
 export function createPlanningCandidateReads({ read, binding, publish, now }: {
   read?: (query: InitiativeCandidateQuery, options: { signal: AbortSignal }) => Promise<InitiativeCandidateReceipt>;
   binding: () => Binding; publish: () => void; now: () => number;
-}): PlanningCandidateAccess & { invalidate(): void; clear(): void } {
+}): PlanningCandidateAccess & { invalidate(): void; clear(): void; deny(): void } {
   const entries = new Map<string, Entry>();
   const invalidView: InitiativeCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null };
   let sequence = 0, acceptedSequence = 0, acceptedSource: string | undefined;
@@ -47,6 +47,17 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
     for (const value of entries.values()) {
       release(value);
       value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null };
+    }
+    acceptedSource = undefined;
+  }
+  function deny() {
+    // An item-level denial cannot establish which unloaded matches contributed
+    // to a query's exact count. Invalidate this candidate contract, not the
+    // independent canonical Task store or other workspace contracts.
+    for (const value of entries.values()) {
+      release(value); clearTimeout(value.expiry);
+      value.receipt = undefined; value.acceptedBinding = undefined; value.consumed = undefined;
+      value.view = { ...value.view, readStatus: "stale", furtherReadStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null };
     }
     acceptedSource = undefined;
   }
@@ -125,7 +136,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
     }
   }
   return {
-    clear, invalidate,
+    clear, invalidate, deny,
     candidates(query) { if (!normalizeInitiativeCandidateQuery(query)) return invalidView; if (!binding().active) clear(); const value = entry(query); expire(value); return value.view; },
     candidate(id) {
       if (!binding().active) return null;
