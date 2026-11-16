@@ -26,7 +26,7 @@ export type TaskDetailReadArea = "target" | "discussion" | "timeline" | "childre
 
 export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeline";
 
-export type TaskDetailModel = Readonly<{
+type TaskDetailModelFields = Readonly<{
   revision: string;
   sourceRevision?: string;
   readArea?: TaskDetailReadArea;
@@ -37,13 +37,10 @@ export type TaskDetailModel = Readonly<{
   coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea | "children", "complete" | "partial">>>;
   childProgress?: ReturnType<typeof import("./task-card-presentation").taskChildProgress>;
   taskOmittedFields?: readonly (keyof Task)[];
-  project: Project;
   item: Task;
   ancestors: readonly Task[];
   children: readonly Task[];
   relatedItems: readonly Task[];
-  people: readonly Profile[];
-  sprints: readonly Sprint[];
   discussion: Readonly<{
     comments: readonly TaskComment[];
     externalComments: readonly TaskExternalComment[];
@@ -53,6 +50,13 @@ export type TaskDetailModel = Readonly<{
   activity: readonly TaskActivity[];
   reviews: readonly TaskReview[];
 }>;
+
+// Canonical and legacy models retain their required supporting context. Only
+// independent children may explicitly omit data they did not read.
+export type TaskDetailModel = TaskDetailModelFields & (
+  | Readonly<{ supportingData?: never; project: Project; people: readonly Profile[]; sprints: readonly Sprint[] }>
+  | Readonly<{ readArea: "children"; supportingData: "omitted"; project?: never; people?: never; sprints?: never }>
+);
 
 export type TaskDetailHydration = Readonly<{
   itemId: string;

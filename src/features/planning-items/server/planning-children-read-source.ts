@@ -9,7 +9,7 @@ import { taskDetailReadLimits } from "@/features/tasks/model/task-detail-read-mo
 import { loadAllSupabaseRows } from "../model/supabase-pagination";
 import { compactPlanningCard, planningCardOmittedFields } from "./planning-card-summary";
 
-export const childListOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink"];
+export const childListOmittedFields: readonly (keyof Task)[] = [...planningCardOmittedFields, "dependsOn", "evidenceLink", "assignee", "owner", "createdBy"];
 const omittedColumns = new Set(["description", "problem_statement", "intended_outcome", "scope_constraints", "acceptance_criteria", "evidence_required", "definition_of_done", "evidence_link", "review_evidence_exception_note", "github_issue_sync_error", "decision_note", "carryover_reason"]);
 export const childListRowSelect = taskRowColumns.filter(column => !omittedColumns.has(column)).join(",");
 

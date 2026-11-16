@@ -149,9 +149,37 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       if (area !== "complete" && !source) return { status: "unavailable" };
 
       const scopedIds = source ? source.descriptor.targetId ? [source.descriptor.targetId, ...source.descriptor.ancestorIds] : [] : null;
+      const scopedAncestors = (selectedRows: DbTask[]) => {
+        const byId = new Map(selectedRows.map(row => [row.id, row]));
+        if (!scopedIds || selectedRows.length !== scopedIds.length || byId.size !== scopedIds.length
+          || selectedRows.some(row => !scopedIds.includes(row.id))) return null;
+        const target = byId.get(normalizedItemId);
+        if (!target) return null;
+        const ancestors = source!.descriptor.ancestorIds.map(id => byId.get(id)!);
+        if ((target.parent_task_id || null) !== (ancestors.at(-1)?.id || null)
+          || ancestors.some((row, index) => !row || (row.parent_task_id || null) !== (ancestors[index - 1]?.id || null))) return null;
+        return { target, ancestors };
+      };
+      if (area === "children") {
+        if (!source!.descriptor.targetId) return { status: "notFound", people: [] };
+        const targetResult = await supabase.from(ACTIVE_TASKS_TABLE).select(childListRowSelect).eq("project_id", projectId).in("id", scopedIds!).returns<DbTask[]>();
+        if (targetResult.error) return { status: "unavailable" };
+        const selected = scopedAncestors(targetResult.data || []);
+        if (!selected) return { status: "unavailable" };
+        const { target, ancestors } = selected;
+        try {
+          const children = await loadPlanningDirectChildren(supabase, target, []);
+          return { status: "ready", model: {
+            revision: target.updated_at, sourceRevision: source!.sourceRevision, observedAt: source!.observedAt, validUntil: source!.validUntil, readArea: "children",
+            supportingData: "omitted", coverage: { children: "complete" }, taskOmittedFields: childListOmittedFields,
+            item: mapChildListItem(target, []), ancestors: ancestors.map(row => mapChildListItem(row, [])), ...children, relatedItems: [],
+            discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+          } };
+        } catch { return { status: "unavailable" }; }
+      }
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
         scopedIds ? scopedIds.length
-          ? supabase.from(ACTIVE_TASKS_TABLE).select(area === "children" ? childListRowSelect : taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
+          ? supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
           : Promise.resolve({ data: [] as DbTask[], error: null })
           : supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
         supabase.from("profiles").select(profileSelect).order("name"),
@@ -167,26 +195,10 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       if (!target) return source?.descriptor.targetId ? { status: "unavailable" } : { status: "notFound", people };
 
       if (source) {
-        const byId = new Map(selectedRows.map(row => [row.id, row]));
-        if (selectedRows.length !== scopedIds!.length || byId.size !== scopedIds!.length
-          || selectedRows.some(row => !scopedIds!.includes(row.id))) return { status: "unavailable" };
-        const ancestors = source.descriptor.ancestorIds.map(id => byId.get(id)!);
-        if ((target.parent_task_id || null) !== (ancestors.at(-1)?.id || null)
-          || ancestors.some((row, index) => !row || (row.parent_task_id || null) !== (ancestors[index - 1]?.id || null))) return { status: "unavailable" };
+        const selected = scopedAncestors(selectedRows);
+        if (!selected) return { status: "unavailable" };
+        const { ancestors } = selected;
         const rows = [target, ...ancestors];
-        if (area === "children") {
-          try {
-            const children = await loadPlanningDirectChildren(supabase, target, people);
-            return { status: "ready", model: {
-              revision: target.updated_at, sourceRevision: source.sourceRevision, observedAt: source.observedAt, validUntil: source.validUntil, readArea: "children",
-              coverage: { children: "complete" }, taskOmittedFields: childListOmittedFields,
-              project: project(projectResult.data), item: mapChildListItem(target, people),
-              ancestors: ancestors.map(row => mapChildListItem(row, people)), ...children, relatedItems: [], people,
-              sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
-              discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
-            } };
-          } catch { return { status: "unavailable" }; }
-        }
         const supporting = await loadSupportingRows(supabase, rows.map(row => row.id));
         if (supporting.error) return { status: "unavailable" };
         const tasks = byIds(mapTasks(rows, people, supporting));

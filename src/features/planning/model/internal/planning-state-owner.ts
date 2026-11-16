@@ -1277,12 +1277,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           return previous && previous.updatedAt !== task.updatedAt && (taskConfirmedAt.get(task.id) || 0) <= started && (taskReadAt.get(task.id) || 0) <= started;
         })) invalidatePlanningSource();
         const detailProjection = applyTaskDetailModel(confirmed, result.model, result.unavailable, result.model.coverage || {});
-        const profileRead = profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
-        const sprintRead = sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
+        const profileRead = result.model.supportingData === "omitted" ? { data: detailProjection } : profileSettings.acceptRead(detailProjection, { profiles: "partial" }, started, "planning", { ...detailProjection, profiles: [...result.model.people] }, ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"]);
+        const sprintRead = result.model.supportingData === "omitted" ? { data: profileRead.data } : sprintState.acceptRead(profileRead.data, { sprints: "partial" }, started, { ...detailProjection, sprints: [...result.model.sprints] });
         const next = sprintRead.data;
         if (includesRelationships && !result.unavailable?.includes("relationships")) lifecycle.acceptRelationshipRead(next, started, result.model.coverage?.relationships === "complete", taskId);
         deniedTaskReads.delete(taskId);
-        acceptProfileScope(`task:${taskId}`, result.model.people);
+        if (result.model.supportingData !== "omitted") acceptProfileScope(`task:${taskId}`, result.model.people);
         detailUnavailable.set(taskId, area ? [...(detailUnavailable.get(taskId) || []).filter(value => value !== area), ...(result.unavailable || [])] : result.unavailable || []);
         if (!area || area === "target") detailStatuses.set(taskId, result.unavailable?.length ? "unavailable" : "current");
         for (const scope of ["discussion", "timeline", "relationships"] as const) if (!area || area === scope) detailAreaStatuses.set(taskId+":"+scope, result.unavailable?.includes(scope) ? "unavailable" : "current");
@@ -1290,7 +1290,17 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && Math.max(taskConfirmedAt.get(task.id) || 0, taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         const omittedFields = result.model.taskOmittedFields || [];
         const returnedIds = new Set(returnedTasks.map(task => task.id));
-        for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task, omittedFields);
+        const supportingNames = ["assignee", "owner", "createdBy"] as const;
+        const supportingNamesUnknown = (id: string) => result.model.supportingData === "omitted"
+          && detailReceipts.get(id+":target")?.sourceRevision !== result.model.sourceRevision;
+        for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) {
+          acceptTaskFieldCoverage(task, omittedFields);
+          if (supportingNamesUnknown(task.id)) {
+            const retained = new Set(retainedTaskFields.get(task.id));
+            supportingNames.forEach(field => retained.add(field));
+            retainedTaskFields.set(task.id, retained);
+          }
+        }
         const previousTasksById = new Map<string, Task>();
         // Preserve the previous first-match selection even for duplicate IDs.
         for (const task of confirmed.tasks) if (!previousTasksById.has(task.id)) previousTasksById.set(task.id, task);
@@ -1301,7 +1311,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           const merged = { ...previous, ...task };
           for (const field of omittedFields) Object.assign(merged, { [field]: previous[field] });
           if (previous.detailAvailability !== "summary") {
-            merged.detailAvailability = previous.updatedAt === task.updatedAt ? previous.detailAvailability : "stale";
+            merged.detailAvailability = previous.updatedAt === task.updatedAt && !supportingNamesUnknown(task.id) ? previous.detailAvailability : "stale";
             if (merged.detailAvailability === "stale") detailStatuses.set(task.id, "stale");
           }
           return merged;
@@ -2158,7 +2168,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     scopedDetailIds.add(read.model.item.id);
     rememberDetailReceipt(read.model.item.id, "target", read.model, read.readAuthority);
     detailStatuses.set(read.model.item.id, "current");
-    acceptProfileScope("task:"+read.model.item.id, read.model.people);
+    if (read.model.supportingData !== "omitted") acceptProfileScope("task:"+read.model.item.id, read.model.people);
     if (notify) publish();
     else visible = confirmed;
     return true;
