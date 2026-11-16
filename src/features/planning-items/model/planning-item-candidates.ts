@@ -16,6 +16,27 @@ export type InitiativeCandidatePage = Readonly<{
   validUntil: string;
 }>;
 
+export type InitiativeCandidateReceipt = Readonly<{
+  candidates: InitiativeCandidatePage;
+  readAuthority: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
+  readActor: Readonly<{ profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }>;
+}>;
+
+export type InitiativeCandidateView = Readonly<{
+  query: InitiativeCandidateQuery;
+  readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus;
+  items: InitiativeCandidatePage["items"];
+  total: number | null;
+  coverage: "complete" | "partial" | "unknown";
+  continuation: string | null;
+}>;
+
+export type PlanningCandidateAccess = {
+  candidates(query: InitiativeCandidateQuery): InitiativeCandidateView;
+  candidate(id: string): InitiativeCandidatePage["items"][number] | null;
+  loadCandidates(query: InitiativeCandidateQuery, options?: { immediate?: boolean; refresh?: boolean; signal?: AbortSignal }): Promise<{ ok: boolean }>;
+};
+
 export function normalizeInitiativeCandidateQuery(input: unknown): InitiativeCandidateQuery | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const value = input as Record<string, unknown>;

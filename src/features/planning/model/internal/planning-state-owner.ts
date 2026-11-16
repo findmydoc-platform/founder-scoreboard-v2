@@ -48,6 +48,7 @@ import { createProfileSettingsState } from "./profile-settings-state";
 import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/features/profile/model/profile-settings-contract";
 import { createTaskEditing } from "./task-editing";
 import { applyPlanningItemApprovalPatch } from "../approval-domain";
+import { createPlanningCandidateReads } from "./planning-candidate-reads";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
 
@@ -91,6 +92,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
+  readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").InitiativeCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").InitiativeCandidateReceipt>;
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
@@ -141,6 +143,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
   let planningSourceEpoch = 0;
+  const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
+    binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
+
   let planningInteraction: import("../planning-state").PlanningInteraction = { selectedTaskId: null };
   const boardInteractions = new Set<symbol>();
   const heldReads = new Set<() => void>();
@@ -173,6 +178,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }, delay);
   }
   function invalidatePlanningSource(invalidateChildren = true) {
+    candidateReads.invalidate();
     if (invalidateChildren) for (const [id, list] of childLists) {
       if (list.readStatus === "current" || list.readStatus === "loading") childLists.set(id, { ...list, readStatus: "stale" });
     }
@@ -826,6 +832,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    candidates: candidateReads.candidates,
+    candidate: candidateReads.candidate,
+    loadCandidates: candidateReads.loadCandidates,
     planningInteraction() { isActive(); return planningInteraction; },
     rememberPlanningInteraction(patch) {
       if (!isActive()) return;
@@ -2038,6 +2047,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return true;
   }
   function suspendProtected() {
+    candidateReads.clear();
     failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
     boardInteractions.clear();
@@ -2267,6 +2277,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
   } };
 }

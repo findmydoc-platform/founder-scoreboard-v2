@@ -38,7 +38,8 @@ async function handleGET(request: NextRequest) {
     if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Auswahl hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
     if (result.status !== "ready") return apiError("Auswahl konnte nicht geladen werden.", 503);
     if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Auswahl darf nicht geladen werden.", 403);
-    return NextResponse.json({ candidates: result.candidates, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ candidates: result.candidates, readAuthority: result.readAuthority,
+      readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
   }
   const currentProfile = permission.profile;
   const normalized = query && normalizePlanningBoardQuery(query);

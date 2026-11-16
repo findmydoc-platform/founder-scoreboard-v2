@@ -1,3 +1,4 @@
+import type { PlanningCandidateAccess } from "@/features/planning-items/model/planning-item-candidates";
 import type { PlanningHierarchy } from "@/features/projects/model/hierarchy-state";
 import type { PlanningMeetingAttendance } from "@/features/sprint/model/meeting-attendance-state";
 import type { PlanningTaskRelationships } from "@/features/tasks/model/task-relationship-change";
@@ -82,7 +83,7 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PlanningCandidateAccess, PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
   checkPlanningSource(): Promise<PlanningSourceObservation>;

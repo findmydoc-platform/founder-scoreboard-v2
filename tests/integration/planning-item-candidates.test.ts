@@ -45,6 +45,7 @@ test("candidate discovery retains mapped-role admission and denies direct user R
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([f.initiativeId]);
+    expect(body.readActor).toEqual({ profileId: f.actors[role].profileId, platformRole: role === "administrator" ? "founder" : role });
     expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
   }
   for (const role of ["unmapped"] as const) {
