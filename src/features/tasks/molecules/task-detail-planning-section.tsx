@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ChevronDown, ListTree, Pencil, UsersRound } from "lucide-react";
-import { PlanningParentCandidateSelect } from "./planning-parent-candidate-select";
+import { PlanningItemCandidateSelect } from "./planning-item-candidate-select";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { useState, type ReactNode } from "react";
 import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
@@ -80,7 +80,7 @@ export function TaskDetailPlanningSection({
         </div>
         {open && canReparentSubIssue ? (
           <div id="sub-issue-parent-control" className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
-            {candidateOwner ? <PlanningParentCandidateSelect kind="deliverable" label="Parent-Deliverable" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(allTasks)} selectClassName="h-11 text-sm" />}
+            {candidateOwner ? <PlanningItemCandidateSelect kind="deliverable" label="Parent-Deliverable" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Parent-Deliverable" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentDeliverableOptions(allTasks)} selectClassName="h-11 text-sm" />}
           </div>
         ) : null}
         {task.parentApprovalStatus !== "approved" ? <p className="pb-3 text-xs font-medium text-amber-800">Unter einem nicht freigegebenen Deliverable bleibt dieses Sub-Issue inaktiv.</p> : null}
@@ -109,7 +109,7 @@ export function TaskDetailPlanningSection({
           <div id="strategic-planning-controls" className="grid gap-4 border-t border-slate-200 bg-slate-50/70 px-4 py-4 md:grid-cols-2">
             {task.taskType === "initiative" ? (
               view.canEditPlanning
-                ? candidateOwner ? <PlanningParentCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
+                ? candidateOwner ? <PlanningItemCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
                 : <ReadFact label="Parent-Epic">{view.currentParent?.title || "Ohne Epic"}</ReadFact>
             ) : null}
             {view.canEditPlanning ? (
@@ -146,7 +146,7 @@ export function TaskDetailPlanningSection({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {canManageTaskMeta ? (
               <>
-                {candidateOwner ? <PlanningParentCandidateSelect label="Initiative" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...view.initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />}
+                {candidateOwner ? <PlanningItemCandidateSelect label="Initiative" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Initiative" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={[{ value: "", label: "Ohne Initiative – als Vorschlag" }, ...view.initiatives.map((item) => ({ value: item.id, label: item.title }))]} selectClassName="h-11 text-sm" />}
                 <UiSelectField onOpen={onEditingStart} label="Sprint" value={task.sprintId} disabled={!isApprovedDeliverable(task) || pending} onChange={(sprintId) => onUpdate({ sprintId })} options={sprintOptions(sprints)} selectClassName="h-11 text-sm" />
                 <ReadFact label="Sprint-Zeitraum">{view.sprintPeriod}</ReadFact>
               </>

@@ -7,18 +7,18 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 
 function selectedContextSnapshot(owner: PlanningState, id: string) {
   const context = owner.taskDetail(id), task = context.task;
-  return JSON.stringify([context.readStatus, context.removed, task?.id, task?.title, task?.taskType, task?.updatedAt, task?.detailAvailability, task?.approvalStatus, task?.parentTaskId, task?.parentTaskId ? owner.taskDetail(task.parentTaskId).task?.title : null]);
+  return JSON.stringify([context.readStatus, context.removed, task?.id, task?.title, task?.taskType, task?.updatedAt, task?.detailAvailability, task?.approvalStatus, task?.assignee, task?.parentTaskId, task?.parentTaskId ? owner.taskDetail(task.parentTaskId).task?.title : null]);
 }
 
-export function PlanningParentCandidateSelect({ owner, value, selectedContext, onChange, kind = "initiative", label, chooseDefault = false, disabled = false }: {
-  kind?: "initiative" | "epic" | "deliverable"; label?: string; chooseDefault?: boolean; disabled?: boolean; owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
+export function PlanningItemCandidateSelect({ owner, value, selectedContext, onChange, kind = "initiative", label, chooseDefault = false, disabled = false, sourceId = null, emptyLabel }: {
+  kind?: "initiative" | "epic" | "deliverable" | "relationship"; sourceId?: string | null; emptyLabel?: string; label?: string; chooseDefault?: boolean; disabled?: boolean; owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
 }) {
-  const singular = kind === "epic" ? "Epic" : kind === "deliverable" ? "Deliverable" : "Initiative", plural = kind === "epic" ? "Epics" : kind === "deliverable" ? "Deliverables" : "Initiativen";
+  const singular = kind === "epic" ? "Epic" : kind === "deliverable" ? "Deliverable" : kind === "relationship" ? "Item" : "Initiative", plural = kind === "epic" ? "Epics" : kind === "deliverable" ? "Deliverables" : kind === "relationship" ? "Items" : "Initiativen";
   const [defaultEnabled, setDefaultEnabled] = useState(chooseDefault);
   const needsDefault = defaultEnabled && !value;
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
-  const normalizedSearch = normalizePlanningItemCandidateQuery({ view: "candidates", kind, query: search, limit: 20 })!.query;
-  const query = useMemo(() => ({ view: "candidates" as const, kind, query: normalizedSearch, limit: 20 }), [kind, normalizedSearch]);
+  const normalizedSearch = normalizePlanningItemCandidateQuery({ view: "candidates", kind, ...(kind === "relationship" ? { sourceId } : {}), query: search, limit: 20 })!.query;
+  const query = useMemo(() => ({ view: "candidates" as const, kind, ...(kind === "relationship" ? { sourceId } : {}), query: normalizedSearch, limit: 20 }), [kind, normalizedSearch, sourceId]);
   const demand = useRef<AbortController | null>(null);
   const contextDemand = useRef<AbortController | null>(null);
   const view = useSyncExternalStore(owner.subscribe, () => owner.candidates(query), () => owner.candidates(query));
@@ -27,7 +27,7 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
     if (!value) return;
     const controller = new AbortController(); contextDemand.current = controller;
     const context = owner.taskDetail(value);
-    const known = owner.candidate(value) || context.task?.taskType === kind && context.task.detailAvailability !== "stale" && !context.removed;
+    const known = owner.candidate(value) || context.task && (kind === "relationship" ? context.task.taskType !== "sub_issue" : context.task.taskType === kind) && context.task.detailAvailability !== "stale" && !context.removed;
     // Selection identity owns this lease. Its response must not release or
     // restart the request merely because the label becomes available.
     if (!known && !context.removed && context.readStatus !== "forbidden") void owner.loadTaskDetail(value, { area: "target", signal: controller.signal });
@@ -46,14 +46,15 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   }, [needsDefault, view.defaultChoice, value, onChange]);
   const context = owner.taskDetail(value);
   const contextBlocked = context.removed || context.readStatus === "forbidden";
-  const contextualTask = !contextBlocked && context.task?.taskType === kind && context.task.detailAvailability !== "stale" ? context.task : null;
+  const contextualTask = !contextBlocked && context.task && (kind === "relationship" ? context.task.taskType !== "sub_issue" : context.task.taskType === kind) && context.task.detailAvailability !== "stale" ? context.task : null;
   const contextNeedsRefresh = Boolean(value && !owner.candidate(value) && !contextualTask && !contextBlocked && ["not-loaded", "stale"].includes(context.readStatus));
   useEffect(() => {
     // A confirmed parent mutation can invalidate discovery without changing
     // selection identity. Reuse its existing lease for authoritative context.
     if (contextNeedsRefresh && contextDemand.current) void owner.loadTaskDetail(value, { area: "target", signal: contextDemand.current.signal });
   }, [owner, value, contextNeedsRefresh]);
-  const optionLabel = (item: { id: string; title: string; parentTaskId: string; approvalStatus?: string | null; parentTitle?: string | null }) => {
+  const optionLabel = (item: { id: string; title: string; parentTaskId: string; approvalStatus?: string | null; parentTitle?: string | null; assigneeLabel?: string; assignee?: string }) => {
+    if (kind === "relationship") return `${item.title} · ${item.assigneeLabel || item.assignee || "Nicht zugeordnet"}`;
     if (kind !== "deliverable") return item.title;
     const parent = owner.taskDetail(item.parentTaskId);
     const title = "parentTitle" in item ? item.parentTitle : !parent.removed && parent.task?.detailAvailability !== "stale" ? parent.task?.title : undefined;
@@ -72,13 +73,13 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
   };
   return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setDefaultEnabled(false); onChange(id); }} onOpenChange={setOpen}
     selectedOptionLabel={(selected ? optionLabel(selected) : null) || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
-    options={[{ value: "", label: kind === "deliverable" ? "Deliverable auswählen" : `Ohne ${singular} – als Vorschlag` }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: optionLabel(item) })) : [])]}
+    options={[{ value: "", label: emptyLabel || (kind === "relationship" ? "Keine Abhängigkeit" : kind === "deliverable" ? "Deliverable auswählen" : `Ohne ${singular} – als Vorschlag`) }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: optionLabel(item) })) : [])]}
     search={{ label: `${singular} suchen`, value: search, onChange: value => setSearch(value.slice(0, 2048)), onSubmit: () => submit() }}
     feedback={<div className="px-2 py-2 text-xs text-slate-600">
       {view.readStatus === "loading" || view.readStatus === "not-loaded" ? <p role="status">{plural} werden geladen.</p>
         : view.readStatus === "current" && view.total === 0 && view.coverage === "complete" ? <p role="status">Keine {plural} gefunden.</p>
           : view.readStatus === "current" && view.coverage === "partial" ? <>
-            <p role="status">{view.furtherReadStatus === "loading" ? "Weitere {plural} werden geladen." : view.furtherReadStatus === "unavailable" ? `Weitere ${plural} konnten nicht geladen werden.` : `Weitere ${plural} sind noch nicht geladen.`}</p>
+            <p role="status">{view.furtherReadStatus === "loading" ? `Weitere ${plural} werden geladen.` : view.furtherReadStatus === "unavailable" ? `Weitere ${plural} konnten nicht geladen werden.` : `Weitere ${plural} sind noch nicht geladen.`}</p>
             <button type="button" disabled={view.furtherReadStatus === "loading"} onClick={loadFurther} className="min-h-11 px-2 font-semibold text-blue-700">
               {view.furtherReadStatus === "unavailable" ? `Weitere ${plural} erneut laden` : `Weitere ${plural} laden`}
             </button>

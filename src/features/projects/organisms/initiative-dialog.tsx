@@ -5,7 +5,7 @@ import { HierarchyEditNotice } from "../molecules/hierarchy-edit-notice";
 import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { CustomDatePicker } from "@/shared/atoms/custom-date-picker";
-import { PlanningParentCandidateSelect } from "@/features/tasks/molecules/planning-parent-candidate-select";
+import { PlanningItemCandidateSelect } from "@/features/tasks/molecules/planning-item-candidate-select";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { ProfileMultiSelect } from "@/features/team/molecules/profile-multi-select";
 import { currentApprovalDecisionReason } from "@/features/planning/model/approval-domain";
@@ -325,7 +325,7 @@ export function InitiativeDialog({
                 className="grid gap-1 text-xs font-semibold text-slate-500"
               >
                 <span id={epicLabelId}>Epic *</span>
-                {planningState ? <PlanningParentCandidateSelect kind="epic" label="Epic *" owner={planningState} value={draft.parentTaskId} chooseDefault={!defaults.id && !defaults.parentTaskId} disabled={pending || submitting || saveBlocked} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <CustomSelect
+                {planningState ? <PlanningItemCandidateSelect kind="epic" label="Epic *" owner={planningState} value={draft.parentTaskId} chooseDefault={!defaults.id && !defaults.parentTaskId} disabled={pending || submitting || saveBlocked} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <CustomSelect
                   value={draft.parentTaskId}
                   onChange={(value) => setDraft((current) => ({ ...current, parentTaskId: value }))}
                   aria-labelledby={epicLabelId}

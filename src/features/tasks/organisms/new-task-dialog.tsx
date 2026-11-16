@@ -7,7 +7,7 @@ import type { PlanningTaskLifecycleView } from "@/features/planning/model/planni
 import type { PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
-import { PlanningParentCandidateSelect } from "@/features/tasks/molecules/planning-parent-candidate-select";
+import { PlanningItemCandidateSelect } from "@/features/tasks/molecules/planning-item-candidate-select";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -221,6 +221,7 @@ function PlanningFields({ accent = false, draft, setDraft }: { accent?: boolean;
 }
 
 function RelationshipFields({ accent = false, draft, data, setDraft }: { accent?: boolean; draft: NewTaskDraft; data: TaskDialogData; setDraft: DraftSetter }) {
+  const candidateOwner = usePlanningBusinessState();
   return (
     <section className="grid gap-3">
       <SectionHeading accent={accent}>Erste Abhängigkeit</SectionHeading>
@@ -232,12 +233,12 @@ function RelationshipFields({ accent = false, draft, data, setDraft }: { accent?
           onChange={(value) => setDraft((current) => ({ ...current, relationType: value as TaskRelationType }))}
           options={taskRelationTypeOptions}
         />
-        <UiSelectField
+        {candidateOwner ? <PlanningItemCandidateSelect kind="relationship" sourceId={null} label="Verknüpfte Aufgabe" owner={candidateOwner} value={draft.relatedTaskId} onChange={relatedTaskId => setDraft(current => ({ ...current, relatedTaskId }))} /> : <UiSelectField
           label="Verknüpfte Aufgabe"
           value={draft.relatedTaskId}
           onChange={(value) => setDraft((current) => ({ ...current, relatedTaskId: value }))}
           options={relatedTaskOptions(data.tasks)}
-        />
+        />}
       </div>
       <UiField>
         Hinweis
@@ -336,7 +337,7 @@ function DeliverableForm({
       <div className="grid content-start gap-5 bg-slate-50/40 p-5 sm:p-6">
         <section className="grid gap-3">
           <SectionHeading>Struktur</SectionHeading>
-          {candidateOwner ? <PlanningParentCandidateSelect owner={candidateOwner} value={draft.parentTaskId} selectedContext={selectedInitiative} onChange={selectInitiative} /> : <UiSelectField
+          {candidateOwner ? <PlanningItemCandidateSelect owner={candidateOwner} value={draft.parentTaskId} selectedContext={selectedInitiative} onChange={selectInitiative} /> : <UiSelectField
             label="Initiative"
             value={draft.parentTaskId}
             onChange={selectInitiative}
@@ -491,7 +492,7 @@ function StrategicItemForm({
         <section className="grid gap-3">
           <SectionHeading>Einordnung</SectionHeading>
           {isInitiative ? (
-            candidateOwner ? <PlanningParentCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={draft.parentTaskId} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <UiSelectField
+            candidateOwner ? <PlanningItemCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={draft.parentTaskId} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <UiSelectField
               label="Parent-Epic"
               value={draft.parentTaskId}
               onChange={(parentTaskId) => setDraft((current) => ({ ...current, parentTaskId }))}
@@ -555,7 +556,7 @@ function SubIssueForm({
         <span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld
       </p>
 
-      {candidateOwner ? <PlanningParentCandidateSelect kind="deliverable" label="Übergeordnetes Deliverable, Pflichtfeld" owner={candidateOwner} value={draft.parentTaskId} onChange={value => setDraft(current => withSubIssueParentHierarchy(current, data.tasks, value))} /> : <UiSelectField
+      {candidateOwner ? <PlanningItemCandidateSelect kind="deliverable" label="Übergeordnetes Deliverable, Pflichtfeld" owner={candidateOwner} value={draft.parentTaskId} onChange={value => setDraft(current => withSubIssueParentHierarchy(current, data.tasks, value))} /> : <UiSelectField
         label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
         value={draft.parentTaskId}
         onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
