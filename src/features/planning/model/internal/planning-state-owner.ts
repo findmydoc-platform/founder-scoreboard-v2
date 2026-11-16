@@ -197,8 +197,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     pageStatus = "stale";
     workspaceStatuses.set("planning", "stale");
   }
-  function confirmTaskRevision(id: string, accepted: number) {
+  function confirmTaskRevision(id: string, accepted: number, newParentId?: string | null) {
     taskConfirmedAt.set(id, accepted);
+    const previousParentId = confirmed.tasks.find(task => task.id === id)?.parentTaskId;
+    for (const [parentId, list] of childLists) {
+      if (list.readStatus === "current" && (parentId === id || parentId === previousParentId || parentId === newParentId || list.ids.has(id))) childLists.set(parentId, { ...list, readStatus: "stale" });
+    }
     invalidatePlanningSource();
   }
   function detachPlanningMetadata() {
@@ -337,7 +341,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const scopedDetailIds = new Set<string>();
   const detailReceipts = new Map<string, { taskId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; ids: string[]; deadline: number; validUntil: string | null; sourceRevision: string }>();
   function rememberDetailReceipt(taskId: string, area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea, model: TaskDetailModel, authority: import("../planning-server-header-read").PlanningReadAuthority) {
-    detailReceipts.set(taskId+":"+area, { taskId, area, ids: [model.item.id, ...model.ancestors.map(row => row.id)],
+    detailReceipts.set(taskId+":"+area, { taskId, area, ids: [model.item.id, ...model.ancestors.map(row => row.id), ...(area === "children" ? model.children.map(row => row.id) : [])],
       deadline: Math.min(authority.deadline, model.authorityDeadline!), validUntil: model.validUntil!, sourceRevision: model.sourceRevision! });
   }
   const detailAreaStatuses = new Map<string, PlanningReadStatus>();
@@ -361,7 +365,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (isActive()) {
           const next = demand.previous === "current" ? "stale" : demand.previous;
           if (area === "target") detailStatuses.set(taskId, next);
-          else detailAreaStatuses.set(key, next);
+          else if (area === "children") {
+            const list = childLists.get(taskId);
+            if (list) childLists.set(taskId, { ...list, readStatus: next });
+          } else detailAreaStatuses.set(key, next);
           publish();
         }
       }
@@ -386,6 +393,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const expired = [...detailReceipts].filter(([,read]) => read.deadline <= now || read.validUntil && Date.parse(read.validUntil) <= now);
       for (const [key] of expired) detailReceipts.delete(key);
       for (const [,read] of expired) {
+        if (read.area === "children") {
+          const list = childLists.get(read.taskId);
+          if (list) childLists.set(read.taskId, { ...list, readStatus: "stale" });
+        }
         if (read.area === "discussion") {
           confirmed = { ...confirmed, taskComments: confirmed.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: confirmed.taskExternalComments.filter(row => row.taskId !== read.taskId) };
           visible = { ...visible, taskComments: visible.taskComments.filter(row => row.taskId !== read.taskId), taskExternalComments: visible.taskExternalComments.filter(row => row.taskId !== read.taskId) };
@@ -691,7 +702,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (!result.task.updatedAt) throw new Error("Die Speicherung ist noch nicht bestätigt.");
         if (!isActive() || generation !== sessionGeneration) return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt.", status: 409 };
         acceptTaskFieldCoverage({ ...result.task, id: task.id }, [...retainedTaskFields.get(task.id) || []].filter(field => !Object.prototype.hasOwnProperty.call(result.task, field)));
-        confirmTaskRevision(task.id, ++sequence);
+        confirmTaskRevision(task.id, ++sequence, result.task.parentTaskId);
         notifications.invalidateHeader(["notifications"]);
         const currentAfterWrite = confirmed.tasks.find(item => item.id === task.id);
         const foreignConfirmed = currentAfterWrite?.updatedAt !== task.updatedAt && currentAfterWrite?.updatedAt !== result.task.updatedAt;
@@ -1204,7 +1215,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const includesChildren = !area || area === "children";
       const existing = detailReads.get(key);
       if (existing) return area ? retainDetailRead(key, taskId, area, existing, options?.signal) : existing;
-      const demand = area ? { controller: new AbortController(), consumers: new Set<symbol>(), settled: false, previous: (area === "target" ? detailStatuses.get(taskId) : detailAreaStatuses.get(key)) || "not-loaded" as PlanningReadStatus } : undefined;
+      const demand = area ? { controller: new AbortController(), consumers: new Set<symbol>(), settled: false, previous: (area === "target" ? detailStatuses.get(taskId) : area === "children" ? childLists.get(taskId)?.readStatus : detailAreaStatuses.get(key)) || "not-loaded" as PlanningReadStatus } : undefined;
       if (demand) detailDemands.set(key, demand);
       const readTaskDetail = adapter.readTaskDetail;
       if (!area || area === "target") detailStatuses.set(taskId, "loading");
