@@ -468,7 +468,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return body.version;
       },
       async readCandidates(query, options) {
-        const { response, body } = await ownedApiClient.requestJson<Partial<import("@/features/planning-items/model/planning-item-candidates").InitiativeCandidateReceipt> & { error?: string; code?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, options);
+        const { response, body } = await ownedApiClient.requestJson<Partial<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt> & { error?: string; code?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, options);
         if (!response.ok || !body?.candidates || !body.readActor) throw Object.assign(new Error(body?.error || "Initiativen konnten nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { candidates: body.candidates, readAuthority: body.readAuthority!, readActor: body.readActor };

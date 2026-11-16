@@ -144,10 +144,10 @@
       "expiresWhen": "Revalidate whenever child membership, progress, compact field coverage or authority changes."
     },
     "CANDIDATES": {
-      "consumer": "Initiative candidate discovery for Item selectors",
+      "consumer": "Initiative and Epic parent candidate discovery",
       "owner": "Planning and Tasks feature owners",
-      "reason": "The fixed credential-bound operation discovers nontrashed project Initiative identities and labels through a service-only SQL statement. Literal title matching and existing sort_order/id semantics precede the page limit. Fresh user-bound Actor/source publication and independent original authority limits remain required; discovery never authorizes a write or supplies complete canonical Item fields.",
-      "evidence": "tests/integration/planning-item-candidates.test.ts; tests/migrations/20261116170022_planning_initiative_candidates.test.mjs",
+      "reason": "The fixed credential-bound operation discovers nontrashed project Initiative or Epic identities and labels through one service-only SQL implementation. Literal title matching and existing sort_order/id semantics precede the page limit. Epic default selection uses the complete unfiltered eligible set before limits, independently of displayed matches. Fresh user-bound Actor/source publication and original authority limits remain required; candidate identity/default metadata never authorizes writes or certifies canonical Task fields.",
+      "evidence": "tests/integration/planning-item-candidates.test.ts; tests/integration/planning-epic-candidates.test.ts; tests/migrations/20261116170022_planning_initiative_candidates.test.mjs; tests/migrations/20261116182817_planning_parent_candidate_intents.test.mjs",
       "expiresWhen": "Revalidate when candidate eligibility, selection, continuation or the declared credential-bound caller changes; each UI selector still needs its own migration evidence."
     }
   },

@@ -92,7 +92,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
   readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
-  readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").InitiativeCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").InitiativeCandidateReceipt>;
+  readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt>;
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;

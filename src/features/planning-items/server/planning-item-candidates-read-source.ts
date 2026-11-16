@@ -1,18 +1,25 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { InitiativeCandidatePage, InitiativeCandidateQuery } from "../model/planning-item-candidates";
+import type { PlanningItemCandidate, PlanningItemCandidatePage, PlanningItemCandidateQuery } from "../model/planning-item-candidates";
 import type { PlanningWorkspaceLoadContext } from "../model/planning-workspace-model";
 
 type Cursor = { offset: number; source: string; observedAt: string; validUntil: string; deadline: number; binding: string };
-type CandidateResult = { status: "ready"; candidates: InitiativeCandidatePage; authorityDeadline: number }
+type CandidateResult = { status: "ready"; candidates: PlanningItemCandidatePage; authorityDeadline: number }
   | { status: "forbidden" | "unavailable" | "staleContinuation" };
 
-function sign(context: PlanningWorkspaceLoadContext, query: InitiativeCandidateQuery, cursor: Omit<Cursor, "binding">) {
+function sign(context: PlanningWorkspaceLoadContext, query: PlanningItemCandidateQuery, cursor: Omit<Cursor, "binding">) {
   return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["initiative-candidates-v1", context.actorProfileId, query.kind, query.query, query.limit, cursor])).digest("hex");
 }
 
-export async function loadInitiativeCandidates(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, query: InitiativeCandidateQuery): Promise<CandidateResult> {
+function validCandidate(value: unknown, kind: PlanningItemCandidateQuery["kind"]): value is PlanningItemCandidate {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.id === "string" && typeof item.title === "string" && item.taskType === kind
+    && typeof item.parentTaskId === "string" && typeof item.approvalStatus === "string" && typeof item.updatedAt === "string";
+}
+
+export async function loadPlanningItemCandidates(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, query: PlanningItemCandidateQuery): Promise<CandidateResult> {
   if (!context.authorized || !context.actorProfileId) return { status: "forbidden" };
   if (!context.authorityKey || !context.authorityDeadline || !context.publicationSource) return { status: "unavailable" };
   let cursor: Omit<Cursor, "binding"> | undefined;
@@ -30,7 +37,7 @@ export async function loadInitiativeCandidates(supabase: SupabaseClient, context
   const deadline = Math.min(context.authorityDeadline, cursor?.deadline ?? Infinity);
   if (deadline <= Date.now()) return { status: "forbidden" };
   try {
-    const read = supabase.rpc("planning_initiative_candidates", { p_actor_profile_id: context.actorProfileId, p_query: query.query,
+    const read = supabase.rpc("planning_item_candidates", { p_actor_profile_id: context.actorProfileId, p_kind: query.kind, p_query: query.query,
       p_limit: query.limit, p_offset: cursor?.offset ?? 0, p_source_revision: cursor?.source ?? null,
       p_evaluated_at: cursor?.observedAt ?? null, p_valid_until: cursor?.validUntil ?? null });
     const result = await (context.signal ? read.abortSignal(context.signal) : read);
@@ -40,8 +47,8 @@ export async function loadInitiativeCandidates(supabase: SupabaseClient, context
     if (page?.status !== "ready" || typeof page.source_revision !== "string" || !page.source_revision
       || !Number.isFinite(Date.parse(page.observed_at)) || !Number.isFinite(Date.parse(page.valid_until))
       || !Number.isSafeInteger(page.total) || page.total < 0 || !Array.isArray(page.items) || page.items.length > query.limit
-      || page.items.some((item: Record<string, unknown>) => !item || typeof item.id !== "string" || typeof item.title !== "string"
-        || item.taskType !== "initiative" || typeof item.parentTaskId !== "string" || typeof item.approvalStatus !== "string" || typeof item.updatedAt !== "string")
+      || page.items.some((item: unknown) => !validCandidate(item, query.kind))
+      || query.kind === "epic" && (!("default_candidate" in page) || page.default_candidate !== null && !validCandidate(page.default_candidate, "epic"))
       || new Set(page.items.map((item: { id: string }) => item.id)).size !== page.items.length
       || page.items.length !== Math.min(query.limit, Math.max(0, page.total - (cursor?.offset ?? 0)))) return { status: "unavailable" };
     if (cursor && (page.source_revision !== cursor.source || page.observed_at !== cursor.observedAt || page.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
@@ -52,9 +59,11 @@ export async function loadInitiativeCandidates(supabase: SupabaseClient, context
     if (publication.revision !== page.source_revision || Date.parse(page.valid_until) <= Date.now()) return { status: "staleContinuation" };
     const offset = (cursor?.offset ?? 0) + page.items.length;
     const next = { offset, source: page.source_revision, observedAt: page.observed_at, validUntil: page.valid_until, deadline };
-    return { status: "ready", authorityDeadline: deadline, candidates: { items: page.items, total: page.total,
-      coverage: offset >= page.total ? "complete" : "partial",
+    const common = { items: page.items, total: page.total,
+      coverage: offset >= page.total ? "complete" as const : "partial" as const,
       continuation: offset >= page.total ? null : Buffer.from(JSON.stringify({ ...next, binding: sign(context, query, next) })).toString("base64url"),
-      sourceRevision: page.source_revision, observedAt: page.observed_at, validUntil: page.valid_until } };
+      sourceRevision: page.source_revision, observedAt: page.observed_at, validUntil: page.valid_until };
+    return { status: "ready", authorityDeadline: deadline, candidates: query.kind === "epic"
+      ? { ...common, kind: "epic", defaultCandidate: page.default_candidate } : common };
   } catch { return { status: "unavailable" }; }
 }

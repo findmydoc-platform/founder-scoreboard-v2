@@ -1,25 +1,26 @@
-import { normalizeInitiativeCandidateQuery, type InitiativeCandidateQuery, type InitiativeCandidateReceipt, type InitiativeCandidateView, type PlanningCandidateAccess } from "@/features/planning-items/model/planning-item-candidates";
+import { normalizePlanningItemCandidateQuery, type PlanningItemCandidateQuery, type PlanningItemCandidateReceipt, type PlanningItemCandidateView, type PlanningCandidateAccess, type PlanningCandidateDefault } from "@/features/planning-items/model/planning-item-candidates";
 
 type Binding = { active: boolean; generation: number; sourceEpoch: number; sessionRevision?: string; userId: string; actor: { id: string; platformRole: string } | null };
-type Pending = { controller: AbortController; consumers: Set<symbol>; result: Promise<{ ok: boolean }>; resolve: (value: { ok: boolean }) => void; timer?: ReturnType<typeof setTimeout>; previous: InitiativeCandidateView; binding: Binding; sequence: number; append: boolean; base?: InitiativeCandidateReceipt };
-type Entry = { view: InitiativeCandidateView; receipt?: InitiativeCandidateReceipt; acceptedBinding?: Binding; pending?: Pending; expiry?: ReturnType<typeof setTimeout>; consumed?: Set<string> };
+type Pending = { controller: AbortController; consumers: Set<symbol>; result: Promise<{ ok: boolean }>; resolve: (value: { ok: boolean }) => void; timer?: ReturnType<typeof setTimeout>; previous: PlanningItemCandidateView; binding: Binding; sequence: number; append: boolean; base?: PlanningItemCandidateReceipt };
+type Entry = { view: PlanningItemCandidateView; receipt?: PlanningItemCandidateReceipt; acceptedBinding?: Binding; pending?: Pending; expiry?: ReturnType<typeof setTimeout>; consumed?: Set<string> };
 
 // Query receipts belong to the existing Planning owner. These scalar option
 // fields never certify or replace canonical Task content or write authority.
 export function createPlanningCandidateReads({ read, binding, publish, now }: {
-  read?: (query: InitiativeCandidateQuery, options: { signal: AbortSignal }) => Promise<InitiativeCandidateReceipt>;
+  read?: (query: PlanningItemCandidateQuery, options: { signal: AbortSignal }) => Promise<PlanningItemCandidateReceipt>;
   binding: () => Binding; publish: () => void; now: () => number;
 }): PlanningCandidateAccess & { invalidate(): void; clear(): void; deny(): void } {
   const entries = new Map<string, Entry>();
-  const invalidView: InitiativeCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null };
+  const invalidView: PlanningItemCandidateView = { query: { view: "candidates", kind: "initiative", query: "", limit: 20 }, readStatus: "unavailable", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: { status: "not-applicable" } };
   let sequence = 0, acceptedSequence = 0, acceptedSource: string | undefined;
-  const key = (query: InitiativeCandidateQuery) => JSON.stringify([query.kind, query.query, query.limit]);
+  const key = (query: PlanningItemCandidateQuery) => JSON.stringify([query.kind, query.query, query.limit]);
+  const unknownDefault = (query: PlanningItemCandidateQuery): PlanningCandidateDefault => ({ status: query.kind === "epic" ? "unknown" : "not-applicable" });
   const sameSession = (a: Binding, b: Binding) => b.active && a.generation === b.generation && a.sessionRevision === b.sessionRevision && a.userId === b.userId
     && a.actor?.id === b.actor?.id && a.actor?.platformRole === b.actor?.platformRole;
-  function entry(query: InitiativeCandidateQuery) {
-    const normalized = normalizeInitiativeCandidateQuery(query)!;
+  function entry(query: PlanningItemCandidateQuery) {
+    const normalized = normalizePlanningItemCandidateQuery(query)!;
     const signature = key(normalized);
-    if (!entries.has(signature)) entries.set(signature, { view: { query: normalized, readStatus: "not-loaded", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null } });
+    if (!entries.has(signature)) entries.set(signature, { view: { query: normalized, readStatus: "not-loaded", furtherReadStatus: "not-loaded", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: unknownDefault(normalized) } });
     return entries.get(signature)!;
   }
   function valid(value: Entry) {
@@ -30,7 +31,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   function expire(value: Entry) {
     if (value.receipt && !valid(value)) {
       value.receipt = undefined;
-      value.view = { ...value.view, readStatus: "stale", items: [], coverage: "unknown", total: null, continuation: null };
+      value.view = { ...value.view, readStatus: "stale", items: [], coverage: "unknown", total: null, continuation: null, defaultChoice: unknownDefault(value.view.query) };
     }
   }
   function release(value: Entry) {
@@ -46,7 +47,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   function invalidate() {
     for (const value of entries.values()) {
       release(value);
-      value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null };
+      value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null, defaultChoice: unknownDefault(value.view.query) };
     }
     acceptedSource = undefined;
   }
@@ -57,7 +58,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
     for (const value of entries.values()) {
       release(value); clearTimeout(value.expiry);
       value.receipt = undefined; value.acceptedBinding = undefined; value.consumed = undefined;
-      value.view = { ...value.view, readStatus: "stale", furtherReadStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null };
+      value.view = { ...value.view, readStatus: "stale", furtherReadStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: unknownDefault(value.view.query) };
     }
     acceptedSource = undefined;
   }
@@ -75,21 +76,24 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
     signal?.addEventListener("abort", abort, { once: true });
     return pending.result.then(result => aborted ? { ok: false } : result).finally(() => { signal?.removeEventListener("abort", abort); pending.consumers.delete(consumer); });
   }
-  async function execute(value: Entry, pending: Pending, query: InitiativeCandidateQuery) {
+  async function execute(value: Entry, pending: Pending, query: PlanningItemCandidateQuery) {
     if (value.pending !== pending || !pending.consumers.size) return;
     try {
       const receipt = await read!(query, { signal: pending.controller.signal });
       const current = binding();
       if (value.pending !== pending || pending.controller.signal.aborted) return;
       if (!sameSession(pending.binding, current) || pending.binding.sourceEpoch !== current.sourceEpoch) {
-        value.receipt = undefined; value.view = { ...value.view, readStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null }; return;
+        value.receipt = undefined; value.view = { ...value.view, readStatus: "stale", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: unknownDefault(query) }; return;
       }
       const page = receipt.candidates;
       if (!receipt.readAuthority || receipt.readAuthority.userId !== current.userId || !Number.isFinite(receipt.readAuthority.deadline) || receipt.readAuthority.deadline <= now()
         || !current.actor || receipt.readActor?.profileId !== current.actor.id || receipt.readActor.platformRole !== current.actor.platformRole
         || !page || typeof page.sourceRevision !== "string" || !page.sourceRevision || !Number.isFinite(Date.parse(page.observedAt)) || !Number.isFinite(Date.parse(page.validUntil)) || Date.parse(page.validUntil) <= now()
-        || !Array.isArray(page.items) || !Number.isSafeInteger(page.total) || page.total < page.items.length || !["complete", "partial"].includes(page.coverage)) {
-        value.view = { ...value.view, readStatus: "unavailable", items: [], coverage: "unknown", continuation: null }; value.receipt = undefined; return;
+        || !Array.isArray(page.items) || !Number.isSafeInteger(page.total) || page.total < page.items.length || !["complete", "partial"].includes(page.coverage)
+        || page.items.some(item => item.taskType !== query.kind)
+        || query.kind !== "epic" && page.kind === "epic"
+        || query.kind === "epic" && (page.kind !== "epic" || page.defaultCandidate !== null && (page.defaultCandidate.taskType !== "epic" || !page.defaultCandidate.id || typeof page.defaultCandidate.title !== "string"))) {
+        value.view = { ...value.view, readStatus: "unavailable", items: [], coverage: "unknown", continuation: null, defaultChoice: unknownDefault(query) }; value.receipt = undefined; return;
       }
       if (acceptedSource && acceptedSource !== page.sourceRevision) {
         if (pending.sequence < acceptedSequence) { value.view = { ...value.view, readStatus: "stale", coverage: "unknown", continuation: null }; return; }
@@ -117,14 +121,15 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
       if (!pending.append) value.consumed = new Set();
       if (query.continuation) value.consumed?.add(query.continuation);
       const baseQuery = { ...query, continuation: undefined };
-      value.view = { query: baseQuery, readStatus: "current", furtherReadStatus: pending.append ? "current" : "not-loaded", items, total: page.total, coverage: page.coverage, continuation: page.continuation };
+      value.view = { query: baseQuery, readStatus: "current", furtherReadStatus: pending.append ? "current" : "not-loaded", items, total: page.total, coverage: page.coverage, continuation: page.continuation,
+        defaultChoice: page.kind === "epic" ? { status: "current", item: page.defaultCandidate } : { status: "not-applicable" } };
       clearTimeout(value.expiry);
       value.expiry = setTimeout(() => { expire(value); publish(); }, Math.max(0, Math.min(accepted.readAuthority.deadline, Date.parse(page.validUntil)) - now()));
     } catch (error) {
       const current = binding();
       if (sameSession(pending.binding, current) && typeof error === "object" && error !== null && "status" in error && (error.status === 401 || error.status === 403)) {
         clear(); entries.set(key(query), value); value.receipt = undefined;
-        value.view = { ...value.view, readStatus: "forbidden", items: [], total: null, coverage: "unknown", continuation: null };
+        value.view = { ...value.view, readStatus: "forbidden", items: [], total: null, coverage: "unknown", continuation: null, defaultChoice: unknownDefault(query) };
         publish();
       } else if (value.pending === pending) {
         if (pending.append && valid(value) && typeof error === "object" && error !== null && "status" in error && error.status !== 409) {
@@ -137,7 +142,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
   }
   return {
     clear, invalidate, deny,
-    candidates(query) { if (!normalizeInitiativeCandidateQuery(query)) return invalidView; if (!binding().active) clear(); const value = entry(query); expire(value); return value.view; },
+    candidates(query) { if (!normalizePlanningItemCandidateQuery(query)) return invalidView; if (!binding().active) clear(); const value = entry(query); expire(value); return value.view; },
     candidate(id) {
       if (!binding().active) return null;
       for (const value of entries.values()) {
@@ -145,12 +150,13 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
         if (value.view.readStatus === "current" && valid(value)) {
           const candidate = value.view.items.find(item => item.id === id);
           if (candidate) return candidate;
+          if (value.view.defaultChoice.status === "current" && value.view.defaultChoice.item?.id === id) return value.view.defaultChoice.item;
         }
       }
       return null;
     },
     loadCandidates(input, options) {
-      const normalized = normalizeInitiativeCandidateQuery(input);
+      const normalized = normalizePlanningItemCandidateQuery(input);
       const current = binding();
       if (!normalized || !read || !current.active || options?.signal?.aborted) return Promise.resolve({ ok: false });
       const value = entry(normalized); expire(value);

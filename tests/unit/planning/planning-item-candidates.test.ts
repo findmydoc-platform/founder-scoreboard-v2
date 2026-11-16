@@ -2,16 +2,16 @@ import { expect, test, vi } from "vitest";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import type { InitiativeCandidatePage, InitiativeCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
+import type { PlanningItemCandidatePage, PlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 
 const actor = { id: "candidate-reader", name: "Reader", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 40 };
 const task = taskDetailStoryTask({ id: "loaded-deliverable" });
-const query: InitiativeCandidateQuery = { view: "candidates", kind: "initiative", query: " Säulen ", limit: 20 };
+const query: PlanningItemCandidateQuery = { view: "candidates", kind: "initiative", query: " Säulen ", limit: 20 };
 const item = { id: "off-page-initiative", title: "Säulen außerhalb des Boards", taskType: "initiative" as const, parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-01T12:00:00Z" };
 type CandidatePort = {
-  loadCandidates(query: InitiativeCandidateQuery, options?: { immediate?: boolean; refresh?: boolean; signal?: AbortSignal }): Promise<{ ok: boolean }>;
-  candidates(query: InitiativeCandidateQuery): { readStatus: string; items: InitiativeCandidatePage["items"]; coverage: string };
+  loadCandidates(query: PlanningItemCandidateQuery, options?: { immediate?: boolean; refresh?: boolean; signal?: AbortSignal }): Promise<{ ok: boolean }>;
+  candidates(query: PlanningItemCandidateQuery): { readStatus: string; items: PlanningItemCandidatePage["items"]; coverage: string };
 };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 function receipt() {
@@ -26,7 +26,7 @@ test("candidate search waits 250 ms, Enter coalesces normalized demand, and reus
     const pending = deferred<ReturnType<typeof receipt>>();
     const reads: string[] = []; let signal: AbortSignal | undefined;
     const adapter = { now: () => Date.now(), saveTask: async () => ({ task }), readWorkspace: async () => null,
-      readCandidates: async (scope: InitiativeCandidateQuery, options?: { signal?: AbortSignal }) => { reads.push(scope.query); signal = options?.signal; return pending.promise; } };
+      readCandidates: async (scope: PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => { reads.push(scope.query); signal = options?.signal; return pending.promise; } };
     const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
     const port = planning as typeof planning & Partial<CandidatePort>;
     const firstConsumer = new AbortController(), remainingConsumer = new AbortController();
@@ -69,7 +69,7 @@ test.each(["source", "session"] as const)("a changed candidate %s binding reject
 test("releasing the final candidate consumer aborts transport and cannot publish its late result", async () => {
   const pending = deferred<ReturnType<typeof receipt>>(); let signal: AbortSignal | undefined;
   const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => null,
-    readCandidates: async (_scope: InitiativeCandidateQuery, options?: { signal?: AbortSignal }) => { signal = options?.signal; return pending.promise; } };
+    readCandidates: async (_scope: PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => { signal = options?.signal; return pending.promise; } };
   const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
   const port = planning as typeof planning & Partial<CandidatePort>;
   const consumer = new AbortController();
@@ -87,9 +87,9 @@ function page(items: typeof item[], continuation: string | null, sourceRevision 
 const secondItem = { ...item, id: "second-initiative", title: "Säulen zweite Seite" };
 
 test("compatible further-page demand coalesces and appends every candidate without replacing the first page", async () => {
-  const next = deferred<ReturnType<typeof page>>(), reads: InitiativeCandidateQuery[] = [];
+  const next = deferred<ReturnType<typeof page>>(), reads: PlanningItemCandidateQuery[] = [];
   const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => null,
-    readCandidates: async (scope: InitiativeCandidateQuery) => { reads.push(scope); return scope.continuation ? next.promise : page([item], "candidate-next"); } };
+    readCandidates: async (scope: PlanningItemCandidateQuery) => { reads.push(scope); return scope.continuation ? next.promise : page([item], "candidate-next"); } };
   const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
   await planning.loadCandidates(query, { immediate: true });
   const continuation = planning.candidates(query).continuation!;
@@ -105,7 +105,7 @@ test("compatible further-page demand coalesces and appends every candidate witho
 test("a failed further page preserves usable candidates and retries only the missing page", async () => {
   const reads: Array<string | undefined> = []; let fail = true;
   const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => null,
-    readCandidates: async (scope: InitiativeCandidateQuery) => {
+    readCandidates: async (scope: PlanningItemCandidateQuery) => {
       reads.push(scope.continuation);
       if (!scope.continuation) return page([item], "candidate-next");
       if (fail) throw { status: 503 };
@@ -123,11 +123,11 @@ test("a failed further page preserves usable candidates and retries only the mis
 });
 
 test("known source invalidation restarts candidate discovery without sending an obsolete continuation", async () => {
-  const reads: InitiativeCandidateQuery[] = []; let source = "candidate-source-one";
+  const reads: PlanningItemCandidateQuery[] = []; let source = "candidate-source-one";
   const data = { ...emptyPlanningShellState, profiles: [actor], tasks: [task] };
   const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => ({ data, scopeRevision: "candidate-source-one", taskCoverage: "partial" as const }),
     readPlanningSourceVersion: async () => source,
-    readCandidates: async (scope: InitiativeCandidateQuery) => { reads.push(scope); return page(scope.continuation ? [secondItem] : [item], "candidate-next", source); } };
+    readCandidates: async (scope: PlanningItemCandidateQuery) => { reads.push(scope); return page(scope.continuation ? [secondItem] : [item], "candidate-next", source); } };
   const { planning } = createPlanningState({ userId: "candidate-user", initialData: data, initialCurrentProfile: actor, adapter });
   await planning.refreshWorkspace("planning"); await planning.loadCandidates(query, { immediate: true });
   const previousCursor = planning.candidates(query).continuation!;

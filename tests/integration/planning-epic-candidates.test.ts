@@ -43,3 +43,22 @@ test("Epic discovery orders the complete authorized scope before paging and reso
   expect((await fallback.json()).candidates.defaultCandidate.id).toBe(epics[0].id);
   expect(f.observed.slice(before).some(entry => /\/(active_tasks|tasks)$/.test(entry.path))).toBe(false);
 }), 120_000);
+
+test("Epic discovery retains all mapped reader roles and denies unmapped or direct user RPC access", () => withPlanningCredentialDatabase(async f => {
+  await f.db.query("update public.tasks set title=$1 where id=$2", [`${f.prefix} permitted Epic`, `${f.prefix}-epic`]);
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const scope = { view: "candidates", kind: "epic", query: f.prefix, limit: 20 };
+  for (const actor of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
+    const response = await GET(f.request(actor, `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(response.status).toBe(200);
+    const body = await response.json(); expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([`${f.prefix}-epic`]);
+    expect(body.readActor).toEqual({ profileId: f.actors[actor].profileId, platformRole: actor === "administrator" ? "founder" : actor });
+    expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  const denied = await GET(f.request("unmapped", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+  expect(denied.status).toBe(403); expect(await denied.json()).not.toHaveProperty("candidates");
+  for (const actor of ["founder", "unmapped", "anonymous"] as const) {
+    const response = await f.rpc("planning_item_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_kind: "epic", p_query: "", p_limit: 20 }, actor);
+    expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
+  }
+}), 120_000);

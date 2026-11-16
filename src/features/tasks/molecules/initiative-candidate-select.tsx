@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PlanningState } from "@/features/planning/model/planning-state";
-import { normalizeInitiativeCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
+import { normalizePlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 
 function selectedContextSnapshot(owner: PlanningState, id: string) {
@@ -14,7 +14,7 @@ export function InitiativeCandidateSelect({ owner, value, selectedContext, onCha
   owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
-  const normalizedSearch = normalizeInitiativeCandidateQuery({ view: "candidates", kind: "initiative", query: search, limit: 20 })!.query;
+  const normalizedSearch = normalizePlanningItemCandidateQuery({ view: "candidates", kind: "initiative", query: search, limit: 20 })!.query;
   const query = useMemo(() => ({ view: "candidates" as const, kind: "initiative" as const, query: normalizedSearch, limit: 20 }), [normalizedSearch]);
   const demand = useRef<AbortController | null>(null);
   const contextDemand = useRef<AbortController | null>(null);
