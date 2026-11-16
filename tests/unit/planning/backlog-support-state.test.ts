@@ -79,3 +79,45 @@ test("a failed or wrong-Actor support read cannot replace current selected Backl
     expect(owner.planning.backlog().model.controls).toBeUndefined();
   } finally { owner.internal.dispose(); }
 });
+
+test("support consumers share and release only their own transport without aborting selected membership", async () => {
+  const held = deferred<SupportRead>(), members = deferred<PlanningWorkspaceRead>(); let supportSignal: AbortSignal | undefined, memberSignal: AbortSignal | undefined, dispatches = 0;
+  const deadline = Date.now() + 60_000;
+  const owner = createPlanningState({ userId, initialData: emptyPlanningShellState, initialCurrentProfile: actor,
+    initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (Date.now() + 3_600_000) / 1000 }, adapter: {
+      saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async (_query, options) => { memberSignal = options?.signal; return members.promise; },
+      ...{ readBacklogSupport: async (_query: BacklogSupportQuery, options?: { signal?: AbortSignal }) => { dispatches++; supportSignal = options?.signal; return held.promise; } },
+    } });
+  const first = new AbortController(), last = new AbortController();
+  try {
+    const port = owner.planning as typeof owner.planning & SupportPort;
+    const member = owner.planning.loadBacklogSelection(selectedQuery);
+    const firstRead = port.loadBacklogSupport?.(controlsQuery, { signal: first.signal });
+    const lastRead = port.loadBacklogSupport?.(controlsQuery, { signal: last.signal });
+    expect(dispatches).toBe(1); first.abort(); expect(supportSignal?.aborted).toBe(false);
+    last.abort(); expect(supportSignal?.aborted).toBe(true); expect(memberSignal?.aborted).toBe(false);
+    expect(await firstRead).toBe(false); expect(await lastRead).toBe(false);
+    held.resolve(controls(deadline)); members.resolve(selectedFrame(deadline)); expect(await member).toBe(true);
+    expect(owner.planning.backlog().model.controls).toBeUndefined();
+    expect(owner.planning.backlog()).toMatchObject({ readStatus: "current", model: { selection: { itemIds: [selected.id] } } });
+  } finally { owner.internal.dispose(); }
+});
+
+test("a known source replacement prevents a held support reply from publishing old control metadata", async () => {
+  const held = deferred<SupportRead>(); let source = "support-source";
+  const data = { ...emptyPlanningShellState, tasks: [selected], profiles: [actor] };
+  const owner = createPlanningState({ userId, initialData: data, initialCurrentProfile: actor,
+    initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (Date.now() + 3_600_000) / 1000 }, adapter: {
+      saveTask: async () => ({ task: selected }), readWorkspace: async () => ({ data, scopeRevision: "support-source", taskCoverage: "partial" }),
+      readPlanningSourceVersion: async () => source, ...{ readBacklogSupport: async () => held.promise },
+    } });
+  try {
+    const port = owner.planning as typeof owner.planning & SupportPort;
+    await owner.planning.refreshWorkspace("planning");
+    const pending = port.loadBacklogSupport?.(controlsQuery);
+    source = "replacement-support-source"; expect(await owner.planning.checkPlanningSource()).toBe("changed");
+    held.resolve(controls(Date.now() + 60_000)); expect(await pending).toBe(false);
+    expect(owner.planning.backlog().model.controls).toBeUndefined();
+  } finally { owner.internal.dispose(); }
+});
