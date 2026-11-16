@@ -3,6 +3,9 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import type { Sprint } from "@/lib/types";
 import { TaskDetailPlanningSection } from "./task-detail-planning-section";
 import { taskDetailStoryTask } from "./task-detail-story-fixtures";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { PlanningBusinessStateContext } from "@/features/planning/hooks/use-planning-business-state";
+import { createEpicParentBrowserFixture, epicDetailInitiative, searchedParentEpic } from "../../../../tests/helpers/epic-parent-browser-fixture";
 
 const meta = {
   component: TaskDetailPlanningSection,
@@ -82,5 +85,39 @@ export const DeliverableHierarchy: Story = {
     await expect(canvas.queryByText(parentInitiative.title)).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Planung anzeigen" }));
     await expect(canvas.getByText(parentInitiative.title)).toBeVisible();
+  },
+};
+
+function EpicDetailSelectionStory() {
+  const [writtenParent, setWrittenParent] = useState("");
+  const [fixture] = useState(() => createEpicParentBrowserFixture({ onWrite: payload => setWrittenParent(String(payload.parentTaskId || "")) }));
+  useEffect(() => () => fixture.state.owner.internal.dispose(), [fixture]);
+  const data = useSyncExternalStore(fixture.state.owner.planning.subscribe, fixture.state.owner.internal.getSnapshot, fixture.state.owner.internal.getSnapshot);
+  const task = data.tasks.find(item => item.id === epicDetailInitiative.id)!;
+  return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}>
+    <output aria-label="Detail parent update">{writtenParent}</output>
+    <TaskDetailPlanningSection task={task} allTasks={data.tasks} teamProfiles={data.profiles} sprints={[]} canManageTaskMeta canReparentSubIssue={false} pending={false}
+      onUpdate={patch => { void fixture.state.owner.planning.saveTask(task, patch); }} />
+  </PlanningBusinessStateContext.Provider>;
+}
+
+export const InitiativeDetailDiscoversAndRetainsAnOffPageEpic: Story = {
+  args: { task: initiative, allTasks: [epic, initiative], sprints: [] },
+  render: () => <EpicDetailSelectionStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement), page = within(document.body);
+    await userEvent.click(canvas.getByRole("button", { name: "Einordnung bearbeiten" }));
+    const trigger = canvas.getByRole("combobox", { name: "Parent-Epic" });
+    await userEvent.click(trigger);
+    const search = await page.findByRole("searchbox", { name: "Epic suchen" });
+    await userEvent.type(search, "Fern"); await userEvent.keyboard("{Enter}");
+    await userEvent.click(await page.findByRole("option", { name: searchedParentEpic.title }));
+    await expect(canvas.getByLabelText("Detail parent update")).toHaveTextContent(searchedParentEpic.id);
+    await expect(trigger).toHaveTextContent(searchedParentEpic.title);
+    await userEvent.click(trigger);
+    const replacement = page.getByRole("searchbox", { name: "Epic suchen" });
+    await userEvent.clear(replacement); await userEvent.type(replacement, "Kein Treffer"); await userEvent.keyboard("{Enter}");
+    await expect(await page.findByText("Keine Epics gefunden.")).toBeVisible();
+    await expect(trigger).toHaveTextContent(searchedParentEpic.title);
   },
 };

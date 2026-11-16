@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { EpicDialog } from "./epic-dialog";
@@ -11,6 +11,7 @@ import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import type { Profile, Task } from "@/lib/types";
+import { activeDefaultEpic, createEpicParentBrowserFixture, loadedParentEpic, searchedParentEpic } from "../../../../tests/helpers/epic-parent-browser-fixture";
 
 const profile: Profile = { id: "ceo", name: "CEO", platformRole: "ceo", orgRole: "CEO", weeklyCapacity: 40, githubLogin: "ceo" };
 const epic = taskDetailStoryTask({ id: "epic", taskType: "epic", title: "Original milestone", description: "Milestone goal", approvalStatus: null, updatedAt: "original/epic" });
@@ -69,6 +70,48 @@ function Fixture({ scenario = "epic-success" }: { scenario?: string }) {
 const meta = { title: "Features/Projects/Organisms/CoordinatedHierarchy", component: Fixture, parameters: { layout: "fullscreen" } } satisfies Meta<typeof Fixture>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+let releaseEpicDefault: (() => void) | undefined;
+function CompleteEpicDefaultStory() {
+  const [reads, setReads] = useState(0), [writtenParent, setWrittenParent] = useState(""), [closed, setClosed] = useState(false);
+  const [fixture] = useState(() => createEpicParentBrowserFixture({ holdDefault: true, onRead: () => setReads(count => count + 1), onWrite: payload => setWrittenParent(String(payload.parentTaskId || "")) }));
+  useEffect(() => { releaseEpicDefault = fixture.releaseDefault; return () => { releaseEpicDefault = undefined; fixture.state.owner.internal.dispose(); }; }, [fixture]);
+  const data = useSyncExternalStore(fixture.state.owner.planning.subscribe, fixture.state.owner.internal.getSnapshot, fixture.state.owner.internal.getSnapshot);
+  const ownerId = fixture.data.profiles[0].id;
+  return <>
+    <output aria-label="Epic default reads">{reads}</output><output aria-label="Written Epic parent">{writtenParent}</output>
+    {!closed && <InitiativeDialog planningState={fixture.state.owner.planning} data={data} pending={false} onClose={() => setClosed(true)}
+      defaults={{ title: "Unveränderter strategischer Entwurf", goal: "Ein beobachtbares Ziel", successCriteria: "Ein prüfbares Ergebnis", scopeConstraints: "Kein weiterer Umfang", ownerId,
+        accountableProfileId: ownerId, responsibleProfileIds: [ownerId] }} />}
+  </>;
+}
+
+export const InitiativeDefaultUsesTheCompleteEpicBasisAndKeepsTheUsersChoice: Story = {
+  render: () => <CompleteEpicDefaultStory />,
+  play: async () => {
+    const page = within(document.body), trigger = page.getByRole("combobox", { name: /^Epic/ });
+    await expect(trigger).not.toHaveTextContent(loadedParentEpic.title);
+    await waitFor(() => expect(page.getByLabelText("Epic default reads")).toHaveTextContent("1"));
+    const title = page.getByRole("textbox", { name: /Titel/ });
+    await userEvent.type(title, " bleibt erhalten");
+    releaseEpicDefault?.();
+    await waitFor(() => expect(trigger).toHaveTextContent(activeDefaultEpic.title));
+    await userEvent.click(trigger);
+    const search = await page.findByRole("searchbox", { name: "Epic suchen" });
+    await userEvent.type(search, "Fern"); await userEvent.keyboard("{Enter}");
+    await userEvent.click(await page.findByRole("option", { name: searchedParentEpic.title }));
+    await expect(trigger).toHaveTextContent(searchedParentEpic.title);
+    await userEvent.click(trigger);
+    const replacement = page.getByRole("searchbox", { name: "Epic suchen" });
+    await userEvent.clear(replacement); await userEvent.type(replacement, "Kein Treffer"); await userEvent.keyboard("{Enter}");
+    await expect(await page.findByText("Keine Epics gefunden.")).toBeVisible();
+    await expect(trigger).toHaveTextContent(searchedParentEpic.title);
+    await expect(title).toHaveValue("Unveränderter strategischer Entwurf bleibt erhalten");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(page.getByRole("button", { name: "Initiative erstellen" }));
+    await waitFor(() => expect(page.getByLabelText("Written Epic parent")).toHaveTextContent(searchedParentEpic.id));
+  },
+};
 export const EpicPublishesActualReceipt: Story = { play: async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   await userEvent.clear(canvas.getByRole("textbox", { name: /Titel/ }));

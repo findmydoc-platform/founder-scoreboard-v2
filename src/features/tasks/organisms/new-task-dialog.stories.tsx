@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
@@ -9,6 +9,7 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { useTaskCreateCommand } from "../hooks/use-task-create-command";
 import { taskDetailStoryTask } from "../molecules/task-detail-story-fixtures";
 import { NewTaskDialog } from "./new-task-dialog";
+import { createEpicParentBrowserFixture, storedParentEpic, searchedParentEpic } from "../../../../tests/helpers/epic-parent-browser-fixture";
 
 const profile = { id: "ceo", name: "CEO", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "", weeklyCapacity: 40 };
 const parent = taskDetailStoryTask({ id: "initiative", title: "Freigegebene Initiative", taskType: "initiative", approvalStatus: "approved", updatedAt: "opaque/parent" });
@@ -184,6 +185,41 @@ export const FailedInitiativeSearchRetriesAndSelectsByKeyboard: Story = {
     await waitFor(() => expect(trigger).toHaveFocus());
     await expect(trigger).toHaveTextContent("Säulen außerhalb des Boards");
     await expect(canvas.getByLabelText("Candidate searches")).toHaveTextContent("säulen,säulen");
+  },
+};
+
+function EpicParentProposalStory() {
+  const [submitted, setSubmitted] = useState("");
+  const [fixture] = useState(() => createEpicParentBrowserFixture());
+  useEffect(() => () => fixture.state.owner.internal.dispose(), [fixture]);
+  const data = useSyncExternalStore(fixture.state.owner.planning.subscribe, fixture.state.owner.internal.getSnapshot, fixture.state.owner.internal.getSnapshot);
+  return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}>
+    <output aria-label="Epic proposal parent">{submitted}</output>
+    <NewTaskDialog defaults={{ taskType: "initiative", title: "Unveränderter Initiativeentwurf", description: "Ein gültiges strategisches Ziel.", parentTaskId: storedParentEpic.id }}
+      data={data} pending={false} currentProfileId={fixture.data.profiles[0].id} onClose={() => undefined} onCreate={draft => setSubmitted(draft.parentTaskId)} />
+  </PlanningBusinessStateContext.Provider>;
+}
+
+export const InitiativeProposalRetainsItsStoredAndSearchedEpic: Story = {
+  render: () => <EpicParentProposalStory />,
+  play: async () => {
+    const canvas = within(document.body), trigger = canvas.getByRole("combobox", { name: "Parent-Epic" });
+    await waitFor(() => expect(trigger).toHaveTextContent(storedParentEpic.title));
+    await userEvent.click(trigger);
+    const search = await canvas.findByRole("searchbox", { name: "Epic suchen" });
+    await expect(canvas.getByRole("option", { name: "Ohne Epic – als Vorschlag" })).toBeVisible();
+    await userEvent.type(search, "Fern"); await userEvent.keyboard("{Enter}");
+    const choice = await canvas.findByRole("option", { name: searchedParentEpic.title });
+    await expect(trigger).toHaveTextContent(storedParentEpic.title);
+    await userEvent.click(choice); await expect(trigger).toHaveTextContent(searchedParentEpic.title);
+    await userEvent.click(trigger);
+    const replacement = canvas.getByRole("searchbox", { name: "Epic suchen" });
+    await userEvent.clear(replacement); await userEvent.type(replacement, "Kein Treffer"); await userEvent.keyboard("{Enter}");
+    await expect(await canvas.findByText("Keine Epics gefunden.")).toBeVisible();
+    await expect(trigger).toHaveTextContent(searchedParentEpic.title);
+    await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Unveränderter Initiativeentwurf");
+    await userEvent.keyboard("{Escape}"); await userEvent.click(canvas.getByRole("button", { name: "Initiative vorschlagen" }));
+    await expect(canvas.getByLabelText("Epic proposal parent")).toHaveTextContent(searchedParentEpic.id);
   },
 };
 export const LostCreationResponseRetainsDraftWithoutReplay: Story = {
