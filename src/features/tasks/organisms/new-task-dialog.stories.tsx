@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { act, useEffect, useState, useSyncExternalStore } from "react";
-import { vi } from "vitest";
+import { vi, expect as schedulingExpect } from "vitest";
 import { PlanningItemCandidateSelect } from "../molecules/planning-item-candidate-select";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { createBrowserPlanningState } from "@/features/planning/model/internal/browser-planning-state";
@@ -332,26 +332,31 @@ export const ExplicitCandidateOpenIsImmediateWhileTypingAndClearingRemainDebounc
   render:()=> <CandidateOpenSchedulingStory/>,
   play:async({canvasElement})=>{
     const canvas=within(canvasElement),page=within(canvasElement.ownerDocument.body);
+    const dispatched=()=>JSON.parse(canvas.getByLabelText("Candidate dispatched queries").textContent || "[]");
+    const input=(element:HTMLInputElement,value:string)=>{
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(element,value);
+      element.dispatchEvent(new Event("input",{bubbles:true}));
+    };
     vi.useFakeTimers();
-    const user=userEvent.setup({advanceTimers:ms=>vi.advanceTimersByTime(ms)});
     try {
-      await act(async()=>{await user.click(canvas.getByRole("combobox",{name:"Initiative"}));});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('[""]');
-      const search=page.getByRole("searchbox",{name:"Initiative suchen"});
-      await act(async()=>{await user.type(search,"Fern");});
+      await act(async()=>{canvas.getByRole("combobox",{name:"Initiative"}).click();});
+      schedulingExpect(dispatched()).toEqual([""]);
+      const search=page.getByRole("searchbox",{name:"Initiative suchen"}) as HTMLInputElement;
+      await act(async()=>{input(search,"Fern");});
       await act(async()=>{await vi.advanceTimersByTimeAsync(249);});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('[""]');
+      schedulingExpect(dispatched()).toEqual([""]);
       await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern"]');
+      schedulingExpect(dispatched()).toEqual(["","fern"]);
       // Expire query receipts while keeping the original Actor/session authority valid.
       await act(async()=>{await vi.advanceTimersByTimeAsync(501);});
-      await act(async()=>{await user.clear(search);});
+      await act(async()=>{input(search,"");});
       await act(async()=>{await vi.advanceTimersByTimeAsync(249);});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern"]');
+      schedulingExpect(dispatched()).toEqual(["","fern"]);
       await act(async()=>{await vi.advanceTimersByTimeAsync(1);});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern",""]');
-      await act(async()=>{await user.type(search,"Noch");await user.keyboard("{Enter}");});
-      await expect(canvas.getByLabelText("Candidate dispatched queries")).toHaveTextContent('["","fern","","noch"]');
+      schedulingExpect(dispatched()).toEqual(["","fern",""]);
+      await act(async()=>{input(search,"Noch");});
+      await act(async()=>{search.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}));});
+      schedulingExpect(dispatched()).toEqual(["","fern","","noch"]);
     } finally { vi.clearAllTimers();vi.useRealTimers(); }
   },
 };
