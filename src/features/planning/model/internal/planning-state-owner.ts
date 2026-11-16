@@ -172,7 +172,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       void planning.refreshWorkspace("planning");
     }, delay);
   }
-  function invalidatePlanningSource() {
+  function invalidatePlanningSource(invalidateChildren = true) {
+    if (invalidateChildren) for (const [id, list] of childLists) {
+      if (list.readStatus === "current" || list.readStatus === "loading") childLists.set(id, { ...list, readStatus: "stale" });
+    }
     releaseHeldReads();
     planningSourceEpoch++;
     invalidatedAt = adapter.now?.() ?? Date.now();
@@ -203,7 +206,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     for (const [parentId, list] of childLists) {
       if (list.readStatus === "current" && (parentId === id || parentId === previousParentId || parentId === newParentId || list.ids.has(id))) childLists.set(parentId, { ...list, readStatus: "stale" });
     }
-    invalidatePlanningSource();
+    // A confirmed write identifies its affected parents above. An observed
+    // external source change has no such narrower membership evidence.
+    invalidatePlanningSource(false);
   }
   function detachPlanningMetadata() {
     releaseHeldReads();
@@ -1226,6 +1231,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       publish();
       const loaded = (async () => {
         const generation = sessionGeneration;
+        const sourceEpoch = planningSourceEpoch;
         const started = ++sequence;
         let result: Awaited<ReturnType<typeof readTaskDetail>>;
         try {
@@ -1256,6 +1262,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           return { ok: false, error: error instanceof Error ? error.message : "Aufgabendetails konnten nicht geladen werden." };
         }
         if (demand?.controller.signal.aborted || !isActive() || generation !== sessionGeneration) return { ok: false };
+        if (area === "children" && sourceEpoch !== planningSourceEpoch) {
+          const list = childLists.get(taskId);
+          if (list) childLists.set(taskId, { ...list, readStatus: "stale" });
+          publish();
+          return { ok: false };
+        }
         if ((taskDeniedAt.get(taskId) || 0) > started) return { ok: false };
         if (area) { scopedDetailIds.add(taskId); rememberDetailReceipt(taskId, area, result.model, result.readAuthority!); }
         const returnedTasks = [result.model.item, ...result.model.ancestors, ...result.model.children, ...result.model.relatedItems];
@@ -1310,9 +1322,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         githubSync.acceptTaskRead(taskId,started,!protectedIds.has(taskId)&&!unresolvedIds.has(taskId),result.model.item.updatedAt);
         githubImports.acceptTaskRead(taskId, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), result.model.item.updatedAt);
         if (includesRelationships) blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
-        if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current",
-          coverage: result.model.coverage?.children || (!area ? "complete" : "partial"),
-          progress: result.model.childProgress || (!area ? taskChildProgress(result.model.children) : undefined) });
+        if (includesChildren) {
+          const validStatuses = result.model.children.every(child => typeof child.status === "string" && Boolean(child.status.trim()));
+          childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current",
+            coverage: validStatuses ? result.model.coverage?.children || (!area ? "complete" : "partial") : "partial",
+            progress: validStatuses ? result.model.childProgress || (!area ? taskChildProgress(result.model.children) : undefined) : undefined });
+        }
         for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
