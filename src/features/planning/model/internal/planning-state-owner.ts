@@ -1260,9 +1260,24 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         for (const scope of ["discussion", "timeline", "relationships"] as const) if (!area || area === scope) detailAreaStatuses.set(taskId+":"+scope, result.unavailable?.includes(scope) ? "unavailable" : "current");
         const protectedIds = new Set(confirmed.tasks.filter(task => (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started || (taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
         const unresolvedIds = new Set(next.tasks.filter(task => !confirmed.tasks.some(current => current.id === task.id) && Math.max(taskConfirmedAt.get(task.id) || 0, taskDeniedAt.get(task.id) || 0) > started).map(task => task.id));
+        const omittedFields = result.model.taskOmittedFields || [];
+        const returnedIds = new Set(returnedTasks.map(task => task.id));
+        for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task, omittedFields);
+        const acceptedDetailTask = (task: Task) => {
+          const previous = confirmed.tasks.find(item => item.id === task.id);
+          if (protectedIds.has(task.id)) return previous!;
+          if (!previous || !returnedIds.has(task.id) || !omittedFields.length) return task;
+          const merged = { ...previous, ...task };
+          for (const field of omittedFields) Object.assign(merged, { [field]: previous[field] });
+          if (previous.detailAvailability !== "summary") {
+            merged.detailAvailability = previous.updatedAt === task.updatedAt ? previous.detailAvailability : "stale";
+            if (merged.detailAvailability === "stale") detailStatuses.set(task.id, "stale");
+          }
+          return merged;
+        };
         confirmed = {
           ...next,
-          tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(task => protectedIds.has(task.id) ? confirmed.tasks.find(item => item.id === task.id)! : task),
+          tasks: next.tasks.filter(task => !unresolvedIds.has(task.id)).map(acceptedDetailTask),
           ...((taskConfirmedAt.get(taskId) || 0) > started ? { taskActivity: confirmed.taskActivity, taskReviews: confirmed.taskReviews } : {}),
         };
         if (includesDiscussion) {
@@ -1281,7 +1296,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (includesRelationships) blockerReports.acceptDetailRead(result.model, started, !protectedIds.has(taskId) && !unresolvedIds.has(taskId), !result.unavailable?.includes("relationships"));
         if (includesChildren) childLists.set(taskId, { ids: new Set(result.model.children.map(child => child.id)), started, readStatus: "current" });
         for (const task of returnedTasks) if (!lifecycle.isRemoved(task) && (taskDeniedAt.get(task.id) || 0) <= started) deniedTaskReads.delete(task.id);
-        for (const task of returnedTasks) if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) acceptTaskFieldCoverage(task);
         for (const task of returnedTasks) {
           if (!protectedIds.has(task.id) && !unresolvedIds.has(task.id)) taskReadAt.set(task.id, started);
         }
