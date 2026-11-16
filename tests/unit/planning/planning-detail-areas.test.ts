@@ -233,3 +233,40 @@ test.each(["target", "children"] as const)("parallel area acceptance keeps both 
     childrenCoverage: "complete", children: [{ id: child.id, parentTaskId: full.id }],
     childProgress: { completed: 0, total: 1, unfinished: 1, percentage: 0 } });
 });
+
+
+test.each(["different-source", "different-version", "missing-version"] as const)("a %s peer cannot release an older target's field protection", async boundary => {
+  const now = Date.now(), version = boundary === "missing-version" ? undefined : "2026-11-16T12:00:00.000Z";
+  const summary = { ...task, updatedAt: version, detailAvailability: "summary" as const };
+  const full = { ...summary, detailAvailability: undefined, description: "Older protected canonical content" };
+  const common = { observedAt: new Date(now).toISOString(), validUntil: null, readActor: { profileId: actor.id, platformRole: actor.platformRole } };
+  const originalDeadline = now + 45_000;
+  const canonical: TaskDetailModel = { ...target, ...common, item: full, authorityDeadline: originalDeadline, sourceRevision: "original-peer-source" };
+  const childContext: TaskDetailModel = { ...common, revision: "child-peer", readArea: "children", supportingData: "omitted",
+    sourceRevision: boundary === "different-source" ? "different-peer-source" : canonical.sourceRevision,
+    authorityDeadline: now + 55_000, item: { ...summary, updatedAt: boundary === "different-version" ? "2026-11-16T12:01:00.000Z" : version },
+    ancestors: [], children: [], relatedItems: [], taskOmittedFields: ["description", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
+    childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 },
+    discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+  };
+  type Reply = { model: TaskDetailModel; readAuthority: { userId: string; deadline: number } };
+  let answerTarget!: (reply: Reply) => void, answerChildren!: (reply: Reply) => void;
+  const { planning } = createPlanningState({ userId: "user-a", initialSession: session, initialCurrentProfile: actor,
+    initialData: { ...emptyPlanningShellState, tasks: [summary] }, adapter: {
+      now: () => now, readWorkspace: async () => null, saveTask: async () => ({ task: full }),
+      readTaskDetail: async (_id, options) => new Promise<Reply>(resolve => {
+        if (options?.area === "target") answerTarget = resolve;
+        else if (options?.area === "children") answerChildren = resolve;
+        else throw new Error("Explicit independent area required");
+      }),
+    },
+  });
+  const first = planning.loadTaskDetail(task.id, { area: "target" });
+  const second = planning.loadTaskDetail(task.id, { area: "children" });
+  answerChildren({ model: childContext, readAuthority: { userId: "user-a", deadline: childContext.authorityDeadline! } });
+  expect(await second).toMatchObject({ ok: true });
+  answerTarget({ model: canonical, readAuthority: { userId: "user-a", deadline: originalDeadline } });
+  expect(await first).toMatchObject({ ok: true });
+  expect(planning.taskDetail(task.id).task?.description).toBeUndefined();
+  expect(planning.taskDetail(task.id).readStatus).not.toBe("current");
+});
