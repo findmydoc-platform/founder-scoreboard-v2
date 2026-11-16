@@ -190,6 +190,9 @@ export function BacklogOverview({
       )}>
         <div className="grid min-w-0 gap-4">
           <PlanningBacklogTree
+            childOwner={planningState}
+            collectionComplete={model.coverage?.items === "complete"}
+            independentMembership={!filters.query.trim() && filters.status === "Alle" && filters.priority === "Alle" && filters.assignee === "Alle" && filters.scope === "all" && filters.readiness === "all"}
             canAssignSprints={backlogLevel === "deliverable" && canManageBacklog}
             canCreate={canManageBacklog}
             data={[...model.items]}

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, ChevronUp, GripVertical, Plus } from "lucide-react";
-import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { BacklogSprintAssignmentMenu } from "@/features/backlog/molecules/backlog-sprint-actions";
 import type { BacklogSprintBucket } from "@/features/backlog/model/backlog-view-model";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
@@ -9,6 +9,7 @@ import { TaskStatusBadge } from "@/features/tasks/atoms/task-status-control";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskTypeIndicator } from "@/features/tasks/atoms/task-type-indicator";
 import { directChildPluralLabel, taskChildProgress } from "@/features/tasks/model/task-card-presentation";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { PlanningLevel } from "@/features/planning/model/planning-level";
 import { normalizeStatus } from "@/lib/status";
 import type { Sprint, Task } from "@/lib/types";
@@ -17,6 +18,9 @@ import { classNames, UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-p
 export type BacklogPlanningLevel = PlanningLevel;
 
 type PlanningBacklogTreeProps = {
+  childOwner?: PlanningState;
+  collectionComplete?: boolean;
+  independentMembership?: boolean;
   canAssignSprints: boolean;
   canCreate: boolean;
   data: Task[];
@@ -85,7 +89,7 @@ function TreeRow({
     : visibleChildren;
   const rollup = taskChildProgress(rollupChildren);
   const rank = task.taskType === "deliverable" ? rankByTaskId.get(task.id) : undefined;
-  const isDraggable = task.taskType === "deliverable" && Boolean(onDragTaskStart);
+  const isDraggable = task.taskType === "deliverable" && task.detailAvailability !== "summary" && Boolean(onDragTaskStart);
   const isDragging = isDraggable && draggedTaskId === task.id;
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
@@ -145,14 +149,14 @@ function TreeRow({
               className="mt-2 max-w-md"
               completed={rollup.completed}
               label={directChildPluralLabel(task.taskType)}
-              leading={task.assignee || <span className="text-amber-700">Owner fehlt</span>}
+              leading={task.assignee || (task.detailAvailability === "summary" ? "Zuständigkeit nicht geladen" : <span className="text-amber-700">Owner fehlt</span>)}
               percentage={rollup.percentage}
               total={rollup.total}
             />
           ) : null}
           {!rollup.total || task.targetDate || task.fixedDate ? (
             <div className={classNames("flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500", rollup.total ? "mt-2" : "mt-1")}>
-              {!rollup.total ? (task.assignee ? <span>{task.assignee}</span> : <span className="text-amber-700">Owner fehlt</span>) : null}
+              {!rollup.total ? (task.assignee ? <span>{task.assignee}</span> : task.detailAvailability === "summary" ? <span>Zuständigkeit nicht geladen</span> : <span className="text-amber-700">Owner fehlt</span>) : null}
               {task.targetDate ? <span>Zieltermin: {task.targetDate}</span> : task.fixedDate ? <span>Fixtermin: {task.fixedDate}</span> : null}
             </div>
           ) : null}
@@ -210,6 +214,8 @@ function Group({
   rollupTasks,
   title,
   visibleCount,
+  progress,
+  notice,
 }: {
   children: ReactNode;
   collapsed: boolean;
@@ -219,9 +225,11 @@ function Group({
   rollupTasks: Task[];
   title: string;
   visibleCount: number;
+  progress?: ReturnType<typeof taskChildProgress> | null;
+  notice?: ReactNode;
 }) {
   const contentId = `backlog-group-${groupId}`;
-  const rollup = taskChildProgress(rollupTasks);
+  const rollup = progress === undefined ? taskChildProgress(rollupTasks) : progress;
   const rollupLabel = groupItemPluralLabel(itemType);
 
   return (
@@ -230,35 +238,70 @@ function Group({
         type="button"
         aria-controls={contentId}
         aria-expanded={!collapsed}
-        aria-label={`${title}: ${rollup.completed} von ${rollup.total} ${rollupLabel} erledigt. Gruppe ${collapsed ? "aufklappen" : "einklappen"}`}
+        aria-label={`${title}: ${rollup ? `${rollup.completed} von ${rollup.total} ${rollupLabel} erledigt` : "Fortschritt unbekannt"}. Gruppe ${collapsed ? "aufklappen" : "einklappen"}`}
         onClick={onToggle}
         className="grid min-h-11 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-slate-50/90 px-4 py-2.5 text-left hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:grid-cols-[minmax(0,1fr)_minmax(14rem,22rem)_auto]"
       >
         <span className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-slate-800">
           <span className="min-w-0 truncate">{title}</span>
-          {visibleCount < rollup.total ? (
+          {rollup && visibleCount < rollup.total ? (
             <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
               {visibleCount} von {rollup.total} sichtbar
             </span>
           ) : null}
         </span>
-        <TaskChildProgress
+        {rollup ? <TaskChildProgress
           className="col-span-2 row-start-2 w-full sm:col-span-1 sm:col-start-2 sm:row-start-1"
           completed={rollup.completed}
           label={rollupLabel}
           percentage={rollup.percentage}
           total={rollup.total}
-        />
+        /> : <span role="status" className="col-span-2 text-xs text-slate-500">Fortschritt noch nicht verfügbar.</span>}
         <span className="col-start-2 row-start-1 shrink-0 text-slate-600 sm:col-start-3">
           {collapsed ? <ChevronDown size={18} aria-hidden="true" /> : <ChevronUp size={18} aria-hidden="true" />}
         </span>
       </button>
+      {!collapsed && notice ? <div className="border-b border-slate-100 px-4 py-3 text-sm text-slate-600">{notice}</div> : null}
       <ul id={contentId} hidden={collapsed}>{children}</ul>
     </section>
   );
 }
 
+function ParentGroup({ owner, parent, collectionComplete, independentMembership, tasks, rollupTasks, itemType, title, groupId, collapsed, onToggle, renderRow }: {
+  owner?: PlanningState; parent?: Task; collectionComplete: boolean; independentMembership: boolean;
+  tasks: Task[]; rollupTasks: Task[]; itemType: GroupItemType; title: string; groupId: string; collapsed: boolean; onToggle: () => void;
+  renderRow: (task: Task) => ReactNode;
+}) {
+  const lease = useRef<AbortController | null>(null);
+  const parentId = parent?.id;
+  const independent = Boolean(owner && parentId && !collectionComplete);
+  useEffect(() => {
+    if (!owner || !parentId || !independent || collapsed) return;
+    const controller = new AbortController(); lease.current = controller;
+    void owner.loadTaskDetail(parentId, { area: "children", signal: controller.signal });
+    return () => { controller.abort(); if (lease.current === controller) lease.current = null; };
+  }, [owner, parentId, independent, collapsed]);
+  const detail = parentId ? owner?.taskDetail(parentId) : undefined;
+  const currentChildren = detail?.childrenReadStatus === "current" && ["complete", "complete-empty"].includes(detail.childrenCoverage);
+  const forbidden = detail?.childrenReadStatus === "forbidden";
+  const displayed = forbidden ? [] : independent && currentChildren && independentMembership
+    ? detail.children.filter(child => child.taskType === itemType) : tasks;
+  const progress = independent ? detail?.childProgress || null : undefined;
+  const failed = detail?.childrenReadStatus === "unavailable" || detail?.childrenReadStatus === "stale";
+  const retry = () => { if (owner && parentId && lease.current) void owner.loadTaskDetail(parentId, { area: "children", signal: lease.current.signal }); };
+  const notice = !independent ? null : forbidden ? <p role="status">Unteraufgaben dürfen nicht angezeigt werden.</p>
+    : failed ? <><p role="status">Unteraufgaben konnten nicht geladen werden.</p><UiButton type="button" onClick={retry}>Erneut laden</UiButton></>
+      : !currentChildren ? <p role="status">Unteraufgaben werden geladen.</p> : null;
+  return <Group groupId={groupId} itemType={itemType} title={title} collapsed={collapsed} onToggle={onToggle}
+    rollupTasks={rollupTasks} progress={progress} visibleCount={displayed.length} notice={notice}>
+    {displayed.map(renderRow)}
+  </Group>;
+}
+
 export function PlanningBacklogTree({
+  childOwner,
+  collectionComplete = true,
+  independentMembership = false,
   canAssignSprints,
   canCreate,
   data,
@@ -334,8 +377,8 @@ export function PlanningBacklogTree({
   const visibleDeliverables = deliverables.filter(visibleAtCurrentLevel);
   const visibleOrphanInitiatives = orphanInitiatives.filter(visibleAtCurrentLevel);
   const visibleOrphanDeliverables = orphanDeliverables.filter(visibleAtCurrentLevel);
-  const group = (groupId: string, itemType: GroupItemType, title: string, tasks: Task[], rollupTasks = tasks) => (
-    <Group
+  const group = (groupId: string, itemType: GroupItemType, title: string, tasks: Task[], rollupTasks = tasks, parent?: Task) => (
+    <ParentGroup owner={childOwner} parent={parent} collectionComplete={collectionComplete} independentMembership={independentMembership} tasks={tasks} renderRow={task => row(task)}
       key={groupId}
       collapsed={collapsedGroups.has(groupId)}
       groupId={groupId}
@@ -343,10 +386,7 @@ export function PlanningBacklogTree({
       onToggle={() => toggleGroup(groupId)}
       rollupTasks={rollupTasks}
       title={title}
-      visibleCount={tasks.length}
-    >
-      {tasks.map((task) => row(task))}
-    </Group>
+    />
   );
 
   const groups = level === "epic"
@@ -361,7 +401,7 @@ export function PlanningBacklogTree({
             const allChildren = initiatives.filter((initiative) => initiative.parentTaskId === epic.id);
             const children = visibleInitiatives.filter((initiative) => initiative.parentTaskId === epic.id);
             const groupId = `initiative:${epic.id}`;
-            return children.length ? group(groupId, "initiative", epic.title, children, allChildren) : null;
+            return children.length ? group(groupId, "initiative", epic.title, children, allChildren, epic) : null;
           }),
           visibleOrphanInitiatives.length ? group("initiative:orphan", "initiative", "Ohne Epic", visibleOrphanInitiatives, orphanInitiatives) : null,
         ]
@@ -372,7 +412,7 @@ export function PlanningBacklogTree({
           const epic = initiative.parentTaskId ? epicById.get(initiative.parentTaskId) : null;
           const title = epic ? `${epic.title} · ${initiative.title}` : initiative.title;
           const groupId = `deliverable:${initiative.id}`;
-          return children.length ? group(groupId, "deliverable", title, children, allChildren) : null;
+          return children.length ? group(groupId, "deliverable", title, children, allChildren, initiative) : null;
         }),
         visibleOrphanDeliverables.length ? group("deliverable:orphan", "deliverable", "Ohne Initiative", visibleOrphanDeliverables, orphanDeliverables) : null,
       ];
