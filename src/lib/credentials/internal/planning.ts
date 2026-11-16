@@ -1,3 +1,5 @@
+import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
+import { loadPlanningBacklogSelection } from "@/features/planning-items/server/planning-backlog-read-source";
 import "server-only";
 import type { Session } from "@supabase/supabase-js";
 import { projectSessionView } from "./session-view";
@@ -160,7 +162,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   // Preserve the existing explicit local profile-override path. Ordinary Board
   // publications use only the original user's bound data capability.
   const localProfileOverride = "localProfileOverride" in permission && permission.localProfileOverride === true;
-  const publicationSource = action === "planning.board.read" && !localProfileOverride
+  const publicationSource = (action === "planning.board.read" || action === "planning.backlog.read") && !localProfileOverride
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
@@ -320,9 +322,17 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (result.ok && result.status === "committed") reviewCommitted = true;
       return result;
     },
-    async loadBacklog() {
+    async loadBacklog(query?: BacklogSelectionQuery, options?: { signal?: AbortSignal }) {
       if (action !== "planning.backlog.read" || await current()) return { status: "forbidden" as const };
-      return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+      if (!query) return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningBacklogSelection(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, publicationSource, signal,
+        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+          .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline) } } : result;
     },
     async loadSprint() {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };

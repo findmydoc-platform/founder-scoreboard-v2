@@ -4,6 +4,8 @@ export type BacklogReadCoverage = Partial<Record<"items" | "people" | "sprints" 
 
 export type BacklogModel = Readonly<{
   revision: string;
+  selection?: import("./backlog-selection").BacklogSelection;
+  taskOmittedFields?: readonly (keyof Task)[];
   coverage?: BacklogReadCoverage;
   items: readonly Task[];
   people: readonly Profile[];
@@ -17,9 +19,10 @@ export type BacklogReadContext = Readonly<{
 }>;
 
 export type BacklogLoadResult =
-  | { status: "ready"; model: BacklogModel }
+  | { status: "ready"; model: BacklogModel; authorityDeadline?: number }
   | { status: "forbidden" }
-  | { status: "unavailable" };
+  | { status: "unavailable" }
+  | { status: "staleContinuation" };
 
 export interface BacklogReadModel {
   load(context: BacklogReadContext): Promise<BacklogLoadResult>;

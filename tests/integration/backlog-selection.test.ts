@@ -42,3 +42,18 @@ test("selected Backlog searches the full authorized description scope before pag
   expect(second.readAuthority.deadline).toBeLessThanOrEqual(body.readAuthority.deadline);
   expect((await read({...filters,query:query+" changed"},selected.continuation)).status).toBe(409);
 }),120_000);
+
+test("selected Backlog retains mapped reader roles and denies unmapped or direct user selection", () => withPlanningCredentialDatabase(async f => {
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const scope={view:"backlog",filters:{...DEFAULT_BACKLOG_FILTERS,query:f.prefix},limit:20};
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const){
+    const response=await GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));expect(response.status).toBe(200);
+    const body=await response.json();expect(body.model.selection.itemIds).toEqual([]);expect(body.model.selection.total).toBe(0);
+    expect(body.readActor).toEqual({profileId:f.actors[actor].profileId,platformRole:actor==="administrator"?"founder":actor});expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  const denied=await GET(f.request("unmapped",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));expect(denied.status).toBe(403);expect(await denied.json()).not.toHaveProperty("model");
+  for(const actor of ["founder","unmapped","anonymous"] as const){
+    const response=await f.rpc("planning_backlog_selection",{p_actor_profile_id:f.actors.founder.profileId,p_filters:scope.filters,p_limit:20},actor);
+    expect(response.status).toBe(actor==="anonymous"?401:403);
+  }
+}),120_000);
