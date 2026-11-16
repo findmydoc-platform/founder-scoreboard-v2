@@ -5,7 +5,8 @@
     "src/features/planning-items/server/planning-deliverable-read-source.ts",
     "src/features/planning-items/server/workspace-profile-avatars.ts",
     "src/features/planning-items/server/planning-card-summary.ts",
-    "src/features/planning-items/server/planning-detail-source.ts"
+    "src/features/planning-items/server/planning-detail-source.ts",
+    "src/features/planning-items/server/planning-children-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -30,11 +31,11 @@
       "expiresWhen": "Remove on accepted BACKLOG migration #652."
     },
     "DETAIL": {
-      "consumer": "DETAIL / DISCUSSION / TIMELINE identity reads and retained CHILDREN / CANDIDATES supporting access",
+      "consumer": "DETAIL / DISCUSSION / TIMELINE identity reads, complete action evidence and retained CANDIDATES / structure compatibility",
       "owner": "Tasks feature owner",
-      "reason": "Canonical target and required ancestors are selected by a service-only source descriptor and hydrated in one bounded, project-constrained batch. The adapter validates the complete ID set and parent chain, restores root-first order and excludes the descriptor from public models. User-bound publication certificates exclude descriptor fields in SQL and preserve original actor/source/deadline checks. Discussion and timeline remain independently requested. Explicit complete child, relationship and lifecycle reads retain their existing path until their own migrations.",
+      "reason": "Canonical target and required ancestors are selected by a service-only source descriptor and hydrated in one bounded, project-constrained batch. The adapter validates the complete ID set and parent chain, restores root-first order and excludes the descriptor from public models. User-bound publication certificates exclude descriptor fields in SQL and preserve original actor/source/deadline checks. Discussion and timeline remain independently requested. Independent Board/detail child navigation uses the declared CHILDREN operation. Explicit complete child/supporting evidence remains available to dependent actions and the separate structure migration; relationship, lifecycle and candidate compatibility readers retain their existing paths.",
       "evidence": "tests/integration/task-detail-independent-areas.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/tasks/task-detail-server-page.test.tsx; tests/unit/tasks/task-detail-read-model.test.mjs; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
-      "expiresWhen": "Revalidate DETAIL area or authority changes; retire retained child/candidate statements only on accepted #650 or #651."
+      "expiresWhen": "Revalidate DETAIL area or authority changes; retire retained complete child/supporting statements only after their last required action or structure consumer migrates, and candidate statements on accepted #651."
     },
     "STRATEGY": {
       "consumer": "STRATEGY",
@@ -133,6 +134,13 @@
       "reason": "One fixed service-only Table risk read supplies complete directed relation counts and Planning attention for the signed selected row batch on its original source/time/authority basis. It returns no child progress or Item content and does not authorize neighboring reads.",
       "evidence": "tests/integration/planning-table-risk-delivery.test.ts; src/features/planning/PlanningApp.table-risks.stories.tsx; tests/architecture/planning-read-boundary.test.mjs",
       "expiresWhen": "Revalidate when the TABLE risk contract changes under #641."
+    },
+    "CHILDREN": {
+      "consumer": "Independent direct-child lists and complete progress",
+      "owner": "Tasks feature owner",
+      "reason": "The fixed detail capability requests compact direct children independently. Counted enumeration covers the complete active direct-parent scope in stable manual/id order before progress is certified. Original actor/source/time/deadline checks remain at publication; complete dependent action readers retain their separate legacy basis.",
+      "evidence": "tests/integration/task-detail-children.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/planning/planning-child-consistency.test.ts; src/features/planning/PlanningApp.children.stories.tsx; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
+      "expiresWhen": "Revalidate whenever child membership, progress, compact field coverage or authority changes."
     }
   },
   "allowedEdges": [
@@ -210,6 +218,16 @@
       "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-detail-source.ts",
       "contract": "DETAIL"
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-children-read-source.ts",
+      "contract": "CHILDREN"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-children-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "CHILDREN"
     }
   ],
   "readSites": [
@@ -627,7 +645,7 @@
       "kind": "from",
       "target": "active_tasks",
       "fingerprint": "41caf66a3c4c9594149c1f93475d17526af04bb59e73fb912abe89fdcdaa264e",
-      "contract": "DETAIL",
+      "contract": "CHILDREN",
       "references": 1
     },
     {
@@ -1076,6 +1094,22 @@
       "kind": "rpc",
       "target": "planning_detail_source",
       "fingerprint": "00fdac9f9a78ac37830e098ed8f951fab73349662e5e7bb442d0adc0b8b75f0d",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-children-read-source.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "2352065ea0e0f84ab95948ccc21593ccad7b89fbc536bc8be3497f879ab1a54d",
+      "contract": "CHILDREN",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "6395a92e1ba04490aebd4652d87680f5f224c829dee12b890e177dd6d34546c9",
       "contract": "DETAIL",
       "references": 1
     },

@@ -1,3 +1,6 @@
+import { usePlanningTaskSelection } from "./use-planning-task-selection";
+import { createPlanningState } from "../model/internal/planning-state-owner";
+import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -82,3 +85,57 @@ export const DeniedUnloadedItemShowsNoProtectedDetails: Story = { args: { forbid
   await expect(canvas.queryByText(model.item.title)).not.toBeInTheDocument();
   await expect(canvas.queryByText("Keep the planning context.")).not.toBeInTheDocument();
 } };
+
+
+const historyTasks = ["A", "B", "C"].map(letter => taskDetailStoryTask({ id: `history-${letter}`, title: `Navigation ${letter}`, approvalStatus: "proposed", sprintId: "", updatedAt: `history-${letter}-r1` }));
+const historyData = { ...emptyPlanningShellState, tasks: historyTasks };
+function StartAndPushNavigationFlow() {
+  const [owner] = useState(() => createPlanningState({ userId: "history-user", initialData: historyData, adapter: {
+    readWorkspace: async () => null,
+    saveTask: async () => ({ task: historyTasks[0] }),
+    removeTask: async task => ({ affectedTaskIds: [task.id] }),
+  } }));
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [removal, setRemoval] = useState("");
+  const selection = usePlanningTaskSelection({ data: historyData, planningState: owner.planning, selectedTaskId, setSelectedTaskId });
+  return <>
+    <button type="button" onClick={() => selection.openTaskPanel(historyTasks[0].id)}>A starten</button>
+    <button type="button" onClick={() => selection.openTaskPanel(historyTasks[1].id, "push")}>B anhängen</button>
+    <button type="button" onClick={selection.backTaskPanel}>In der Historie zurück</button>
+    <button type="button" onClick={() => selection.openTaskPanel(historyTasks[2].id)}>C neu starten</button>
+    <button type="button" onClick={selection.closeTaskPanel}>Auswahl schließen</button>
+    <button type="button" onClick={async () => {
+      const result = await owner.planning.withdrawTask(historyTasks[0], "Nicht mehr benötigt");
+      setRemoval(result.ok ? "Bestätigt" : "Nicht bestätigt");
+    }}>A entfernen</button>
+    <output aria-label="Ausgewähltes Item">{selection.selectedTask?.title || "Kein Item"}</output>
+    <output aria-label="Vorheriges Item">{selection.taskPanelPreviousTask?.title || "Kein Vorgänger"}</output>
+    <output aria-label="Bestätigte Entfernung">{removal}</output>
+  </>;
+}
+
+export const StartResetsHistoryWhilePushAndBackRemainCurrent: Story = {
+  render: () => <StartAndPushNavigationFlow />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "A starten" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Navigation A");
+    await expect(canvas.getByLabelText("Vorheriges Item")).toHaveTextContent("Kein Vorgänger");
+    await userEvent.click(canvas.getByRole("button", { name: "B anhängen" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Navigation B");
+    await expect(canvas.getByLabelText("Vorheriges Item")).toHaveTextContent("Navigation A");
+    await userEvent.click(canvas.getByRole("button", { name: "In der Historie zurück" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Navigation A");
+    await expect(canvas.getByLabelText("Vorheriges Item")).toHaveTextContent("Kein Vorgänger");
+    await userEvent.click(canvas.getByRole("button", { name: "C neu starten" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Navigation C");
+    await expect(canvas.getByLabelText("Vorheriges Item")).toHaveTextContent("Kein Vorgänger");
+    await userEvent.click(canvas.getByRole("button", { name: "Auswahl schließen" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Kein Item");
+    await userEvent.click(canvas.getByRole("button", { name: "A entfernen" }));
+    await waitFor(() => expect(canvas.getByLabelText("Bestätigte Entfernung")).toHaveTextContent("Bestätigt"));
+    await userEvent.click(canvas.getByRole("button", { name: "A starten" }));
+    await expect(canvas.getByLabelText("Ausgewähltes Item")).toHaveTextContent("Kein Item");
+    await expect(canvas.getByLabelText("Vorheriges Item")).toHaveTextContent("Kein Vorgänger");
+  },
+};

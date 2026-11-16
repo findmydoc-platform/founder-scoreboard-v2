@@ -174,6 +174,7 @@ export function TaskDetailPage({
         {controller.planningState.taskGitHubSync(task.id)?<TaskGitHubSyncNotice view={controller.planningState.taskGitHubSync(task.id)!} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(task.id);}} onRetry={()=>controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)})}/>:null}
         {controller.planningState.taskReviewOperations(task.id).map(operation=><TaskReviewOperationNotice profiles={controller.data.profiles} key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         <TaskDetailSurface
+          detailReadMode={detailHydration ? "scoped" : "complete"}
           surface="page"
           task={task}
           comments={controller.data.taskComments.filter((comment) => comment.taskId === task.id)}

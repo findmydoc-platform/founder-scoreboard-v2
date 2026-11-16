@@ -4,7 +4,7 @@ import { withPlanningCredentialDatabase } from "./helpers/planning-credential-da
 
 const routeContext = (id: string) => ({ params: Promise.resolve({ id }) });
 
-test("detail certificates retain mapped team reads and deny privileged source access and unmapped callers", () => withPlanningCredentialDatabase(async f => {
+test.each(["target", "children"] as const)("%s certificates retain mapped team reads and deny privileged source access and unmapped callers", area => withPlanningCredentialDatabase(async f => {
   const admittedCertificates: Record<string, unknown>[] = [], delegate = globalThis.fetch;
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), response = await delegate(request);
@@ -12,9 +12,9 @@ test("detail certificates retain mapped team reads and deny privileged source ac
     return response;
   });
   const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
-  const args = { p_item_id: f.initiativeId, p_area: "target" };
+  const args = { p_item_id: f.initiativeId, p_area: area };
   for (const name of ["ceo", "deputy", "founder", "other", "viewer"] as const) {
-    const response = await GET(f.request(name, `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId));
+    const response = await GET(f.request(name, `/api/tasks/${f.initiativeId}/detail-data?area=${area}`), routeContext(f.initiativeId));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ taskDetail: { item: { id: f.initiativeId }, readActor: { profileId: f.actors[name].profileId } }, readAuthority: { userId: f.actors[name].userId } });
     expect((await f.rpc("planning_detail_source", args, name)).status).toBe(403);
@@ -30,7 +30,7 @@ test("detail certificates retain mapped team reads and deny privileged source ac
   expect((await f.rpc("planning_detail_publication_context", args, "founder")).status).toBe(403);
   expect((await f.rpc("planning_detail_publication_context", args, "service")).status).toBe(403);
   for (const name of ["unmapped", "administrator", "anonymous"] as const) expect([401,403]).toContain((await f.rpc("planning_detail_publication_context", args, name)).status);
-  expect((await GET(f.request("unmapped", `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId))).status).toBe(403);
+  expect((await GET(f.request("unmapped", `/api/tasks/${f.initiativeId}/detail-data?area=${area}`), routeContext(f.initiativeId))).status).toBe(403);
   const direct = await f.db.query(`select role_name as role,has_table_privilege(role_name,'workspace_private.planning_detail_area_revision','SELECT') readable
     from unnest(array['anon','authenticated','service_role']) roles(role_name)`);
   expect(direct.rows).toEqual([{ role: "anon", readable: false }, { role: "authenticated", readable: false }, { role: "service_role", readable: false }]);
@@ -42,29 +42,29 @@ test("detail certificates retain mapped team reads and deny privileged source ac
     if (!new URL(request.url).pathname.endsWith("/rpc/planning_detail_source") || !response.ok) return response;
     return Response.json({ ...await response.json(), target_id: f.initiativeId, ancestor_ids: [foreign] });
   });
-  const inconsistent = await GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=target`), routeContext(f.initiativeId));
+  const inconsistent = await GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=${area}`), routeContext(f.initiativeId));
   expect(inconsistent.status).toBe(503); expect(await inconsistent.json()).not.toHaveProperty("taskDetail");
 }, "linking"));
 
 test("prepared target and secondary content cannot outlive original authority or a changed mapped role", () => withPlanningCredentialDatabase(async f => {
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const transport = globalThis.fetch;
-  for (const change of ["role", "target-deadline", "discussion-deadline", "timeline-deadline"] as const) {
-    const area = change === "role" ? "target" : change.split("-")[0] as "target" | "discussion" | "timeline";
+  for (const change of ["role", "children-role", "target-deadline", "discussion-deadline", "timeline-deadline", "children-deadline"] as const) {
+    const area = change === "role" ? "target" : change.split("-")[0] as "target" | "discussion" | "timeline" | "children";
     const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=${area}`) }, action: "planning.task.read", targetId: f.initiativeId });
     if (!permission.ok || !permission.readAuthority) throw new Error("Fresh detail admission unavailable");
     let release!: () => void, entered!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; }), held = new Promise<void>(resolve => { entered = resolve; });
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const next = new Request(input, init), response = await transport(next);
-      if (new URL(next.url).pathname.endsWith("/task_links") && response.ok) { entered(); await gate; }
+      if ((area === "children" ? new URL(next.url).pathname.endsWith("/active_tasks") : new URL(next.url).pathname.endsWith("/task_links")) && response.ok) { entered(); await gate; }
       return response;
     });
-    const clock = change === "role" ? null : vi.spyOn(Date, "now").mockReturnValue(permission.readAuthority.deadline - 1_000);
+    const clock = (change === "role" || change === "children-role") ? null : vi.spyOn(Date, "now").mockReturnValue(permission.readAuthority.deadline - 1_000);
     const pending = permission.planning.loadDetail({ area });
     try {
       await held;
-      if (change === "role") await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
+      if ((change === "role" || change === "children-role")) await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
       else clock!.mockReturnValue(permission.readAuthority.deadline);
       release();
       const result = await pending;
@@ -73,7 +73,7 @@ test("prepared target and secondary content cannot outlive original authority or
     } finally {
       release(); await pending.catch(() => undefined);
       clock?.mockRestore(); vi.stubGlobal("fetch", transport);
-      if (change === "role") await f.db.query("update public.profiles set platform_role='founder' where id=$1", [f.actors.founder.profileId]);
+      if ((change === "role" || change === "children-role")) await f.db.query("update public.profiles set platform_role='founder' where id=$1", [f.actors.founder.profileId]);
     }
   }
   expect((await f.db.query("select count(*)::int count from workspace_private.request_permits where user_id=any($1)", [Object.values(f.actors).map(actor => actor.userId)])).rows[0].count).toBe(0);

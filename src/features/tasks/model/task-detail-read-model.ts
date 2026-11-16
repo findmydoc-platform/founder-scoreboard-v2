@@ -22,11 +22,11 @@ export const taskDetailReadLimits = {
   reviews: 100,
 } as const;
 
-export type TaskDetailReadArea = "target" | "discussion" | "timeline";
+export type TaskDetailReadArea = "target" | "discussion" | "timeline" | "children";
 
 export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeline";
 
-export type TaskDetailModel = Readonly<{
+type TaskDetailModelFields = Readonly<{
   revision: string;
   sourceRevision?: string;
   readArea?: TaskDetailReadArea;
@@ -34,14 +34,13 @@ export type TaskDetailModel = Readonly<{
   validUntil?: string | null;
   authorityDeadline?: number;
   readActor?: Readonly<{ profileId: string; platformRole: Profile["platformRole"] }>;
-  coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
-  project: Project;
+  coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea | "children", "complete" | "partial">>>;
+  childProgress?: ReturnType<typeof import("./task-card-presentation").taskChildProgress>;
+  taskOmittedFields?: readonly (keyof Task)[];
   item: Task;
   ancestors: readonly Task[];
   children: readonly Task[];
   relatedItems: readonly Task[];
-  people: readonly Profile[];
-  sprints: readonly Sprint[];
   discussion: Readonly<{
     comments: readonly TaskComment[];
     externalComments: readonly TaskExternalComment[];
@@ -51,6 +50,15 @@ export type TaskDetailModel = Readonly<{
   activity: readonly TaskActivity[];
   reviews: readonly TaskReview[];
 }>;
+
+// Canonical and legacy models retain their required supporting context. Only
+// independent children may explicitly omit data they did not read.
+export type HydratedTaskDetailModel = TaskDetailModelFields & Readonly<{
+  supportingData?: never; project: Project; people: readonly Profile[]; sprints: readonly Sprint[];
+}>;
+export type TaskDetailModel = HydratedTaskDetailModel | (TaskDetailModelFields & Readonly<{
+  readArea: "children"; supportingData: "omitted"; project?: never; people?: never; sprints?: never;
+}>);
 
 export type TaskDetailHydration = Readonly<{
   itemId: string;

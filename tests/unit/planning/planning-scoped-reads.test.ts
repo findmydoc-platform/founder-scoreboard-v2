@@ -4,7 +4,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 import type { Task, TaskComment } from "@/lib/types";
 
-const task = { id: "task-a", title: "Board task", updatedAt: "opaque-before", taskType: "deliverable" } as Task;
+const task = { id: "task-a", title: "Board task", updatedAt: "opaque-before", status: "Offen", taskType: "deliverable" } as Task;
 const comment: TaskComment = { id: 1, taskId: task.id, profileId: "profile-a", comment: "Loaded discussion", githubDeliveryStatus: "not_applicable", githubCommentUrl: "", createdAt: "2026-10-28T00:00:00Z" };
 const initial = { ...emptyPlanningShellState, tasks: [task] };
 function detail(item = task): TaskDetailModel {

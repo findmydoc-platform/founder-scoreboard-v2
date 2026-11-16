@@ -1,3 +1,4 @@
+import { taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { inactiveAdministratorAccess } from "@/features/administrator-access/model/administrator-access";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
@@ -5,7 +6,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { readyHeaderSlot } from "@/lib/planning-header-data";
 import type { PlanningHeaderData, Profile, Task } from "@/lib/types";
 import type { User } from "@supabase/supabase-js";
-import type { TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
+import type { HydratedTaskDetailModel, TaskDetailModel } from "@/features/tasks/model/task-detail-read-model";
 import { mockAccountLifecycle } from "./account-lifecycle-browser-fixture";
 import { releaseStoryFixture } from "@/features/platform-releases/organisms/platform-release-story-fixture";
 
@@ -17,7 +18,7 @@ export const itemPageHeaderData: PlanningHeaderData = {
   notifications: readyHeaderSlot({ unreadCount: 0, items: [] }),
 };
 
-export function itemPageModel(taskType: Task["taskType"] = "deliverable"): TaskDetailModel {
+export function itemPageModel(taskType: Task["taskType"] = "deliverable"): HydratedTaskDetailModel {
   return {
     revision: "item-page-r1", project: emptyPlanningShellState.project,
     item: taskDetailStoryTask({ id: "item-page-task", taskType, title: "Reliable planning", assignee: itemPageProfile.id, assigneeId: itemPageProfile.id, owner: itemPageProfile.id, problemStatement: "Keep the planning context.", description: "Strategic context", updatedAt: "2026-11-01T12:00:00Z" }),
@@ -38,18 +39,18 @@ export async function mockItemPageBrowser({ administrator = false, headerData = 
     const deadline = Date.now() + 60_000;
     const observedAt = new Date().toISOString();
     const scopedDetail = async (response: Response) => {
-      if (!response.ok || !requestUrl.pathname.endsWith("/detail-data") || area !== "target" && area !== "discussion" && area !== "timeline") return response;
+      if (!response.ok || !requestUrl.pathname.endsWith("/detail-data") || area !== "target" && area !== "discussion" && area !== "timeline" && area !== "children") return response;
       const body = await response.clone().json();
       if (!body.taskDetail) return response;
       const model: TaskDetailModel = body.taskDetail;
       if (model.readArea !== undefined || model.sourceRevision !== undefined || model.authorityDeadline !== undefined || body.readAuthority !== undefined) return response;
       const unavailable = (body.unavailable || []) as import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[];
       const actor = model.people.find(profile => profile.id === itemPageProfile.id) || itemPageProfile;
-      const coverage = area !== "target" && !unavailable.includes(area) ? { [area]: model.coverage?.[area] || "complete" } : {};
+      const coverage = area !== "target" && !unavailable.includes(area as import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea) ? { [area]: model.coverage?.[area as keyof NonNullable<TaskDetailModel["coverage"]>] || "complete" } : {};
       return Response.json({ ...body, readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
         ...model, readArea: area, sourceRevision: `fixture-detail:${model.item.id}:${model.revision}:${area}`, observedAt, validUntil: null,
         authorityDeadline: deadline, readActor: { profileId: actor.id, platformRole: actor.platformRole }, coverage,
-        children: [], relatedItems: [], blockers: [], relationships: [],
+        children: area === "children" ? model.children : [], ...(area === "children" ? { childProgress: taskChildProgress(model.children) } : {}), relatedItems: [], blockers: [], relationships: [],
         discussion: area === "discussion" ? model.discussion : { comments: [], externalComments: [] },
         activity: area === "timeline" ? model.activity : [], reviews: area === "timeline" ? model.reviews : [],
       } });

@@ -262,6 +262,7 @@ export function usePlanningAppController({
     checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     openTaskPanel,
+    startTaskPanel: taskSelection.startTaskPanel,
     protectedDataLoaded,
     refreshCurrentWorkspaceModel,
     refreshPlanningRemoteChanges,

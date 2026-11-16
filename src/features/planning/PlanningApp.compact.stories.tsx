@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useEffect, useState } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -73,8 +73,8 @@ export const CompactSignalsAndFullDetail: Story = { play: async ({ canvasElement
     const panel = await canvas.findByRole("dialog", { name: "Compact card" }, { timeout: 5000 });
   await expect(await within(panel).findByText("Full acceptance criteria")).toBeVisible();
   await expect(await within(panel).findByText("Full definition of done")).toBeVisible();
-  await expect(canvas.getByLabelText("Detail read areas")).toHaveTextContent(/^target$/);
-  await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("1");
+  await waitFor(() => expect(canvas.getByLabelText("Detail read areas")).toHaveTextContent(/^target,children$/));
+  await expect(canvas.getByLabelText("Detail reads")).toHaveTextContent("2");
   await expect(canvas.getByLabelText("Unscoped reads")).toHaveTextContent("0");
 } };
 export const BootstrapAlwaysDeclaresBoardScope: Story = { args: { bootstrap: true }, play: async ({ canvasElement }) => {

@@ -27,6 +27,7 @@ export type TaskDetailOperationalHeaderProps = {
   profiles: Profile[];
   subIssues: Task[];
   subIssuesKnown?: boolean;
+  childProgress?: { completed: number; total: number } | null;
   statusOptions: TaskStatus[];
   canChangeStatus: boolean;
   statusLockedReason?: string;
@@ -284,6 +285,7 @@ export function TaskDetailOperationalHeader({
   profiles,
   subIssues,
   subIssuesKnown = true,
+  childProgress,
   statusOptions,
   canChangeStatus,
   statusLockedReason,
@@ -425,8 +427,8 @@ export function TaskDetailOperationalHeader({
               <OperationalFact label={task.taskType === "deliverable" ? "Fixtermin" : "Ziel"} icon={<CalendarDays size={16} />}>{formatDate(view.targetDate || "", { includeYear: true })}</OperationalFact>
             ))}
 
-            {subIssuesKnown && view.directChildCount > 0 && (
-              <DirectChildProgress completed={view.completedChildCount} label={view.directChildLabel} total={view.directChildCount} />
+            {subIssuesKnown && (childProgress === undefined ? view.directChildCount > 0 : childProgress && childProgress.total > 0) && (
+              <DirectChildProgress completed={childProgress?.completed ?? view.completedChildCount} label={view.directChildLabel} total={childProgress?.total ?? view.directChildCount} />
             )}
           </>
         ) : null}
