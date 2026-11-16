@@ -69,3 +69,35 @@ test("releasing the last child consumer aborts transport and rejects late member
   expect(planning.taskDetail(parent.id)).toMatchObject({ children: [], childrenCoverage: "not-loaded", childProgress: null });
   expect(planning.taskDetail(child.id).task).toBeNull();
 });
+
+test("a changed observed source invalidates child reuse and rejects an already prepared older response", async () => {
+  const late = deferred<ReturnType<typeof receipt>>(); let delayed = false, reads = 0;
+  const initial = { ...emptyPlanningShellState, tasks: [parent, child] };
+  const { planning } = createPlanningState({ userId: "user", initialData: initial, adapter: {
+    readWorkspace: async () => ({ data: initial, scopeRevision: "source-before", taskCoverage: "partial" }),
+    readPlanningSourceVersion: async () => "source-after", saveTask: async () => ({ task: child }),
+    readTaskDetail: async () => { reads++; return delayed ? late.promise : receipt(parent, [child]); },
+  } });
+  await planning.refreshWorkspace("planning"); await planning.loadTaskDetail(parent.id, { area: "children" });
+  delayed = true;
+  const refreshing = planning.loadTaskDetail(parent.id, { area: "children", refresh: true });
+  expect(await planning.checkPlanningSource()).toBe("changed");
+  expect(planning.taskDetail(parent.id)).toMatchObject({ childrenCoverage: "stale", childProgress: null });
+  late.resolve(receipt(parent, [{ ...child, title: "Prepared before source change" }]));
+  expect(await refreshing).toMatchObject({ ok: false });
+  expect(planning.taskDetail(child.id).task?.title).toBe(child.title);
+  delayed = false;
+  await planning.loadTaskDetail(parent.id, { area: "children" });
+  expect(reads).toBe(3);
+});
+
+test("an incomplete legacy child status cannot crash or certify complete progress", async () => {
+  const incomplete = { ...child, status: undefined } as unknown as Task;
+  const { planning } = createPlanningState({ userId: "user", initialData: { ...emptyPlanningShellState, tasks: [parent] }, adapter: {
+    readWorkspace: async () => null, saveTask: async () => ({ task: child }),
+    readTaskDetail: async () => ({ model: { ...receipt(parent, [incomplete]).model, readArea: undefined, childProgress: undefined, coverage: {} } }),
+  } });
+  await expect(planning.loadTaskDetail(parent.id)).resolves.toMatchObject({ ok: true });
+  expect(planning.taskDetail(parent.id)).toMatchObject({ childrenCoverage: "partial", childProgress: null });
+  expect(planning.taskDetail(incomplete.id).task?.id).toBe(incomplete.id);
+});
