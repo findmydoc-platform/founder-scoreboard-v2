@@ -11,3 +11,10 @@ export function requestBacklogSelection(apiClient: BrowserApiClient, query: impo
     readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] };
   }>(`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal });
 }
+
+export function requestBacklogSupport(apiClient: BrowserApiClient, query: import("./backlog-support").BacklogSupportQuery, signal?: AbortSignal) {
+  return apiClient.requestJson<{ error?: string; model?: BacklogModel;
+    readAuthority?: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
+    readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] };
+  }>(`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal });
+}

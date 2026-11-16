@@ -6,7 +6,7 @@ import { sessionAuthority } from "@/features/administrator-access/model/administ
 
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
-import { requestBacklogModel, requestBacklogSelection } from "@/features/backlog/model/backlog-api-client";
+import { requestBacklogModel, requestBacklogSelection, requestBacklogSupport } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
 import { supportingReadCoverage, supportingOmittedFields } from "./supporting-read-coverage";
 import { hierarchyReadCoverage, hierarchyOmittedFields } from "./hierarchy-read-coverage";
@@ -28,6 +28,7 @@ import { mapScoreObjection, mapFounderSprintScore } from "@/lib/planning-sprint-
 import type { DbScoreObjection, DbFounderSprintScore } from "@/lib/planning-row-types";
 import { sprintNumber } from "@/lib/planning-schedule";
 import { normalizePlanningShellState } from "../planning-app-model";
+import { emptyPlanningShellState } from "../planning-shell-state";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
 import { sprintModelCoverage } from "./sprint-read-coverage";
@@ -484,6 +485,14 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
+      async readBacklogSupport(query, options) {
+        const { response, body } = await requestBacklogSupport(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog-Grundlage konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        const sprintRows = body.model.sprintBasis?.buckets.map(bucket => bucket.sprint) || [];
+        return { data: { ...emptyPlanningShellState, sprints: sprintRows }, coverage: sprintRows.length ? { sprints: "partial" } : {}, taskCoverage: "none",
+          readAuthority: body.readAuthority, readActor: body.readActor, backlogControls: body.model.controls, backlogSprintBasis: body.model.sprintBasis };
       },
       async readBacklogSelection(query, options) {
         const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
