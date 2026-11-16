@@ -1138,7 +1138,7 @@
       "from": "src/features/planning-items/server/planning-item-candidates-read-source.ts",
       "kind": "rpc",
       "target": "planning_item_candidates",
-      "fingerprint": "28dc68f65fefa5e6451fcd1c1c665f5bfede3137e0b65887dc4eb46a4c00607d",
+      "fingerprint": "858da37a93f4b15a545c38b3011b8f2047b6b647dd4c4a4df891d2ad313b5a41",
       "contract": "CANDIDATES"
     }
   ]
