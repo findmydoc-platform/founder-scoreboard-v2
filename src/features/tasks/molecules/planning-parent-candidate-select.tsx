@@ -7,13 +7,13 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 
 function selectedContextSnapshot(owner: PlanningState, id: string) {
   const context = owner.taskDetail(id), task = context.task;
-  return JSON.stringify([context.readStatus, context.removed, task?.id, task?.title, task?.taskType, task?.updatedAt, task?.detailAvailability]);
+  return JSON.stringify([context.readStatus, context.removed, task?.id, task?.title, task?.taskType, task?.updatedAt, task?.detailAvailability, task?.approvalStatus, task?.parentTaskId, task?.parentTaskId ? owner.taskDetail(task.parentTaskId).task?.title : null]);
 }
 
 export function PlanningParentCandidateSelect({ owner, value, selectedContext, onChange, kind = "initiative", label, chooseDefault = false, disabled = false }: {
-  kind?: "initiative" | "epic"; label?: string; chooseDefault?: boolean; disabled?: boolean; owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
+  kind?: "initiative" | "epic" | "deliverable"; label?: string; chooseDefault?: boolean; disabled?: boolean; owner: PlanningState; value: string; selectedContext?: { id: string; title: string }; onChange: (id: string) => void;
 }) {
-  const singular = kind === "epic" ? "Epic" : "Initiative", plural = kind === "epic" ? "Epics" : "Initiativen";
+  const singular = kind === "epic" ? "Epic" : kind === "deliverable" ? "Deliverable" : "Initiative", plural = kind === "epic" ? "Epics" : kind === "deliverable" ? "Deliverables" : "Initiativen";
   const [defaultEnabled, setDefaultEnabled] = useState(chooseDefault);
   const needsDefault = defaultEnabled && !value;
   const [open, setOpen] = useState(false), [search, setSearch] = useState("");
@@ -53,6 +53,12 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
     // selection identity. Reuse its existing lease for authoritative context.
     if (contextNeedsRefresh && contextDemand.current) void owner.loadTaskDetail(value, { area: "target", signal: contextDemand.current.signal });
   }, [owner, value, contextNeedsRefresh]);
+  const optionLabel = (item: { id: string; title: string; parentTaskId: string; approvalStatus?: string | null; parentTitle?: string | null }) => {
+    if (kind !== "deliverable") return item.title;
+    const parent = owner.taskDetail(item.parentTaskId);
+    const title = "parentTitle" in item ? item.parentTitle : !parent.removed && parent.task?.detailAvailability !== "stale" ? parent.task?.title : undefined;
+    return `${item.title} · ${title || (item.parentTaskId ? "Initiative nicht geladen" : "Ohne Initiative")}${item.approvalStatus === "approved" ? "" : " · wartet auf Freigabe"}`;
+  };
   const selected = owner.candidate(value) || (!contextBlocked ? view.items.find(item => item.id === value) || contextualTask : null);
   const contextUnavailable = Boolean(value && !selected && (context.removed || ["unavailable", "stale", "forbidden"].includes(context.readStatus)));
   const retryContext = () => {
@@ -65,8 +71,8 @@ export function PlanningParentCandidateSelect({ owner, value, selectedContext, o
     if (demand.current && view.continuation) void owner.loadCandidates({ ...query, continuation: view.continuation }, { immediate: true, signal: demand.current.signal });
   };
   return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setDefaultEnabled(false); onChange(id); }} onOpenChange={setOpen}
-    selectedOptionLabel={selected?.title || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
-    options={[{ value: "", label: `Ohne ${singular} – als Vorschlag` }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: item.title })) : [])]}
+    selectedOptionLabel={(selected ? optionLabel(selected) : null) || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
+    options={[{ value: "", label: kind === "deliverable" ? "Deliverable auswählen" : `Ohne ${singular} – als Vorschlag` }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: optionLabel(item) })) : [])]}
     search={{ label: `${singular} suchen`, value: search, onChange: value => setSearch(value.slice(0, 2048)), onSubmit: () => submit() }}
     feedback={<div className="px-2 py-2 text-xs text-slate-600">
       {view.readStatus === "loading" || view.readStatus === "not-loaded" ? <p role="status">{plural} werden geladen.</p>

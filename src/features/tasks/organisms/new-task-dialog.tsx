@@ -548,13 +548,14 @@ function SubIssueForm({
   titleError: string;
   titleValidationId: string;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   return (
     <div className="grid content-start gap-5 p-5 sm:p-6">
       <p className="text-xs font-medium text-slate-500">
         <span aria-hidden="true" className="text-blue-700">*</span> Pflichtfeld
       </p>
 
-      <UiSelectField
+      {candidateOwner ? <PlanningParentCandidateSelect kind="deliverable" label="Übergeordnetes Deliverable, Pflichtfeld" owner={candidateOwner} value={draft.parentTaskId} onChange={value => setDraft(current => withSubIssueParentHierarchy(current, data.tasks, value))} /> : <UiSelectField
         label={<RequiredLabel>Übergeordnetes Deliverable</RequiredLabel>}
         value={draft.parentTaskId}
         onChange={(value) => setDraft((current) => withSubIssueParentHierarchy(current, data.tasks, value))}
@@ -563,7 +564,7 @@ function SubIssueForm({
         aria-required
         data-autofocus
         selectClassName="h-11 text-sm"
-      />
+      />}
 
       <p className="-mt-2 text-xs leading-5 text-slate-500">
         Initiative, Epic und Freigabe werden vom Parent-Deliverable übernommen.
