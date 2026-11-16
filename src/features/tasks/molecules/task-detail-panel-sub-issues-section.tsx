@@ -82,7 +82,7 @@ export function TaskDetailPanelChildrenSection({
 
       {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</div> : null}
       {loading && !childItems.length ? (
-        <div className="mt-5 grid gap-3" aria-label={`${plural} werden geladen`}>
+        <div role="status" className="mt-5 grid gap-3" aria-label={`${plural} werden geladen`}>
           <div className="h-2 animate-pulse rounded-full bg-slate-100" />
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
           <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
