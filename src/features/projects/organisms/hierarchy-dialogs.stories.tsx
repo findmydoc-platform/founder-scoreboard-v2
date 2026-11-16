@@ -44,6 +44,12 @@ function Fixture({ scenario = "epic-success" }: { scenario?: string }) {
           serverTask = { ...serverTask, ...patch, updatedAt: "accepted/epic" };
           return { response: new Response(null), body: { task: serverTask } as T };
         }
+        const url = new URL(String(path), "http://localhost:3000");
+        if (url.pathname === "/api/planning-board-data") {
+          const query = JSON.parse(url.searchParams.get("scope") || "{}");
+          const items = [epic, target].filter(item => item.title.toLowerCase().includes(query.query || "")).map(item => ({ id: item.id, title: item.title, taskType: "epic", parentTaskId: "", approvalStatus: item.approvalStatus || "proposed", updatedAt: item.updatedAt }));
+          return { response: new Response(null), body: { readAuthority: { userId: "user", deadline: Date.now() + 60_000 }, readActor: { profileId: profile.id, platformRole: profile.platformRole }, candidates: { kind: "epic", items, total: items.length, coverage: "complete", continuation: null, defaultCandidate: { id: epic.id, title: epic.title, taskType: "epic", parentTaskId: "", approvalStatus: "proposed", updatedAt: epic.updatedAt }, sourceRevision: "hierarchy-epic-source", observedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 60_000).toISOString() } } as T };
+        }
         reads++;
         if (scenario === "epic-conflict") serverTask = { ...epic, title: "Server milestone", updatedAt: "server/newer" };
         return { response: new Response(null), body: { taskDetail: { revision: "read", project: initial.project, item: serverTask, ancestors: serverTask.id === epic.id ? [] : [epic], children: [], relatedItems: [], people: [profile], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [], coverage: { discussion: "complete", relationships: "complete", timeline: "complete" } } } as T };

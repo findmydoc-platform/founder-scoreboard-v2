@@ -1,6 +1,8 @@
 "use client";
 
 import { CalendarDays, ChevronDown, ListTree, Pencil, UsersRound } from "lucide-react";
+import { PlanningParentCandidateSelect } from "./planning-parent-candidate-select";
+import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { useState, type ReactNode } from "react";
 import { isApprovedDeliverable } from "@/features/planning/model/approval-domain";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -43,6 +45,7 @@ export function TaskDetailPlanningSection({
   onUpdate,
   onEditingStart,
 }: Props) {
+  const candidateOwner = usePlanningBusinessState();
   const [open, setOpen] = useState(false);
   const view = taskDetailPlanningView({
     task,
@@ -106,7 +109,7 @@ export function TaskDetailPlanningSection({
           <div id="strategic-planning-controls" className="grid gap-4 border-t border-slate-200 bg-slate-50/70 px-4 py-4 md:grid-cols-2">
             {task.taskType === "initiative" ? (
               view.canEditPlanning
-                ? <UiSelectField onOpen={onEditingStart} label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
+                ? candidateOwner ? <PlanningParentCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={task.parentTaskId} disabled={pending} onChange={id => { onEditingStart?.(); updateParent(id); }} /> : <UiSelectField onOpen={onEditingStart} label="Parent-Epic" value={task.parentTaskId} disabled={pending} onChange={updateParent} options={parentOptions} selectClassName="h-11 text-sm" />
                 : <ReadFact label="Parent-Epic">{view.currentParent?.title || "Ohne Epic"}</ReadFact>
             ) : null}
             {view.canEditPlanning ? (

@@ -7,7 +7,7 @@ import type { PlanningTaskLifecycleView } from "@/features/planning/model/planni
 import type { PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import { TaskLifecycleNotice } from "@/features/tasks/molecules/task-lifecycle-notice";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
-import { InitiativeCandidateSelect } from "@/features/tasks/molecules/initiative-candidate-select";
+import { PlanningParentCandidateSelect } from "@/features/tasks/molecules/planning-parent-candidate-select";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { InitiativeRaciList } from "@/features/projects/molecules/initiative-raci-list";
@@ -336,7 +336,7 @@ function DeliverableForm({
       <div className="grid content-start gap-5 bg-slate-50/40 p-5 sm:p-6">
         <section className="grid gap-3">
           <SectionHeading>Struktur</SectionHeading>
-          {candidateOwner ? <InitiativeCandidateSelect owner={candidateOwner} value={draft.parentTaskId} selectedContext={selectedInitiative} onChange={selectInitiative} /> : <UiSelectField
+          {candidateOwner ? <PlanningParentCandidateSelect owner={candidateOwner} value={draft.parentTaskId} selectedContext={selectedInitiative} onChange={selectInitiative} /> : <UiSelectField
             label="Initiative"
             value={draft.parentTaskId}
             onChange={selectInitiative}
@@ -397,6 +397,7 @@ function StrategicItemForm({
   titleError: string;
   titleValidationId: string;
 }) {
+  const candidateOwner = usePlanningBusinessState();
   const isInitiative = draft.taskType === "initiative";
   const strategicStatusOptions = strategicPlanningStatuses.map((status) => ({ value: status, label: status }));
   const epicOptions = [
@@ -490,7 +491,7 @@ function StrategicItemForm({
         <section className="grid gap-3">
           <SectionHeading>Einordnung</SectionHeading>
           {isInitiative ? (
-            <UiSelectField
+            candidateOwner ? <PlanningParentCandidateSelect kind="epic" label="Parent-Epic" owner={candidateOwner} value={draft.parentTaskId} onChange={parentTaskId => setDraft(current => ({ ...current, parentTaskId }))} /> : <UiSelectField
               label="Parent-Epic"
               value={draft.parentTaskId}
               onChange={(parentTaskId) => setDraft((current) => ({ ...current, parentTaskId }))}
