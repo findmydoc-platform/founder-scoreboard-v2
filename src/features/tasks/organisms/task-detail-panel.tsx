@@ -16,6 +16,7 @@ import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
 type Props = {
+  detailReadMode?: "scoped" | "complete";
   restoreFocusRef?: RefObject<HTMLElement | null>;
   task: Task;
   initiative?: Task;

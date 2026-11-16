@@ -138,6 +138,7 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
       )}
       {selectedTask && (
         <TaskDetailPanel
+          detailReadMode="scoped"
           restoreFocusRef={controller.taskPanelReturnFocusRef}
           task={selectedTask}
           previousTask={taskPanelPreviousTask}
