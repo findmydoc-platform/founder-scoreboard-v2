@@ -3,7 +3,7 @@
 import { ChevronRight, ExternalLink, GitPullRequest, Globe2, Network } from "lucide-react";
 import { SiGithub, SiNotion } from "@icons-pack/react-simple-icons";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
-import type { SubIssueEvidenceEntry, SubIssueEvidenceGroup, SubIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
+import type { SubIssueEvidenceEntry, SubIssueEvidenceGroup } from "@/features/tasks/model/sub-issue-evidence";
 import { evidenceLinkPresentation, parseEvidenceUrl } from "@/features/tasks/model/task-evidence-links";
 import { UiNotice, classNames } from "@/shared/atoms/ui-primitives";
 
@@ -65,14 +65,21 @@ function EvidenceGroups({ groups, onOpenTask }: { groups: SubIssueEvidenceGroup[
   </ul>;
 }
 
-export function SubIssueEvidenceSection(summary: SubIssueEvidenceSummary & { onOpenTask?: (id: string) => void }) {
+export function SubIssueEvidenceSection(summary: {
+  count: number | null;
+  groups: SubIssueEvidenceGroup[];
+  coverage?: "partial" | "unknown";
+  knownCount?: number;
+  retainedGroups?: SubIssueEvidenceGroup[];
+  onOpenTask?: (id: string) => void;
+}) {
   if (summary.count === 0) return null;
   const { groups, onOpenTask } = summary;
   const knownCount = summary.count === null ? summary.knownCount : summary.count;
   const label = summary.count === null ? `Mindestens ${knownCount}` : String(knownCount);
   return <>
     {summary.count === null ? <UiNotice tone="info" role="status">Der aktuelle Stand der Nachweise aus Sub-Issues ist noch nicht vollständig bestätigt.</UiNotice> : null}
-    {knownCount > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
+    {knownCount !== undefined && knownCount > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
       <summary data-tour-id="task-sub-issue-evidence-summary" aria-label={`Nachweise aus Sub-Issues: ${label}`} className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
         <ChevronRight size={18} className="shrink-0 transition-transform group-open/evidence:rotate-90" aria-hidden="true" />
         <span className="min-w-0 flex-1">Nachweise aus Sub-Issues</span>
@@ -80,7 +87,7 @@ export function SubIssueEvidenceSection(summary: SubIssueEvidenceSummary & { onO
       </summary>
       <EvidenceGroups groups={groups} onOpenTask={onOpenTask} />
     </details> : null}
-    {summary.count === null && summary.retainedGroups.length > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
+    {summary.count === null && summary.retainedGroups && summary.retainedGroups.length > 0 ? <details className="group/evidence @container/evidence overflow-hidden rounded-lg border border-slate-200 bg-white">
       <summary className="flex min-h-14 cursor-pointer items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 focus-visible:ring-2 focus-visible:ring-blue-500">Zuvor geladene Nachweise – Aktualität unbestätigt</summary>
       <EvidenceGroups groups={summary.retainedGroups} onOpenTask={onOpenTask} />
     </details> : null}

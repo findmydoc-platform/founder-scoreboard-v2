@@ -4,7 +4,7 @@ import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning
 import type { PlanningState, PlanningTaskEditor, PlanningTaskSaveView, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
 import type { TaskUpdateOptions } from "@/features/tasks/hooks/task-mutation-command-types";
 
-import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { ReviewEvidenceGateDialog } from "@/features/reviews/molecules/review-evidence-gate-dialog";
 import { TaskReviewSummary } from "@/features/reviews/molecules/task-review-summary";
 import { TaskReviewRail } from "@/features/reviews/organisms/task-review-rail";
@@ -256,6 +256,14 @@ function HydratedTaskDetailSurface({
   const [reviewSetupOpen, setReviewSetupOpen] = useState(false);
   const [reviewEvidenceTask,setReviewEvidenceTask]=useState<Task|null>(null);
   const [reviewEvidenceGateIntent, setReviewEvidenceGateIntent] = useState<"request" | "reopen" | null>(null);
+  const [evidenceRetry, setEvidenceRetry] = useState<{ taskId: string; scope: object; intent: "request" | "reopen" } | null>(null);
+  const evidenceView = useMemo(() => ({}), [task.id, task.updatedAt, task.detailAvailability, currentProfile?.id, currentProfile?.platformRole, detailOwner]);
+  const activeEvidenceView = useRef<object | null>(null);
+  const evidenceAttempt = useRef(0);
+  useEffect(() => {
+    activeEvidenceView.current = evidenceView;
+    return () => { if (activeEvidenceView.current === evidenceView) activeEvidenceView.current = null; evidenceAttempt.current++; };
+  }, [evidenceView]);
   const [reviewDraftDirty, setReviewDraftDirty] = useState(false);
   const controller = useTaskDetailController({
     task,
@@ -463,27 +471,56 @@ function HydratedTaskDetailSurface({
     return editor ? onUpdate(patch, { editor }) : onUpdate(patch);
   };
   const inlineConflict = inlineEditor?.taskId === task.id && inlineEditor.editor.view().phase === "conflict" ? inlineEditor.editor.view() : null;
+  const beginEvidenceAttempt = () => {
+    setEvidenceRetry(null);
+    return { scope: evidenceView, attempt: ++evidenceAttempt.current };
+  };
+  const rememberRejectedEvidence = (intent: "request" | "reopen", binding: ReturnType<typeof beginEvidenceAttempt>) => {
+    if (activeEvidenceView.current === binding.scope && evidenceAttempt.current === binding.attempt) setEvidenceRetry({ taskId: task.id, scope: binding.scope, intent });
+  };
   const guardedUpdate = (patch: Partial<Task>) => {
     const requestsReview = patch.status === "Review" || patch.reviewStatus === "requested";
     const includesEvidence = Boolean(patch.evidenceLinks?.length || patch.reviewEvidenceExceptionNote?.trim());
-    if (task.taskType === "deliverable"
-      && requestsReview
-      && taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown }) === "absent"
-      && !includesEvidence) {
+    const evidenceStatus = taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown });
+    const binding = requestsReview ? beginEvidenceAttempt() : undefined;
+    if (task.taskType === "deliverable" && requestsReview && evidenceStatus === "absent" && !includesEvidence) {
       beginInlineEditing();
       setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("request");
       return;
     }
-    return updateInline(patch);
+    const result = updateInline(patch);
+    if (binding && evidenceStatus === "unknown" && result) return result.then(outcome => {
+      if (outcome.ok === false) rememberRejectedEvidence("request", binding);
+      return outcome;
+    });
+    return result;
   };
   const reopenReview = () => {
-    if (taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown }) === "absent") {
+    const binding = beginEvidenceAttempt();
+    const evidenceStatus = taskReviewEvidenceStatus(task, directChildren, { membershipComplete: childrenKnown });
+    if (evidenceStatus === "absent") {
       setReviewEvidenceTask(task);
       setReviewEvidenceGateIntent("reopen");
       return;
     }
-    return onReopenReview(task);
+    const result = onReopenReview(task);
+    if (evidenceStatus === "unknown") {
+      if (result === false) rememberRejectedEvidence("reopen", binding);
+      else if (result && typeof result === "object") return result.then(accepted => {
+        if (accepted === false) rememberRejectedEvidence("reopen", binding);
+        return accepted;
+      });
+    }
+    return result;
+  };
+  const canCaptureRejectedEvidence = evidenceRetry?.taskId === task.id && evidenceRetry.scope === evidenceView
+    && (evidenceRetry.intent === "reopen" ? controller.permissions.canOpenReview : controller.permissions.canUpdateStatus && effectivelyApproved && canSelectNextStatus);
+  const captureRejectedEvidence = () => {
+    if (!evidenceRetry || !canCaptureRejectedEvidence || pending) return;
+    beginEvidenceAttempt();
+    setReviewEvidenceTask(task);
+    setReviewEvidenceGateIntent(evidenceRetry.intent);
   };
   const submitReviewEvidence = async (submission: ReviewEvidenceSubmission) => {
     if (reviewEvidenceGateIntent === "reopen") {
@@ -786,7 +823,10 @@ function HydratedTaskDetailSurface({
         <UiButton type="button" size="lg" disabled={!inlineConflict.canResave} onClick={() => { if (inlineConflict.submitted && inlineEditor) void onUpdate(inlineConflict.submitted, { editor: inlineEditor.editor, resave: true }); }}>Änderung erneut speichern</UiButton>
         {!inlineConflict.canResave ? <UiButton type="button" size="lg" onClick={() => { void inlineEditor?.editor.refreshConflict(); }}>Aktuellen Stand erneut laden</UiButton> : null}
       </UiNotice> : null}
-      {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div> : null}
+      {error ? <div role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+        {error}
+        {canCaptureRejectedEvidence ? <UiButton type="button" size="lg" className="mt-3" disabled={pending} onClick={captureRejectedEvidence}>Nachweis ergänzen</UiButton> : null}
+      </div> : null}
 
       <TaskDetailTabs
         value={activeTab}
