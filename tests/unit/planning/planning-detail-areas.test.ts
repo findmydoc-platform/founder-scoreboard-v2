@@ -170,3 +170,66 @@ test.each(["task-version", "source-version"] as const)("children without support
   expect(planning.taskDetail(task.id).task).toMatchObject({ assignee: full.assignee, owner: full.owner, createdBy: full.createdBy, description: full.description, detailAvailability: "stale" });
   expect(planning.taskDetail(task.id)).toMatchObject({ childrenCoverage: "complete-empty", childProgress: { total: 0, completed: 0, unfinished: 0, percentage: 0 } });
 });
+
+
+test.each(["target", "children"] as const)("parallel area acceptance keeps both coverages when %s starts first and answers last", async first => {
+  type Area = "target" | "children";
+  const second: Area = first === "target" ? "children" : "target";
+  const now = Date.now(), version = "2026-11-16T12:00:00.000Z", source = "unchanged-parallel-source";
+  const full = { ...task, updatedAt: version, description: "Canonical complete target field", assigneeId: actor.id, assignee: "Canonical accepted name" };
+  const summary = { id: full.id, title: full.title, status: full.status, taskType: full.taskType, updatedAt: version, detailAvailability: "summary" } as Task;
+  const child = { id: "parallel-direct-child", title: "Complete direct membership", status: "Offen", taskType: "sub_issue", parentTaskId: full.id, updatedAt: version, detailAvailability: "summary" } as Task;
+  const deadlines = { target: now + 45_000, children: now + 55_000 };
+  const models: Record<Area, TaskDetailModel> = {
+    target: { ...target, item: full, revision: version, sourceRevision: source, observedAt: new Date(now).toISOString(), validUntil: null,
+      authorityDeadline: deadlines.target, readActor: { profileId: actor.id, platformRole: actor.platformRole } },
+    children: { revision: version, sourceRevision: source, observedAt: new Date(now).toISOString(), validUntil: null,
+      authorityDeadline: deadlines.children, readActor: { profileId: actor.id, platformRole: actor.platformRole },
+      readArea: "children", supportingData: "omitted", item: summary, ancestors: [], children: [child], relatedItems: [],
+      taskOmittedFields: ["description", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
+      childProgress: { completed: 0, total: 1, unfinished: 1, percentage: 0 },
+      discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+    },
+  };
+  type Reply = { model: TaskDetailModel; readAuthority: { userId: string; deadline: number } };
+  const replies = new Map<Area, (reply: Reply) => void>(), signals = new Map<Area, AbortSignal | undefined>();
+  const ordinals: string[] = [];
+  const record = (event: string) => ordinals.push(`${ordinals.length + 1}:${event}`);
+  const { planning } = createPlanningState({ userId: "user-a", initialSession: session, initialCurrentProfile: actor,
+    initialData: { ...emptyPlanningShellState, tasks: [summary] }, adapter: {
+      now: () => now, readWorkspace: async () => null, saveTask: async () => ({ task: full }),
+      readTaskDetail: async (_id, options) => {
+        if (options?.area !== "target" && options?.area !== "children") throw new Error("Explicit independent area required");
+        const area = options.area;
+        record(`start:${area}`); signals.set(area, options.signal);
+        return new Promise<Reply>(resolve => { replies.set(area, resolve); });
+      },
+    },
+  });
+  const consumer = new AbortController();
+  const pending = new Map<Area, ReturnType<typeof planning.loadTaskDetail>>();
+  pending.set(first, planning.loadTaskDetail(full.id, { area: first, signal: consumer.signal }));
+  pending.set(second, planning.loadTaskDetail(full.id, { area: second, signal: consumer.signal }));
+  const answer = async (area: Area) => {
+    record(`answer:${area}`);
+    replies.get(area)!({ model: models[area], readAuthority: { userId: "user-a", deadline: deadlines[area] } });
+    expect(await pending.get(area)).toMatchObject({ ok: true });
+  };
+  await answer(second);
+  if (second === "children") {
+    expect(planning.taskDetail(full.id).task).toMatchObject({ detailAvailability: "summary" });
+    expect(planning.taskDetail(full.id).task).not.toHaveProperty("description");
+    expect(planning.taskDetail(full.id).task).not.toHaveProperty("assignee");
+    expect(planning.taskDetail(full.id).readStatus).toBe("loading");
+  } else {
+    expect(planning.taskDetail(full.id)).toMatchObject({ readStatus: "current", task: { description: full.description, assignee: full.assignee } });
+  }
+  expect(signals.get("target")?.aborted).toBe(false);
+  await answer(first);
+  expect(ordinals).toEqual([`1:start:${first}`, `2:start:${second}`, `3:answer:${second}`, `4:answer:${first}`]);
+  expect(ordinals.filter(event => event.endsWith("start:target"))).toHaveLength(1);
+  expect(signals.get("target")?.aborted).toBe(false);
+  expect(planning.taskDetail(full.id)).toMatchObject({ readStatus: "current", task: { updatedAt: version, description: full.description, assignee: full.assignee },
+    childrenCoverage: "complete", children: [{ id: child.id, parentTaskId: full.id }],
+    childProgress: { completed: 0, total: 1, unfinished: 1, percentage: 0 } });
+});
