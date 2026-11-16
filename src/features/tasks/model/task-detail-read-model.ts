@@ -34,7 +34,9 @@ export type TaskDetailModel = Readonly<{
   validUntil?: string | null;
   authorityDeadline?: number;
   readActor?: Readonly<{ profileId: string; platformRole: Profile["platformRole"] }>;
-  coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea, "complete" | "partial">>>;
+  coverage?: Readonly<Partial<Record<TaskDetailUnavailableArea | "children", "complete" | "partial">>>;
+  childProgress?: ReturnType<typeof import("./task-card-presentation").taskChildProgress>;
+  taskOmittedFields?: readonly (keyof Task)[];
   project: Project;
   item: Task;
   ancestors: readonly Task[];

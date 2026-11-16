@@ -1,3 +1,4 @@
+import { childListRowSelect, childListOmittedFields, mapChildListItem, loadPlanningDirectChildren } from "@/features/planning-items/server/planning-children-read-source";
 import "server-only";
 import { readPlanningDetailSource } from "@/features/planning-items/server/planning-detail-source";
 
@@ -150,7 +151,7 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
       const scopedIds = source ? source.descriptor.targetId ? [source.descriptor.targetId, ...source.descriptor.ancestorIds] : [] : null;
       const [targetResult, profileResult, projectResult, sprintResult] = await Promise.all([
         scopedIds ? scopedIds.length
-          ? supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
+          ? supabase.from(ACTIVE_TASKS_TABLE).select(area === "children" ? childListRowSelect : taskRowSelect).eq("project_id", projectId).in("id", scopedIds).returns<DbTask[]>()
           : Promise.resolve({ data: [] as DbTask[], error: null })
           : supabase.from(ACTIVE_TASKS_TABLE).select(taskRowSelect).eq("id", normalizedItemId).maybeSingle<DbTask>(),
         supabase.from("profiles").select(profileSelect).order("name"),
@@ -173,6 +174,19 @@ export function createSupabaseTaskDetailReadModel(supabase: SupabaseClient): Tas
         if ((target.parent_task_id || null) !== (ancestors.at(-1)?.id || null)
           || ancestors.some((row, index) => !row || (row.parent_task_id || null) !== (ancestors[index - 1]?.id || null))) return { status: "unavailable" };
         const rows = [target, ...ancestors];
+        if (area === "children") {
+          try {
+            const children = await loadPlanningDirectChildren(supabase, target, people);
+            return { status: "ready", model: {
+              revision: target.updated_at, sourceRevision: source.sourceRevision, observedAt: source.observedAt, validUntil: source.validUntil, readArea: "children",
+              coverage: { children: "complete" }, taskOmittedFields: childListOmittedFields,
+              project: project(projectResult.data), item: mapChildListItem(target, people),
+              ancestors: ancestors.map(row => mapChildListItem(row, people)), ...children, relatedItems: [], people,
+              sprints: ((sprintResult.data || []) as DbSprint[]).map(mapSprint),
+              discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+            } };
+          } catch { return { status: "unavailable" }; }
+        }
         const supporting = await loadSupportingRows(supabase, rows.map(row => row.id));
         if (supporting.error) return { status: "unavailable" };
         const tasks = byIds(mapTasks(rows, people, supporting));

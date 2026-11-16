@@ -5,7 +5,8 @@
     "src/features/planning-items/server/planning-deliverable-read-source.ts",
     "src/features/planning-items/server/workspace-profile-avatars.ts",
     "src/features/planning-items/server/planning-card-summary.ts",
-    "src/features/planning-items/server/planning-detail-source.ts"
+    "src/features/planning-items/server/planning-detail-source.ts",
+    "src/features/planning-items/server/planning-children-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -133,6 +134,13 @@
       "reason": "One fixed service-only Table risk read supplies complete directed relation counts and Planning attention for the signed selected row batch on its original source/time/authority basis. It returns no child progress or Item content and does not authorize neighboring reads.",
       "evidence": "tests/integration/planning-table-risk-delivery.test.ts; src/features/planning/PlanningApp.table-risks.stories.tsx; tests/architecture/planning-read-boundary.test.mjs",
       "expiresWhen": "Revalidate when the TABLE risk contract changes under #641."
+    },
+    "CHILDREN": {
+      "consumer": "Independent direct-child lists and complete progress",
+      "owner": "Tasks feature owner",
+      "reason": "The fixed detail capability requests compact direct children independently. Counted enumeration covers the complete active direct-parent scope in stable manual/id order before progress is certified. Original actor/source/time/deadline checks remain at publication; complete dependent action readers retain their separate legacy basis.",
+      "evidence": "tests/integration/task-detail-children.test.ts; tests/unit/planning/planning-detail-areas.test.ts",
+      "expiresWhen": "Revalidate whenever child membership, progress, compact field coverage or authority changes."
     }
   },
   "allowedEdges": [
@@ -210,6 +218,11 @@
       "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-detail-source.ts",
       "contract": "DETAIL"
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-children-read-source.ts",
+      "contract": "CHILDREN"
     }
   ],
   "readSites": [
