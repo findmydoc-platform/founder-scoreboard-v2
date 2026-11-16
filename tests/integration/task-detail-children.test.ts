@@ -24,10 +24,31 @@ test("independent direct children enumerate above provider limits with complete 
   const referenceChildren = complete.model.items.filter((item: { parentTaskId: string }) => item.parentTaskId === f.initiativeId);
   expect(referenceChildren).toHaveLength(1008);
   const before = f.observed.length;
-  const response: Response = await read(f.initiativeId, "children");
+  const transport = globalThis.fetch;
+  const directoryDataReads: string[] = [];
+  const { vi } = await import("vitest");
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    // Actor profile lookups remain required; only the full display directory
+    // and project/sprint data hydration belong to this resource boundary.
+    if (url.pathname.endsWith("/profiles") && url.searchParams.get("order") === "name.asc"
+      || /\/(projects|sprints)$/.test(url.pathname)) directoryDataReads.push(url.pathname.split("/").at(-1)!);
+    return transport(request);
+  });
+  let response: Response;
+  try { response = await read(f.initiativeId, "children"); }
+  finally { vi.stubGlobal("fetch", transport); }
   expect(response.status).toBe(200);
   const { taskDetail: model, readAuthority } = await response.json();
+  expect(directoryDataReads).toEqual([]);
   expect(model.readArea).toBe("children");
+  expect(model.supportingData).toBe("omitted");
+  for (const field of ["project", "people", "sprints"]) expect(model).not.toHaveProperty(field);
+  for (const field of ["assignee", "owner", "createdBy"]) {
+    expect(model.taskOmittedFields).toContain(field);
+    expect(model.children[0]).not.toHaveProperty(field);
+  }
+  expect(model.children[0].ownerId).toBe(f.actors.founder.profileId);
   expect(model.coverage.children).toBe("complete");
   expect(model.children).toHaveLength(1008);
   expect(model.children.map((child: { id: string }) => child.id)).toEqual(referenceChildren.map((child: { id: string }) => child.id));

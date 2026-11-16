@@ -148,3 +148,21 @@ test("child coverage distinguishes partial, complete-empty and failed refresh wh
   expect(planning.taskDetail(task.id)).toMatchObject({ children: [], childrenCoverage: "complete-empty", childProgress: { total: 0, unfinished: 0 } });
   expect(planning.taskDetail(child.id).task?.id).toBe(child.id);
 });
+
+
+test("children without supporting hydration preserve accepted names and directories while newer rows remain stale", async () => {
+  const full = { ...task, assigneeId: "assigned-profile", assignee: "Accepted assignee", ownerId: "owner-profile", owner: "Accepted owner", createdById: "creator-profile", createdBy: "Accepted creator", description: "Accepted canonical detail" };
+  const compact = { ...task, updatedAt: "new-target-version", detailAvailability: "summary" as const };
+  const model = Object.assign({ ...target, readArea: "children" as const, item: compact,
+    taskOmittedFields: ["description", "assignee", "owner", "createdBy"] as (keyof Task)[], coverage: { children: "complete" as const },
+    childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 } }, { supportingData: "omitted" });
+  for (const field of ["project", "people", "sprints"]) Reflect.deleteProperty(model, field);
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...emptyPlanningShellState, tasks: [full] }, adapter: {
+    readWorkspace: async () => null, saveTask: async () => ({ task: full }),
+    readTaskDetail: async (_id, options) => ({ model: options?.area === "children" ? model : { ...target, item: full }, readAuthority: { userId: "user-a", deadline: target.authorityDeadline! } }),
+  } });
+  expect(await planning.loadTaskDetail(task.id, { area: "target" })).toMatchObject({ ok: true });
+  expect(await planning.loadTaskDetail(task.id, { area: "children" })).toMatchObject({ ok: true });
+  expect(planning.taskDetail(task.id).task).toMatchObject({ assignee: full.assignee, owner: full.owner, createdBy: full.createdBy, description: full.description, detailAvailability: "stale" });
+  expect(planning.taskDetail(task.id)).toMatchObject({ childrenCoverage: "complete-empty", childProgress: { total: 0, completed: 0, unfinished: 0, percentage: 0 } });
+});
