@@ -158,3 +158,22 @@ test("an older held membership response cannot replace the source already verifi
     expect(owner.planning.taskDetail(selected.id).task).toBeNull();
   } finally { owner.internal.dispose(); }
 });
+
+test("expiry of a newer support receipt does not lower the source sequence floor for an older held membership reply", async () => {
+  let now = Date.now(); const controlsDeadline = now + 1000, selectedDeadline = now + 120_000, held = deferred<PlanningWorkspaceRead>();
+  const freshControls = controls(controlsDeadline); freshControls.backlogControls = { ...freshControls.backlogControls!, sourceRevision: "support-source-two" };
+  const owner = createPlanningState({ userId, initialData: emptyPlanningShellState, initialCurrentProfile: actor,
+    initialSession: { userId, user: { id: userId }, revision: "support-session", expiresAt: (now + 3_600_000) / 1000 }, adapter: {
+      now: () => now, saveTask: async () => ({ task: selected }), readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async () => held.promise, ...{ readBacklogSupport: async () => freshControls },
+    } });
+  try {
+    const port = owner.planning as typeof owner.planning & SupportPort;
+    const pending = owner.planning.loadBacklogSelection(selectedQuery);
+    expect(await port.loadBacklogSupport?.(controlsQuery)).toBe(true);
+    now = controlsDeadline + 1; expect(owner.planning.backlog().model.controls).toBeUndefined();
+    held.resolve(selectedFrame(selectedDeadline)); expect(await pending).toBe(false);
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.taskDetail(selected.id).task).toBeNull();
+  } finally { owner.internal.dispose(); }
+});
