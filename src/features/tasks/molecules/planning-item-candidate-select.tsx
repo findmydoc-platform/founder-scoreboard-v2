@@ -20,6 +20,7 @@ export function PlanningItemCandidateSelect({ owner, value, selectedContext, onC
   const normalizedSearch = normalizePlanningItemCandidateQuery({ view: "candidates", kind, ...(kind === "relationship" ? { sourceId } : {}), query: search, limit: 20 })!.query;
   const query = useMemo(() => ({ view: "candidates" as const, kind, ...(kind === "relationship" ? { sourceId } : {}), query: normalizedSearch, limit: 20 }), [kind, normalizedSearch, sourceId]);
   const demand = useRef<AbortController | null>(null);
+  const explicitDemand = useRef(chooseDefault && !value);
   const contextDemand = useRef<AbortController | null>(null);
   const view = useSyncExternalStore(owner.subscribe, () => owner.candidates(query), () => owner.candidates(query));
   useSyncExternalStore(owner.subscribe, () => selectedContextSnapshot(owner, value), () => selectedContextSnapshot(owner, value));
@@ -36,7 +37,7 @@ export function PlanningItemCandidateSelect({ owner, value, selectedContext, onC
   useEffect(() => {
     if (!open && !needsDefault) return;
     const controller = new AbortController(); demand.current = controller;
-    void owner.loadCandidates(query, { signal: controller.signal });
+    void owner.loadCandidates(query, { signal: controller.signal, immediate: explicitDemand.current });
     return () => { controller.abort(); if (demand.current === controller) demand.current = null; };
   }, [owner, open, query, needsDefault]);
   useEffect(() => {
@@ -71,10 +72,10 @@ export function PlanningItemCandidateSelect({ owner, value, selectedContext, onC
   const loadFurther = () => {
     if (demand.current && view.continuation) void owner.loadCandidates({ ...query, continuation: view.continuation }, { immediate: true, signal: demand.current.signal });
   };
-  return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setDefaultEnabled(false); onChange(id); }} onOpenChange={setOpen}
+  return <div className="grid gap-1"><span className="text-xs font-semibold text-slate-600">{label || singular}</span><CustomSelect value={value} aria-label={label || singular} disabled={disabled} onChange={id => { setDefaultEnabled(false); onChange(id); }} onOpenChange={next => { if (next) explicitDemand.current = true; setOpen(next); }}
     selectedOptionLabel={(selected ? optionLabel(selected) : null) || (contextBlocked ? "Auswahl nicht verfügbar" : selectedContext?.id === value ? selectedContext.title : undefined)}
     options={[{ value: "", label: emptyLabel || (kind === "relationship" ? "Keine Abhängigkeit" : kind === "deliverable" ? "Deliverable auswählen" : `Ohne ${singular} – als Vorschlag`) }, ...(view.readStatus === "current" ? view.items.map(item => ({ value: item.id, label: optionLabel(item) })) : [])]}
-    search={{ label: `${singular} suchen`, value: search, onChange: value => setSearch(value.slice(0, 2048)), onSubmit: () => submit() }}
+    search={{ label: `${singular} suchen`, value: search, onChange: value => { explicitDemand.current = false; setSearch(value.slice(0, 2048)); }, onSubmit: () => submit() }}
     feedback={<div className="px-2 py-2 text-xs text-slate-600">
       {view.readStatus === "loading" || view.readStatus === "not-loaded" ? <p role="status">{plural} werden geladen.</p>
         : view.readStatus === "current" && view.total === 0 && view.coverage === "complete" ? <p role="status">Keine {plural} gefunden.</p>
