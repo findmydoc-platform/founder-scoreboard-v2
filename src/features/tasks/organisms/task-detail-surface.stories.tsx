@@ -766,6 +766,7 @@ const unknownReviewChild = taskDetailStoryTask({ id: "unknown-review-child", tas
 Reflect.deleteProperty(unknownReviewChild, "evidenceLinks"); Reflect.deleteProperty(unknownReviewChild, "linkedPullRequests");
 const rejectedReviewMessage = "Review-Anfrage wurde serverseitig abgelehnt.";
 let releaseUnknownReview: (() => Promise<void>) | undefined;
+function resetUnknownReview() { releaseUnknownReview = undefined; }
 
 function UnknownReviewHarness({ held = false, initialError = "", ...args }: React.ComponentProps<typeof TaskDetailSurface> & { held?: boolean; initialError?: string }) {
   const [current, setCurrent] = useState(args.task);
@@ -857,7 +858,7 @@ export const LateUnknownReviewRejectCannotOfferEvidenceForAnotherTask: Story = {
   args: { ...unknownReviewArgs, onUpdate: fn(async () => ({ ok: false as const, error: rejectedReviewMessage, kind: "rejected" as const })) },
   render: args => <UnknownReviewHarness {...args} held />,
   play: async ({ canvasElement, args }) => {
-    releaseUnknownReview = undefined;
+    resetUnknownReview();
     const { canvas, page } = await requestUnknownReview(canvasElement);
     await waitFor(() => expect(releaseUnknownReview).toBeDefined());
     await expect(args.onUpdate).toHaveBeenCalledTimes(1);
