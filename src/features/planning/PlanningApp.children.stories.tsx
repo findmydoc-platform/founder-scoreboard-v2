@@ -96,7 +96,10 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
           const signal = input instanceof Request ? input.signal : init?.signal;
           if (area === "target") {
             openedTargetSignal = signal;
-            return new Promise<Response>(resolve => { completeOpenedTarget = () => resolve(Response.json({ taskDetail: { ...base,
+            const deadline = Date.now() + 60_000, observedAt = new Date().toISOString();
+            return new Promise<Response>(resolve => { completeOpenedTarget = () => resolve(Response.json({ readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: { ...base,
+              readArea: "target", sourceRevision: "parallel-open-source", observedAt, validUntil: null, authorityDeadline: deadline,
+              readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, coverage: {},
               item: { ...children[0], detailAvailability: undefined, description: "Canonical opened child", problemStatement: "Canonical opened child" },
               ancestors: [{ ...parent, detailAvailability: "summary" }], children: [] }, unavailable: [] })); });
           }
@@ -107,7 +110,7 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
               updatedAt: row.updatedAt, status: row.status, order: row.order, assigneeId: row.assigneeId, ownerId: row.ownerId, detailAvailability: "summary" });
             const child = taskDetailStoryTask({ id: "early-visible-sub-issue", taskType: "sub_issue", title: "Early complete child membership", parentTaskId: children[0].id, status: "Offen" });
             return new Promise<Response>(resolve => { completeOpenedChildren = () => resolve(Response.json({ readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
-              revision: base.revision, readArea: "children", sourceRevision: "early-child-source", observedAt, validUntil: null, authorityDeadline: deadline,
+              revision: base.revision, readArea: "children", sourceRevision: "parallel-open-source", observedAt, validUntil: null, authorityDeadline: deadline,
               readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, supportingData: "omitted",
               taskOmittedFields: ["description", "problemStatement", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
               item: compact(children[0]), ancestors: [compact(parent)], children: [compact(child)], relatedItems: [],
