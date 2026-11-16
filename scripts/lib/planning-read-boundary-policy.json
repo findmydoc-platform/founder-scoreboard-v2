@@ -1215,6 +1215,13 @@
       "target": "planning_backlog_support",
       "fingerprint": "29155065d7ef5c95894cdd1f3f9b9e869089a458a6f062537319f420c1d898a4",
       "contract": "BACKLOG-SUPPORT"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_backlog_rank_target",
+      "fingerprint": "1ada98cb7c18c35c039cd27642366a7a19449d1d036e42339bdd1bfcaa049fb6",
+      "contract": "BACKLOG-RANK"
     }
   ]
 }
