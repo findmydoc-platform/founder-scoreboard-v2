@@ -270,7 +270,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const backlogSupportReads = new Map<BacklogSupportQuery["area"], SupportPending>();
   const backlogSupportSequences = new Map<BacklogSupportQuery["area"], number>();
   const backlogSupportStatuses = new Map<BacklogSupportQuery["area"], PlanningReadStatus>();
+  let backlogSourceReceipt: { revision: string; started: number; generation: number; session: string | undefined; epoch: number; actorId: string; actorRole: string; deadline: number } | undefined;
   function clearBacklogSupport() {
+    backlogSourceReceipt = undefined;
     for (const read of backlogSupportReads.values()) read.controller.abort();
     backlogSupportReads.clear(); backlogSupport.clear(); backlogSupportSequences.clear(); backlogSupportStatuses.clear();
   }
@@ -1499,6 +1501,25 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     void result.finally(() => { if (columnReads.get(column)?.result === result) columnReads.delete(column); }).catch(() => undefined);
     return result;
   }
+  function acceptBacklogSource(revision: string, token: ReturnType<typeof beginWorkspaceRead>, deadline: number) {
+    if (!actorIdentity) return false;
+    const previous = backlogSourceReceipt;
+    const compatible = previous && previous.generation === token.generation && previous.session === token.sessionRevision
+      && previous.epoch === token.sourceEpoch && previous.actorId === actorIdentity.id && previous.actorRole === actorIdentity.platformRole
+      && previous.deadline > (adapter.now?.() ?? Date.now());
+    if (compatible && previous.revision !== revision) {
+      if (previous.started > token.started) return false;
+      if (selectedBacklog && selectedBacklog.selection.sourceRevision !== revision) {
+        selectedBacklog = undefined;
+        if (workspaceStatuses.get("backlog") !== "forbidden") workspaceStatuses.set("backlog", "stale");
+      }
+      for (const [area, entry] of backlogSupport) if (entry.value.sourceRevision !== revision) backlogSupportStatuses.set(area, "stale");
+    }
+    if (!compatible || previous.started <= token.started) backlogSourceReceipt = { revision, started: token.started,
+      generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
+      actorId: actorIdentity.id, actorRole: actorIdentity.platformRole, deadline };
+    return true;
+  }
   function currentBacklogSupport(area: BacklogSupportQuery["area"]) {
     const entry = backlogSupport.get(area);
     if (!entry) return undefined;
@@ -1537,6 +1558,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || query.area === "controls" && !("levelTotals" in value && validBacklogControls(value))
           || query.area === "sprints" && (!("day" in value) || value.day !== query.day || !validBacklogBuckets(value.buckets))) {
           backlogSupportStatuses.set(query.area, "unavailable"); publish(); return false;
+        }
+        if (!acceptBacklogSource(value.sourceRevision, token, Math.min(read.readAuthority.deadline, Date.parse(value.validUntil)))) {
+          backlogSupportStatuses.set(query.area, "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token) || backlogSupportStatuses.get(query.area) !== "current") return false;
         backlogSupport.set(query.area, { value, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
@@ -1606,6 +1630,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || [...selection.itemIds, ...selection.contextIds].some(id => !ids.has(id))
           || selection.itemIds.some(id => !Number.isSafeInteger(selection.rankById[id]) || selection.rankById[id] < 1)) {
           workspaceStatuses.set("backlog", "unavailable"); publish(); return false;
+        }
+        if (!acceptBacklogSource(selection.sourceRevision, token, Math.min(read.readAuthority.deadline, Date.parse(selection.validUntil)))) {
+          workspaceStatuses.set("backlog", "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token)) return false;
         selectedBacklog = { selection, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
