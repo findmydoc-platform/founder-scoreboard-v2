@@ -270,7 +270,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const backlogSupportReads = new Map<BacklogSupportQuery["area"], SupportPending>();
   const backlogSupportSequences = new Map<BacklogSupportQuery["area"], number>();
   const backlogSupportStatuses = new Map<BacklogSupportQuery["area"], PlanningReadStatus>();
-  let backlogSourceReceipt: { revision: string; started: number; generation: number; session: string | undefined; epoch: number; actorId: string; actorRole: string; deadline: number } | undefined;
+  let backlogSourceReceipt: { revision: string; started: number; generation: number; session: string | undefined; epoch: number; actorId: string; actorRole: string } | undefined;
   function clearBacklogSupport() {
     backlogSourceReceipt = undefined;
     for (const read of backlogSupportReads.values()) read.controller.abort();
@@ -1501,12 +1501,13 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     void result.finally(() => { if (columnReads.get(column)?.result === result) columnReads.delete(column); }).catch(() => undefined);
     return result;
   }
-  function acceptBacklogSource(revision: string, token: ReturnType<typeof beginWorkspaceRead>, deadline: number) {
+  function acceptBacklogSource(revision: string, token: ReturnType<typeof beginWorkspaceRead>) {
     if (!actorIdentity) return false;
     const previous = backlogSourceReceipt;
     const compatible = previous && previous.generation === token.generation && previous.session === token.sessionRevision
-      && previous.epoch === token.sourceEpoch && previous.actorId === actorIdentity.id && previous.actorRole === actorIdentity.platformRole
-      && previous.deadline > (adapter.now?.() ?? Date.now());
+      && previous.epoch === token.sourceEpoch && previous.actorId === actorIdentity.id && previous.actorRole === actorIdentity.platformRole;
+    // This floor grants no field or membership authority. Expiring a receipt
+    // cannot make an older, already superseded source current again.
     if (compatible && previous.revision !== revision) {
       if (previous.started > token.started) return false;
       if (selectedBacklog && selectedBacklog.selection.sourceRevision !== revision) {
@@ -1517,7 +1518,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     if (!compatible || previous.started <= token.started) backlogSourceReceipt = { revision, started: token.started,
       generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
-      actorId: actorIdentity.id, actorRole: actorIdentity.platformRole, deadline };
+      actorId: actorIdentity.id, actorRole: actorIdentity.platformRole };
     return true;
   }
   function currentBacklogSupport(area: BacklogSupportQuery["area"]) {
@@ -1559,7 +1560,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || query.area === "sprints" && (!("day" in value) || value.day !== query.day || !validBacklogBuckets(value.buckets))) {
           backlogSupportStatuses.set(query.area, "unavailable"); publish(); return false;
         }
-        if (!acceptBacklogSource(value.sourceRevision, token, Math.min(read.readAuthority.deadline, Date.parse(value.validUntil)))) {
+        if (!acceptBacklogSource(value.sourceRevision, token)) {
           backlogSupportStatuses.set(query.area, "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token) || backlogSupportStatuses.get(query.area) !== "current") return false;
@@ -1631,7 +1632,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || selection.itemIds.some(id => !Number.isSafeInteger(selection.rankById[id]) || selection.rankById[id] < 1)) {
           workspaceStatuses.set("backlog", "unavailable"); publish(); return false;
         }
-        if (!acceptBacklogSource(selection.sourceRevision, token, Math.min(read.readAuthority.deadline, Date.parse(selection.validUntil)))) {
+        if (!acceptBacklogSource(selection.sourceRevision, token)) {
           workspaceStatuses.set("backlog", "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token)) return false;
