@@ -41,3 +41,56 @@ test("selected Backlog coalesces compatible reads and keeps scoped membership, c
     await port.loadBacklogSelection?.(query,{immediate:true});expect(reads).toHaveLength(1);
   }finally{internal.dispose();}
 });
+
+function selectedOwner(read: (query: BacklogSelectionQuery, options?: { signal?: AbortSignal }) => Promise<SelectedRead | null>, now = () => Date.now()) {
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const owner = createPlanningState({ userId: session.userId, initialWorkspace: "planning", initialCurrentProfile: actor, initialSession: session,
+    initialData: { ...emptyPlanningShellState, tasks: [selected] }, adapter: { now, saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("No workspace fallback"); }, readBacklogSelection: read } });
+  return { ...owner, session };
+}
+
+test("selected Backlog expires its original receipt without certifying retained membership as current", async () => {
+  let now = Date.now();
+  const frame = response();
+  const owner = selectedOwner(async () => frame, () => now);
+  try {
+    expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
+    now = frame.readAuthority!.deadline + 1;
+    expect(owner.planning.backlog()).toMatchObject({ readStatus: "stale", model: { coverage: { items: "partial" } } });
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.taskDetail(selected.id).task?.note).toBe(selected.note);
+  } finally { owner.internal.dispose(); }
+});
+
+test("selected Backlog rejects another mapped actor and a late response from the replaced session", async () => {
+  const held = deferred<SelectedRead>(); let dispatch = 0;
+  const owner = selectedOwner(async () => ++dispatch === 1 ? { ...response(), readActor: { profileId: "other-mapped-reader", platformRole: "founder" } } : held.promise);
+  try {
+    expect(await owner.planning.loadBacklogSelection(query)).toBe(false);
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    const pending = owner.planning.loadBacklogSelection(query);
+    owner.internal.bindSession({ ...owner.session, revision: "replacement-session" });
+    held.resolve(response());
+    expect(await pending).toBe(false);
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+  } finally { owner.internal.dispose(); }
+});
+
+test("selected Backlog shares its transport until the final consumer releases and rejects its late rows", async () => {
+  const held = deferred<SelectedRead>(); let signal: AbortSignal | undefined; let dispatches = 0;
+  const owner = selectedOwner(async (_query, options) => { dispatches++; signal = options?.signal; return held.promise; });
+  const firstConsumer = new AbortController(), lastConsumer = new AbortController();
+  try {
+    const first = owner.planning.loadBacklogSelection(query, { signal: firstConsumer.signal });
+    const last = owner.planning.loadBacklogSelection(query, { signal: lastConsumer.signal });
+    expect(dispatches).toBe(1);
+    firstConsumer.abort(); expect(signal?.aborted).toBe(false);
+    lastConsumer.abort(); expect(signal?.aborted).toBe(true);
+    expect(await first).toBe(false); expect(await last).toBe(false);
+    held.resolve(response()); await Promise.resolve();
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.backlog().readStatus).not.toBe("loading");
+    expect(owner.planning.taskDetail(parent.id).task).toBeNull();
+  } finally { owner.internal.dispose(); }
+});
