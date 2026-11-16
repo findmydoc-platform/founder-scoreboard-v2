@@ -16,11 +16,23 @@ export const storedParentEpic = epic("stored-parent-epic", "Gespeichertes Epic")
 export const epicDetailInitiative = taskDetailStoryTask({ id: "epic-detail-initiative", title: "Initiative mit Parent", taskType: "initiative", parentTaskId: loadedParentEpic.id,
   updatedAt: "2026-11-01T12:00:00Z", approvalStatus: "proposed", ownerId: epicParentProfile.id });
 
-export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite }: {
-  holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
+export const storedParentDeliverable = taskDetailStoryTask({ id: "stored-parent-deliverable", title: "Gespeichertes Deliverable", taskType: "deliverable", parentTaskId: epicDetailInitiative.id, approvalStatus: "approved", updatedAt: "2026-11-01T12:00:00Z" });
+export const searchedParentDeliverable = { ...storedParentDeliverable, id: "searched-parent-deliverable", title: "Fernes Deliverable", approvalStatus: "proposed" as const };
+export const parentDetailSubIssue = taskDetailStoryTask({ id: "parent-detail-sub-issue", title: "Sub-Issue mit Parent", taskType: "sub_issue", parentTaskId: storedParentDeliverable.id, parentApprovalStatus: "approved", assignee: epicParentProfile.id, updatedAt: "2026-11-01T12:00:00Z" });
+export const parentDetailDeliverable = { ...storedParentDeliverable, id: "parent-detail-deliverable", parentTaskId: epicDetailInitiative.id };
+export const searchedParentInitiative = { ...epicDetailInitiative, id: "searched-parent-initiative", title: "Ferne Initiative", approvalStatus: "approved" as const };
+
+export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask }: {
+  parentKind?: "epic" | "initiative" | "deliverable"; detailTask?: Task; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
 } = {}) {
-  const rows = [loadedParentEpic, ...Array.from({ length: 19 }, (_, index) => epic(`epic-decoy-${index}`, `Weiteres Epic ${index + 1}`)), activeDefaultEpic, searchedParentEpic, storedParentEpic];
-  const data = { ...emptyPlanningShellState, profiles: [epicParentProfile], tasks: [loadedParentEpic, epicDetailInitiative] };
+  const epicRows = [loadedParentEpic, ...Array.from({ length: 19 }, (_, index) => epic(`epic-decoy-${index}`, `Weiteres Epic ${index + 1}`)), activeDefaultEpic, searchedParentEpic, storedParentEpic];
+  const rows = parentKind === "epic" ? epicRows : parentKind === "initiative"
+    ? [epicDetailInitiative, ...Array.from({ length: 20 }, (_, index) => ({ ...epicDetailInitiative, id: `initiative-choice-${index}`, title: `Weitere Initiative ${index}` })), searchedParentInitiative]
+    : [storedParentDeliverable, ...Array.from({ length: 20 }, (_, index) => ({ ...storedParentDeliverable, id: `deliverable-choice-${index}`, title: `Weiteres Deliverable ${index}` })), searchedParentDeliverable];
+  const selectedTask = detailTask || epicDetailInitiative;
+  const data = { ...emptyPlanningShellState, profiles: [epicParentProfile], tasks: [loadedParentEpic, epicDetailInitiative, ...(detailTask ? [detailTask] : [])] };
+  const allContexts = [...epicRows, ...rows, storedParentDeliverable, selectedTask];
+  const ancestors = (task: Task): Task[] => { const parent = allContexts.find(item => item.id === task.parentTaskId); return parent ? [...ancestors(parent), parent] : []; };
   const deadline = Date.now() + 60_000;
   let observedAt = new Date().toISOString(), sourceRevision = "epic-parent-source";
   const userId = "epic-parent-user";
@@ -29,21 +41,21 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
   const readAuthority = { userId, deadline }, readActor = { profileId: epicParentProfile.id, platformRole: epicParentProfile.platformRole };
   const detailModel = (selected: Task) => ({ revision: selected.updatedAt!, sourceRevision: JSON.stringify([sourceRevision, "0", null, null]),
     observedAt, validUntil: new Date(deadline).toISOString(), authorityDeadline: deadline, readActor, readArea: "target" as const, item: selected,
-    project: data.project, people: data.profiles, sprints: [], ancestors: selected.taskType === "initiative" ? rows.filter(row => row.id === selected.parentTaskId) : [], children: [], relatedItems: [], coverage: {},
+    project: data.project, people: data.profiles, sprints: [], ancestors: ancestors(selected), children: [], relatedItems: [], coverage: {},
     discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] });
   const model = { revision: "epic-parent-source", project: data.project, items: data.tasks, people: data.profiles, sprints: [], relationships: [], preferences: [],
     coverage: { items: "partial" as const, people: "complete" as const, strategies: "partial" as const, raci: "partial" as const, links: "partial" as const } };
   const state = createBrowserPlanningState({ initialData: data, initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: epicParentProfile, initialUserId: userId,
     initialWorkspace: "planning", initialWorkspaceRead: planningWorkspaceHydration("planning", model, session, { userId, deadline }),
-    initialTaskDetailRead: { itemId: epicDetailInitiative.id, model: detailModel(epicDetailInitiative), readAuthority, session } });
-  let released = !holdDefault, writeSequence = 0, currentInitiative = epicDetailInitiative;
+    initialTaskDetailRead: { itemId: selectedTask.id, model: detailModel(selectedTask), readAuthority, session } });
+  let released = !holdDefault, writeSequence = 0, currentInitiative = selectedTask;
   const waiting: Array<() => void> = [];
-  const scalar = (task: Task) => ({ id: task.id, title: task.title, taskType: "epic" as const, parentTaskId: "", approvalStatus: task.approvalStatus || "proposed", updatedAt: task.updatedAt! });
+  const scalar = (task: Task) => ({ id: task.id, title: task.title, taskType: parentKind, parentTaskId: task.parentTaskId, ...(parentKind === "deliverable" ? { parentTitle: epicDetailInitiative.title } : {}), approvalStatus: task.approvalStatus || "proposed", updatedAt: task.updatedAt! });
   const client: BrowserApiClient = {
     async requestJson<T>(input: Parameters<BrowserApiClient["requestJson"]>[0], options?: Parameters<BrowserApiClient["requestJson"]>[1]) {
       const url = new URL(String(input), "http://localhost:3000");
       if (options?.method === "PATCH" || options?.method === "POST") {
-        if (options.method === "POST" && url.pathname !== "/api/tasks" || options.method === "PATCH" && url.pathname !== `/api/tasks/${epicDetailInitiative.id}`) throw new Error("Unexpected parent mutation endpoint");
+        if (options.method === "POST" && url.pathname !== "/api/tasks" || options.method === "PATCH" && url.pathname !== `/api/tasks/${selectedTask.id}`) throw new Error("Unexpected parent mutation endpoint");
         const payload = options.json as Record<string, unknown>; onWrite?.(payload);
         currentInitiative = { ...currentInitiative, ...Object.fromEntries(Object.entries(payload).filter(([key]) => key in currentInitiative)), id: options.method === "POST" ? "created-epic-initiative" : currentInitiative.id,
           updatedAt: `confirmed-parent-${++writeSequence}` } as Task;
@@ -52,21 +64,21 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
       }
       if (url.pathname === "/api/planning-board-data") {
         const scope = JSON.parse(url.searchParams.get("scope") || "{}") as PlanningItemCandidateQuery;
-        if (scope.view !== "candidates" || scope.kind !== "epic") throw new Error("Epic discovery must use its explicit candidate intent");
+        if (scope.view !== "candidates" || scope.kind !== parentKind) throw new Error("Epic discovery must use its explicit candidate intent");
         onRead?.(scope);
         const matching = rows.filter(row => row.title.toLocaleLowerCase("de").includes(scope.query));
         const offset = scope.continuation ? 20 : 0;
         const response = () => ({ response: new Response(null), body: { readAuthority, readActor, candidates: {
-          kind: "epic", items: matching.slice(offset, offset + 20).map(scalar), total: matching.length,
+          kind: parentKind, items: matching.slice(offset, offset + 20).map(scalar), total: matching.length,
           coverage: offset + 20 >= matching.length ? "complete" : "partial", continuation: offset + 20 >= matching.length ? null : "epic-parent-next",
-          sourceRevision, observedAt, validUntil: new Date(deadline).toISOString(), defaultCandidate: scalar(activeDefaultEpic),
+          sourceRevision, observedAt, validUntil: new Date(deadline).toISOString(), ...(parentKind === "epic" ? { defaultCandidate: scalar(activeDefaultEpic) } : {}),
         } } as T });
         if (!released && !scope.query) return new Promise<ReturnType<typeof response>>(resolve => { waiting.push(() => resolve(response())); });
         return response();
       }
       const id = decodeURIComponent(url.pathname.split("/")[3] || "");
       if (url.pathname.endsWith("/detail-data") && url.searchParams.get("area") === "target") {
-        const selected = rows.find(row => row.id === id) || (id === currentInitiative.id ? currentInitiative : null);
+        const selected = allContexts.find(row => row.id === id) || (id === currentInitiative.id ? currentInitiative : null);
         if (!selected) throw new Error("Unexpected selected parent identity");
         return { response: new Response(null), body: { readAuthority, taskDetail: detailModel(selected) } as T };
       }

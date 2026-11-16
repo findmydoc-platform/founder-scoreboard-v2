@@ -9,7 +9,7 @@ import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { useTaskCreateCommand } from "../hooks/use-task-create-command";
 import { taskDetailStoryTask } from "../molecules/task-detail-story-fixtures";
 import { NewTaskDialog } from "./new-task-dialog";
-import { createEpicParentBrowserFixture, storedParentEpic, searchedParentEpic } from "../../../../tests/helpers/epic-parent-browser-fixture";
+import { createEpicParentBrowserFixture, storedParentEpic, searchedParentEpic, storedParentDeliverable, searchedParentDeliverable } from "../../../../tests/helpers/epic-parent-browser-fixture";
 
 const profile = { id: "ceo", name: "CEO", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "", weeklyCapacity: 40 };
 const parent = taskDetailStoryTask({ id: "initiative", title: "Freigegebene Initiative", taskType: "initiative", approvalStatus: "approved", updatedAt: "opaque/parent" });
@@ -247,5 +247,41 @@ export const CreationConfirmedApprovalFailed: Story = {
     await expect(canvas.getByRole("button", { name: "Erstellen und freigeben" })).toBeDisabled();
     await expect(canvas.getByLabelText("Create requests")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Confirmed task count")).toHaveTextContent("2");
+  },
+};
+
+function SubIssueParentDiscoveryStory() {
+  const [writtenParent, setWrittenParent] = useState("");
+  const [fixture] = useState(() => createEpicParentBrowserFixture({ parentKind: "deliverable" }));
+  useEffect(() => () => fixture.state.owner.internal.dispose(), [fixture]);
+  const data = useSyncExternalStore(fixture.state.owner.planning.subscribe, fixture.state.owner.internal.getSnapshot, fixture.state.owner.internal.getSnapshot);
+  return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}>
+    <output aria-label="Sub-Issue submitted parent">{writtenParent}</output>
+    <NewTaskDialog defaults={{ taskType: "sub_issue", parentTaskId: storedParentDeliverable.id, title: "Unveränderter Sub-Issueentwurf", description: "Ein gültiger Arbeitsschritt." }}
+      data={data} pending={false} currentProfileId={fixture.data.profiles[0].id} onClose={() => {}} onCreate={draft => { setWrittenParent(draft.parentTaskId); }} />
+  </PlanningBusinessStateContext.Provider>;
+}
+export const SubIssueDiscoversUnapprovedDeliverablesAndRetainsStoredContext: Story = {
+  render: () => <SubIssueParentDiscoveryStory />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement), page = within(document.body);
+    const trigger = canvas.getByRole("combobox", { name: "Übergeordnetes Deliverable, Pflichtfeld" });
+    await waitFor(() => expect(trigger).toHaveTextContent(storedParentDeliverable.title));
+    await userEvent.click(trigger);
+    const search = await page.findByRole("searchbox", { name: "Deliverable suchen" });
+    await userEvent.type(search, "Fern"); await userEvent.keyboard("{Enter}");
+    const option = await page.findByRole("option", { name: /Fernes Deliverable.*Initiative mit Parent.*wartet auf Freigabe/ });
+    await userEvent.click(option);
+    await expect(trigger).toHaveTextContent(searchedParentDeliverable.title);
+    await expect(trigger).toHaveTextContent("wartet auf Freigabe");
+    await userEvent.click(trigger);
+    const replacement = page.getByRole("searchbox", { name: "Deliverable suchen" });
+    await userEvent.clear(replacement); await userEvent.type(replacement, "Kein Treffer"); await userEvent.keyboard("{Enter}");
+    await expect(await page.findByText("Keine Deliverables gefunden.")).toBeVisible();
+    await expect(trigger).toHaveTextContent(searchedParentDeliverable.title);
+    await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Unveränderter Sub-Issueentwurf");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(canvas.getByRole("button", { name: "Sub-Issue erstellen" }));
+    await waitFor(() => expect(canvas.getByLabelText("Sub-Issue submitted parent")).toHaveTextContent(searchedParentDeliverable.id));
   },
 };
