@@ -53,10 +53,11 @@ export const OpenFormRetainsItsOriginalShownTaskBasis:Story={args:{scenario:"sta
 export const PendingAddPublishesAfterViewRemount:Story={args:{scenario:"pending"},play:async({canvasElement})=>{const canvas=await add(canvasElement);await expect(canvas.getByText("Verknüpfung wird hinzugefügt …")).toBeVisible();await userEvent.click(canvas.getByRole("button",{name:"Ansicht wechseln"}));controls.get("pending")!.finish();await userEvent.click(canvas.getByRole("button",{name:"Ansicht wechseln"}));await waitFor(()=>expect(canvas.getByRole("button",{name:"Beziehung zu Target entfernen"})).toBeVisible());expect(controls.get("pending")!.writes()).toBe(1);}};
 
 function RelationshipDiscoverySectionStory({stored=false}:{stored?:boolean}) {
- const [fixture]=useState(()=>createEpicParentBrowserFixture({parentKind:"relationship",detailTask:parentDetailDeliverable}));
+ const [contextReads,setContextReads]=useState(0);
+ const [fixture]=useState(()=>createEpicParentBrowserFixture({parentKind:"relationship",detailTask:parentDetailDeliverable,onTargetRead:()=>setContextReads(count=>count+1)}));
  useEffect(()=>()=>fixture.state.owner.internal.dispose(),[fixture]);
  useSyncExternalStore(fixture.state.owner.planning.subscribe,fixture.state.owner.internal.getSnapshot,fixture.state.owner.internal.getSnapshot);
- const [draft,setDraft]=useState<TaskRelationshipDraft>({relationType:"blocked_by",relatedTaskId:storedRelationshipTarget.id,note:"Erhaltener Detailhinweis"});
+ const [draft,setDraft]=useState<TaskRelationshipDraft>({relationType:"blocked_by",relatedTaskId:stored?"":storedRelationshipTarget.id,note:"Erhaltener Detailhinweis"});
  const [submitted,setSubmitted]=useState(""),[removed,setRemoved]=useState(0);
  const source=parentDetailDeliverable;
  const edges:TaskRelation[]=stored?[
@@ -66,7 +67,7 @@ function RelationshipDiscoverySectionStory({stored=false}:{stored?:boolean}) {
   {...relation,id:104,taskId:source.id,relatedTaskId:"unavailable-stored-endpoint",relationType:"relates_to",note:"Gespeicherter unbekannter Kontext"},
  ]:[];
  const groups=buildTaskRelationshipRows(source,[source,{...searchedRelationshipTarget,status:"Erledigt",assignee:"CEO"}],edges);
- return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}><output aria-label="Submitted detail relationship">{submitted}</output><output aria-label="Removed canonical edge">{removed}</output>
+ return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}><output aria-label="Relationship context requests">{contextReads}</output><output aria-label="Submitted detail relationship">{submitted}</output><output aria-label="Removed canonical edge">{removed}</output>
   <TaskRelationshipsSection task={source} profiles={fixture.data.profiles} {...groups} relationDraft={draft} relationTargetOptions={[]} allowedRelationTypes={["blocked_by","blocks","relates_to"]} pending={false} onOpenTask={()=>{}} onRemoveRelation={edge=>setRemoved(edge.id)} canRemoveRelation={()=>true} onRelationDraftChange={patch=>setDraft(current=>({...current,...patch}))}
     onAddRelation={async basis=>{setSubmitted(JSON.stringify({source:basis.id,version:basis.updatedAt,...draft}));return {ok:true};}}/>
  </PlanningBusinessStateContext.Provider>;
@@ -74,6 +75,7 @@ function RelationshipDiscoverySectionStory({stored=false}:{stored?:boolean}) {
 export const DetailRelationshipDiscoversOffPageTargetsWithinItsSourceScope:Story={render:()=> <RelationshipDiscoverySectionStory/>,play:async({canvasElement})=>{
  const canvas=within(canvasElement),page=within(document.body);await userEvent.click(canvas.getByRole("button",{name:"Beziehung hinzufügen"}));
  const trigger=canvas.getByRole("combobox",{name:"Verknüpftes Item"});await waitFor(()=>expect(trigger).toHaveTextContent(storedRelationshipTarget.title));
+ await expect(canvas.getByLabelText("Relationship context requests")).toHaveTextContent("1");
  await userEvent.click(trigger);await page.findByRole("searchbox",{name:"Item suchen"});
  await userEvent.click(await page.findByRole("button",{name:"Weitere Items laden"}));
  await userEvent.click(await page.findByRole("option",{name:"Fernes verknüpftes Item · CEO"}));
@@ -95,4 +97,5 @@ export const StoredEndpointContextSurvivesDiscoveryAndKeepsCanonicalEdges:Story=
  await expect(canvas.getAllByRole("link",{name:searchedRelationshipTarget.title})).toHaveLength(1);
  await userEvent.click(canvas.getByRole("button",{name:`Beziehung zu ${searchedRelationshipTarget.title} entfernen`}));
  await expect(canvas.getByLabelText("Removed canonical edge")).toHaveTextContent("101");
+ await expect(canvas.getByLabelText("Relationship context requests")).toHaveTextContent("0");
 }};

@@ -25,8 +25,8 @@ export const searchedParentInitiative = { ...epicDetailInitiative, id: "searched
 export const storedRelationshipTarget = { ...loadedParentEpic, id: "stored-relationship-target", title: "Gespeicherter Beziehungskontext", assignee: "CEO" };
 export const searchedRelationshipTarget = { ...storedRelationshipTarget, id: "searched-relationship-target", title: "Fernes verknüpftes Item" };
 
-export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask }: {
-  parentKind?: "epic" | "initiative" | "deliverable" | "relationship"; detailTask?: Task; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
+export function createEpicParentBrowserFixture({ holdDefault = false, onRead, onWrite, parentKind = "epic", detailTask, onTargetRead }: {
+  parentKind?: "epic" | "initiative" | "deliverable" | "relationship"; detailTask?: Task; onTargetRead?: (id: string) => void; holdDefault?: boolean; onRead?: (query: PlanningItemCandidateQuery) => void; onWrite?: (payload: Record<string, unknown>) => void;
 } = {}) {
   const epicRows = [loadedParentEpic, ...Array.from({ length: 19 }, (_, index) => epic(`epic-decoy-${index}`, `Weiteres Epic ${index + 1}`)), activeDefaultEpic, searchedParentEpic, storedParentEpic];
   const rows = parentKind === "epic" ? epicRows : parentKind === "initiative"
@@ -82,6 +82,7 @@ export function createEpicParentBrowserFixture({ holdDefault = false, onRead, on
       }
       const id = decodeURIComponent(url.pathname.split("/")[3] || "");
       if (url.pathname.endsWith("/detail-data") && url.searchParams.get("area") === "target") {
+        onTargetRead?.(id);
         const selected = allContexts.find(row => row.id === id) || (id === currentInitiative.id ? currentInitiative : null);
         if (!selected) throw new Error("Unexpected selected parent identity");
         return { response: new Response(null), body: { readAuthority, taskDetail: detailModel(selected) } as T };

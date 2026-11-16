@@ -287,11 +287,12 @@ export const SubIssueDiscoversUnapprovedDeliverablesAndRetainsStoredContext: Sto
 };
 
 function CreationRelationshipDiscoveryStory({ subIssue }: { subIssue: boolean }) {
-  const [submitted,setSubmitted] = useState("");
-  const [fixture] = useState(()=>createEpicParentBrowserFixture({parentKind:"relationship"}));
+  const [submitted,setSubmitted] = useState(""), [contextReads,setContextReads] = useState(0);
+  const [fixture] = useState(()=>createEpicParentBrowserFixture({parentKind:"relationship", onTargetRead:id=>{if(id===storedRelationshipTarget.id)setContextReads(count=>count+1);}}));
   useEffect(()=>()=>fixture.state.owner.internal.dispose(),[fixture]);
   const data=useSyncExternalStore(fixture.state.owner.planning.subscribe,fixture.state.owner.internal.getSnapshot,fixture.state.owner.internal.getSnapshot);
   return <PlanningBusinessStateContext.Provider value={fixture.state.owner.planning}>
+    <output aria-label="Relationship selection context reads">{contextReads}</output>
     <output aria-label="Submitted relationship draft">{submitted}</output>
     <NewTaskDialog defaults={{taskType:subIssue?"sub_issue":"deliverable",title:"Unveränderter Beziehungsentwurf",description:"Ein gültiger Arbeitsschritt.",parentTaskId:subIssue?storedParentDeliverable.id:epicDetailInitiative.id,relatedTaskId:storedRelationshipTarget.id}}
       data={data} pending={false} currentProfileId={fixture.data.profiles[0].id} onClose={()=>{}} onCreate={draft=>{setSubmitted(JSON.stringify({target:draft.relatedTaskId,type:draft.relationType,note:draft.relationNote,parent:draft.parentTaskId,title:draft.title}));}} />
@@ -300,6 +301,7 @@ function CreationRelationshipDiscoveryStory({ subIssue }: { subIssue: boolean })
 async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:boolean) {
   const canvas=within(canvasElement),page=within(document.body),trigger=canvas.getByRole("combobox",{name:"Verknüpfte Aufgabe"});
   await waitFor(()=>expect(trigger).toHaveTextContent(storedRelationshipTarget.title));
+  await expect(canvas.getByLabelText("Relationship selection context reads")).toHaveTextContent("1");
   await userEvent.type(canvas.getByPlaceholderText("Optionaler Hinweis zur Abhängigkeit"),"Mein erhaltener Hinweis");
   await userEvent.click(canvas.getByRole("combobox",{name:"Beziehungstyp"}));
   await userEvent.click(await page.findByRole("option",{name:"Blockiert"}));
@@ -312,6 +314,7 @@ async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:b
   await expect(canvas.getByRole("textbox",{name:/Titel/})).toHaveValue("Unveränderter Beziehungsentwurf");
   await userEvent.keyboard("{Escape}");await userEvent.click(canvas.getByRole("button",{name:subIssue?"Sub-Issue erstellen":"Deliverable vorschlagen"}));
   await waitFor(()=>expect(canvas.getByLabelText("Submitted relationship draft")).toHaveTextContent(JSON.stringify({target:searchedRelationshipTarget.id,type:"blocks",note:"Mein erhaltener Hinweis",parent:subIssue?storedParentDeliverable.id:epicDetailInitiative.id,title:"Unveränderter Beziehungsentwurf"})));
+  await expect(canvas.getByLabelText("Relationship selection context reads")).toHaveTextContent("1");
 }
 export const NewDeliverableDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue={false}/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,false)};
 export const NewSubIssueDiscoversAndRetainsRelationshipContext:Story={render:()=> <CreationRelationshipDiscoveryStory subIssue/>,play:async({canvasElement})=>exerciseCreationRelationship(canvasElement,true)};
