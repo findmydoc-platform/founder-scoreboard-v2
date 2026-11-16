@@ -150,13 +150,17 @@ test("child coverage distinguishes partial, complete-empty and failed refresh wh
 });
 
 
-test("children without supporting hydration preserve accepted names and directories while newer rows remain stale", async () => {
+test.each(["task-version", "source-version"] as const)("children without supporting hydration preserve accepted names when %s changes", async changed => {
   const full = { ...task, assigneeId: "assigned-profile", assignee: "Accepted assignee", ownerId: "owner-profile", owner: "Accepted owner", createdById: "creator-profile", createdBy: "Accepted creator", description: "Accepted canonical detail" };
-  const compact = { ...task, updatedAt: "new-target-version", detailAvailability: "summary" as const };
-  const model = Object.assign({ ...target, readArea: "children" as const, item: compact,
-    taskOmittedFields: ["description", "assignee", "owner", "createdBy"] as (keyof Task)[], coverage: { children: "complete" as const },
-    childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 } }, { supportingData: "omitted" });
-  for (const field of ["project", "people", "sprints"]) Reflect.deleteProperty(model, field);
+  const compact = { ...task, assigneeId: full.assigneeId, ownerId: full.ownerId, createdById: full.createdById,
+    updatedAt: changed === "task-version" ? "new-target-version" : task.updatedAt, detailAvailability: "summary" as const };
+  const model: TaskDetailModel = { revision: target.revision, observedAt: target.observedAt, validUntil: target.validUntil, authorityDeadline: target.authorityDeadline,
+    sourceRevision: changed === "source-version" ? "new-directory-source" : target.sourceRevision,
+    readArea: "children", item: compact, ancestors: [], children: [], relatedItems: [], supportingData: "omitted",
+    taskOmittedFields: ["description", "assignee", "owner", "createdBy"], coverage: { children: "complete" },
+    childProgress: { completed: 0, total: 0, unfinished: 0, percentage: 0 },
+    discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+  };
   const { planning } = createPlanningState({ userId: "user-a", initialData: { ...emptyPlanningShellState, tasks: [full] }, adapter: {
     readWorkspace: async () => null, saveTask: async () => ({ task: full }),
     readTaskDetail: async (_id, options) => ({ model: options?.area === "children" ? model : { ...target, item: full }, readAuthority: { userId: "user-a", deadline: target.authorityDeadline! } }),
