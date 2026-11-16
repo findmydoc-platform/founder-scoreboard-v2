@@ -1,12 +1,15 @@
 export type PlanningItemCandidateQuery = Readonly<{
   view: "candidates";
-  kind: "initiative" | "epic";
+  kind: "initiative" | "epic" | "deliverable";
   query: string;
   limit: number;
   continuation?: string;
 }>;
 
-export type PlanningItemCandidate = Readonly<{ id: string; title: string; taskType: "initiative" | "epic"; parentTaskId: string; approvalStatus: string; updatedAt: string }>;
+export type PlanningItemCandidate = Readonly<{ id: string; title: string; parentTaskId: string; approvalStatus: string; updatedAt: string } & (
+  | { taskType: "initiative" | "epic"; parentTitle?: never }
+  | { taskType: "deliverable"; parentTitle: string | null }
+)>;
 
 type CandidatePageFields = Readonly<{
   items: readonly PlanningItemCandidate[];
@@ -22,6 +25,7 @@ type CandidatePageFields = Readonly<{
 // provides an authoritative default from its complete, unfiltered scope.
 export type PlanningItemCandidatePage = CandidatePageFields & (
   | { kind?: "initiative"; defaultCandidate?: never }
+  | { kind: "deliverable"; defaultCandidate?: never }
   | { kind: "epic"; defaultCandidate: PlanningItemCandidate | null }
 );
 
@@ -54,7 +58,7 @@ export type PlanningCandidateAccess = {
 export function normalizePlanningItemCandidateQuery(input: unknown): PlanningItemCandidateQuery | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const value = input as Record<string, unknown>;
-  if (value.view !== "candidates" || value.kind !== "initiative" && value.kind !== "epic" || typeof value.query !== "string" || value.query.length > 2048
+  if (value.view !== "candidates" || value.kind !== "initiative" && value.kind !== "epic" && value.kind !== "deliverable" || typeof value.query !== "string" || value.query.length > 2048
     || value.limit !== undefined && (!Number.isSafeInteger(value.limit) || (value.limit as number) < 1 || (value.limit as number) > 100)
     || value.continuation !== undefined && (typeof value.continuation !== "string" || !value.continuation || value.continuation.length > 4096)) return null;
   return { view: "candidates", kind: value.kind, query: value.query.trim().toLocaleLowerCase("de"), limit: value.limit as number | undefined ?? 20,

@@ -34,3 +34,22 @@ test("Deliverable parent discovery preserves unapproved options and binds Initia
   expect(selected.total).toBe(1); expect(selected.items).toEqual([expect.objectContaining({ id: expected[1007], approvalStatus: "proposed", parentTaskId: f.initiativeId, parentTitle })]);
   expect(f.observed.slice(start).some(entry => /\/(active_tasks|tasks)$/.test(entry.path))).toBe(false);
 }), 120_000);
+
+test("Deliverable discovery retains all mapped reader roles and denies unmapped or direct user RPC access", () => withPlanningCredentialDatabase(async f => {
+  await f.db.query("insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,owner,approval_status) values($1,'findmydoc-founder-execution',$2,'deliverable',$3,'Offen','P2',$4,'proposed')", [`${f.prefix}-permitted-deliverable`, `${f.prefix} permitted Deliverable`, f.initiativeId, f.actors.founder.profileId]);
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const scope = { view: "candidates", kind: "deliverable", query: f.prefix, limit: 20 };
+  for (const actor of ["ceo", "deputy", "founder", "viewer", "administrator"] as const) {
+    const response = await GET(f.request(actor, `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(response.status).toBe(200);
+    const body = await response.json(); expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([`${f.prefix}-permitted-deliverable`]);
+    expect(body.readActor).toEqual({ profileId: f.actors[actor].profileId, platformRole: actor === "administrator" ? "founder" : actor });
+    expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  const denied = await GET(f.request("unmapped", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+  expect(denied.status).toBe(403); expect(await denied.json()).not.toHaveProperty("candidates");
+  for (const actor of ["founder", "unmapped", "anonymous"] as const) {
+    const response = await f.rpc("planning_item_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_kind: "deliverable", p_query: "", p_limit: 20 }, actor);
+    expect(response.status).toBe(actor === "anonymous" ? 401 : 403);
+  }
+}), 120_000);

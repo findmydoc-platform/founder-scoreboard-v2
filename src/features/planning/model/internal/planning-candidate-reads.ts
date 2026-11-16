@@ -90,7 +90,7 @@ export function createPlanningCandidateReads({ read, binding, publish, now }: {
         || !current.actor || receipt.readActor?.profileId !== current.actor.id || receipt.readActor.platformRole !== current.actor.platformRole
         || !page || typeof page.sourceRevision !== "string" || !page.sourceRevision || !Number.isFinite(Date.parse(page.observedAt)) || !Number.isFinite(Date.parse(page.validUntil)) || Date.parse(page.validUntil) <= now()
         || !Array.isArray(page.items) || !Number.isSafeInteger(page.total) || page.total < page.items.length || !["complete", "partial"].includes(page.coverage)
-        || page.items.some(item => item.taskType !== query.kind)
+        || page.items.some(item => item.taskType !== query.kind || item.taskType === "deliverable" && typeof item.parentTitle !== "string" && item.parentTitle !== null)
         || query.kind !== "epic" && page.kind === "epic"
         || query.kind === "epic" && (page.kind !== "epic" || page.defaultCandidate !== null && (page.defaultCandidate.taskType !== "epic" || !page.defaultCandidate.id || typeof page.defaultCandidate.title !== "string"))) {
         value.view = { ...value.view, readStatus: "unavailable", items: [], coverage: "unknown", continuation: null, defaultChoice: unknownDefault(query) }; value.receipt = undefined; return;

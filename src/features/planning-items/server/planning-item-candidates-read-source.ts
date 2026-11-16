@@ -16,6 +16,7 @@ function validCandidate(value: unknown, kind: PlanningItemCandidateQuery["kind"]
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
   return typeof item.id === "string" && typeof item.title === "string" && item.taskType === kind
+    && (kind !== "deliverable" || typeof item.parentTitle === "string" || item.parentTitle === null)
     && typeof item.parentTaskId === "string" && typeof item.approvalStatus === "string" && typeof item.updatedAt === "string";
 }
 
@@ -64,6 +65,6 @@ export async function loadPlanningItemCandidates(supabase: SupabaseClient, conte
       continuation: offset >= page.total ? null : Buffer.from(JSON.stringify({ ...next, binding: sign(context, query, next) })).toString("base64url"),
       sourceRevision: page.source_revision, observedAt: page.observed_at, validUntil: page.valid_until };
     return { status: "ready", authorityDeadline: deadline, candidates: query.kind === "epic"
-      ? { ...common, kind: "epic", defaultCandidate: page.default_candidate } : common };
+      ? { ...common, kind: "epic", defaultCandidate: page.default_candidate } : query.kind === "deliverable" ? { ...common, kind: "deliverable" } : common };
   } catch { return { status: "unavailable" }; }
 }
