@@ -77,3 +77,63 @@ test("releasing the final candidate consumer aborts transport and cannot publish
   pending.resolve(receipt()); expect(await reading).toMatchObject({ ok: false });
   expect(port.candidates?.(query)).toMatchObject({ readStatus: "not-loaded", items: [] });
 });
+
+const pageBasis = receipt();
+pageBasis.readAuthority.deadline = Date.now() + 60_000;
+function page(items: typeof item[], continuation: string | null, sourceRevision = "candidate-source-one") {
+  return { ...pageBasis, candidates: { ...pageBasis.candidates, items, total: 2, coverage: continuation ? "partial" as const : "complete" as const, continuation, sourceRevision } };
+}
+const secondItem = { ...item, id: "second-initiative", title: "Säulen zweite Seite" };
+
+test("compatible further-page demand coalesces and appends every candidate without replacing the first page", async () => {
+  const next = deferred<ReturnType<typeof page>>(), reads: InitiativeCandidateQuery[] = [];
+  const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => null,
+    readCandidates: async (scope: InitiativeCandidateQuery) => { reads.push(scope); return scope.continuation ? next.promise : page([item], "candidate-next"); } };
+  const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
+  await planning.loadCandidates(query, { immediate: true });
+  const continuation = planning.candidates(query).continuation!;
+  const one = planning.loadCandidates({ ...query, continuation }, { immediate: true });
+  const two = planning.loadCandidates({ ...query, continuation }, { immediate: true });
+  expect(reads.map(scope => scope.continuation || "initial")).toEqual(["initial", "candidate-next"]);
+  next.resolve(page([secondItem], null));
+  expect(await one).toMatchObject({ ok: true }); expect(await two).toMatchObject({ ok: true });
+  expect(planning.candidates(query)).toMatchObject({ readStatus: "current", coverage: "complete", total: 2, continuation: null, items: [item, secondItem] });
+  expect(planning.candidate(item.id)?.title).toBe(item.title);
+});
+
+test("a failed further page preserves usable candidates and retries only the missing page", async () => {
+  const reads: Array<string | undefined> = []; let fail = true;
+  const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => null,
+    readCandidates: async (scope: InitiativeCandidateQuery) => {
+      reads.push(scope.continuation);
+      if (!scope.continuation) return page([item], "candidate-next");
+      if (fail) throw { status: 503 };
+      return page([secondItem], null);
+    } };
+  const { planning } = createPlanningState({ userId: "candidate-user", initialData: emptyPlanningShellState, initialCurrentProfile: actor, adapter });
+  await planning.loadCandidates(query, { immediate: true });
+  expect(await planning.loadCandidates({ ...query, continuation: "candidate-next" }, { immediate: true })).toMatchObject({ ok: false });
+  expect(planning.candidates(query)).toMatchObject({ readStatus: "current", furtherReadStatus: "unavailable", items: [item], coverage: "partial", continuation: "candidate-next" });
+  expect(planning.candidate(item.id)?.title).toBe(item.title);
+  fail = false;
+  expect(await planning.loadCandidates({ ...query, continuation: "candidate-next" }, { immediate: true })).toMatchObject({ ok: true });
+  expect(reads).toEqual([undefined, "candidate-next", "candidate-next"]);
+  expect(planning.candidates(query).items).toEqual([item, secondItem]);
+});
+
+test("known source invalidation restarts candidate discovery without sending an obsolete continuation", async () => {
+  const reads: InitiativeCandidateQuery[] = []; let source = "candidate-source-one";
+  const data = { ...emptyPlanningShellState, profiles: [actor], tasks: [task] };
+  const adapter = { saveTask: async () => ({ task }), readWorkspace: async () => ({ data, scopeRevision: "candidate-source-one", taskCoverage: "partial" as const }),
+    readPlanningSourceVersion: async () => source,
+    readCandidates: async (scope: InitiativeCandidateQuery) => { reads.push(scope); return page(scope.continuation ? [secondItem] : [item], "candidate-next", source); } };
+  const { planning } = createPlanningState({ userId: "candidate-user", initialData: data, initialCurrentProfile: actor, adapter });
+  await planning.refreshWorkspace("planning"); await planning.loadCandidates(query, { immediate: true });
+  const previousCursor = planning.candidates(query).continuation!;
+  source = "candidate-source-two"; await planning.checkPlanningSource();
+  expect(planning.candidates(query)).toMatchObject({ readStatus: "stale", continuation: null });
+  await planning.loadCandidates({ ...query, continuation: previousCursor }, { immediate: true });
+  expect(reads.map(scope => scope.continuation)).toEqual([undefined, undefined]);
+  expect(planning.candidates(query)).toMatchObject({ readStatus: "current", items: [item], coverage: "partial" });
+  expect(planning.candidate(item.id)?.title).toBe(item.title);
+});

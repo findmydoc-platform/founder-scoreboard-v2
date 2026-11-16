@@ -48,12 +48,13 @@ const meta = { component: CreateStory, title: "Features/Tasks/Organisms/NewTaskD
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function InitiativeDiscoveryStory() {
+function InitiativeDiscoveryStory({ paging = false }: { paging?: boolean }) {
   const [selected, setSelected] = useState("");
   const [queries, setQueries] = useState<string[]>([]);
   const [bundle] = useState(() => {
     const state = createBrowserPlanningState({ initialData: initial, initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: profile, initialUserId: "candidate-story-user", initialWorkspace: "planning" });
     const deadline = Date.now() + 60_000;
+    const observedAt = new Date().toISOString();
     state.runtime.session = { userId: state.runtime.userId, revision: "candidate-story-session", expiresAt: deadline / 1000, user: { id: state.runtime.userId } };
     state.runtime.apiClient = {
       async requestJson<T>(input: Parameters<BrowserApiClient["requestJson"]>[0]) {
@@ -61,9 +62,12 @@ function InitiativeDiscoveryStory() {
         const scope = JSON.parse(url.searchParams.get("scope") || "{}");
         if (url.pathname !== "/api/planning-board-data" || scope.view !== "candidates") throw new Error("Unexpected candidate story read");
         setQueries(previous => [...previous, scope.query]);
-        const items = scope.query === "säulen" ? [{ id: "off-page-initiative", title: "Säulen außerhalb des Boards", taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-01T12:00:00Z" }] : [];
-        return { response: new Response(null), body: { candidates: { items, total: items.length, coverage: "complete", continuation: null,
-          sourceRevision: "candidate-story-source", observedAt: new Date().toISOString(), validUntil: new Date(deadline).toISOString() },
+        const target = { id: "off-page-initiative", title: "Säulen außerhalb des Boards", taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-01T12:00:00Z" };
+        const firstPage = Array.from({ length: 20 }, (_, index) => ({ ...target, id: `candidate-page-${index + 1}`, title: `Säulen Beispiel ${index + 1}` }));
+        const items = scope.query !== "säulen" ? [] : paging && !scope.continuation ? firstPage : [target];
+        const further = paging && scope.query === "säulen" && !scope.continuation;
+        return { response: new Response(null), body: { candidates: { items, total: scope.query === "säulen" && paging ? 21 : items.length, coverage: further ? "partial" : "complete", continuation: further ? "candidate-story-next" : null,
+          sourceRevision: "candidate-story-source", observedAt, validUntil: new Date(deadline).toISOString() },
         readAuthority: { userId: state.runtime.userId, deadline }, readActor: { profileId: profile.id, platformRole: profile.platformRole } } as T };
       },
       requestForm: async () => { throw new Error("Unexpected form"); }, requestBlob: async () => { throw new Error("Unexpected blob"); },
@@ -95,6 +99,28 @@ export const InitiativeDiscoveryRetainsSelectionAcrossSearch: Story = {
     await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Unveränderter Entwurf");
     await userEvent.keyboard("{Escape}");
     await userEvent.click(canvas.getByRole("button", { name: "Deliverable vorschlagen" }));
+    await expect(canvas.getByLabelText("Submitted Initiative")).toHaveTextContent("off-page-initiative");
+  },
+};
+
+export const InitiativeFurtherPageRetainsSelectionAcrossSearch: Story = {
+  render: () => <InitiativeDiscoveryStory paging />,
+  play: async () => {
+    const canvas = within(document.body);
+    await userEvent.click(canvas.getByRole("combobox", { name: "Initiative" }));
+    const search = await canvas.findByRole("searchbox", { name: "Initiative suchen" });
+    await userEvent.type(search, "Säulen"); await userEvent.keyboard("{Enter}");
+    await expect(await canvas.findByRole("option", { name: "Säulen Beispiel 1" })).toBeVisible();
+    await userEvent.click(await canvas.findByRole("button", { name: "Weitere Initiativen laden" }));
+    await userEvent.click(await canvas.findByRole("option", { name: "Säulen außerhalb des Boards" }));
+    await expect(canvas.getByRole("combobox", { name: "Initiative" })).toHaveTextContent("Säulen außerhalb des Boards");
+    await userEvent.click(canvas.getByRole("combobox", { name: "Initiative" }));
+    const replacement = canvas.getByRole("searchbox", { name: "Initiative suchen" });
+    await userEvent.clear(replacement); await userEvent.type(replacement, "Kein Treffer"); await userEvent.keyboard("{Enter}");
+    await expect(await canvas.findByText("Keine Initiativen gefunden.")).toBeVisible();
+    await expect(canvas.getByRole("combobox", { name: "Initiative" })).toHaveTextContent("Säulen außerhalb des Boards");
+    await expect(canvas.getByRole("textbox", { name: /Titel/ })).toHaveValue("Unveränderter Entwurf");
+    await userEvent.keyboard("{Escape}"); await userEvent.click(canvas.getByRole("button", { name: "Deliverable vorschlagen" }));
     await expect(canvas.getByLabelText("Submitted Initiative")).toHaveTextContent("off-page-initiative");
   },
 };
