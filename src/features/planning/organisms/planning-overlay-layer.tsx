@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState, type ComponentProps } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
 import { TaskDetailPendingPanel } from "@/features/tasks/molecules/task-detail-pending-panel";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 
@@ -64,6 +67,19 @@ const TaskDetailPanel = dynamic(
   () => import("@/features/tasks/organisms/task-detail-panel").then((module) => module.TaskDetailPanel),
   { loading: () => <OverlayLoadingFallback label="Aufgabendetails werden geladen …" surface="panel" /> },
 );
+
+// This scope mounts on selection while the presentation module remains lazy.
+function ModalReadScope({ planningState, ...props }: ComponentProps<typeof TaskDetailPanel> & { planningState: PlanningState }) {
+  const [activeTab, setActiveTab] = useState<TaskDetailTabId>("overview");
+  const childCapable = props.task.taskType === "epic" || props.task.taskType === "initiative" || props.task.taskType === "deliverable";
+  useEffect(() => {
+    if (props.detailReadMode !== "scoped" || activeTab !== "overview" || !childCapable) return;
+    const controller = new AbortController();
+    void planningState.loadTaskDetail(props.task.id, { area: "children", signal: controller.signal });
+    return () => controller.abort();
+  }, [planningState, props.detailReadMode, props.task.id, activeTab, childCapable]);
+  return <TaskDetailPanel {...props} tabControl={{ value: activeTab, onChange: setActiveTab }} childrenDemandOwned />;
+}
 
 export function PlanningOverlayLayer({ controller }: { controller: PlanningAppController }) {
   const {
@@ -137,7 +153,9 @@ export function PlanningOverlayLayer({ controller }: { controller: PlanningAppCo
         />
       )}
       {selectedTask && (
-        <TaskDetailPanel
+        <ModalReadScope
+          key={selectedTask.id}
+          planningState={controller.planningState}
           detailReadMode="scoped"
           restoreFocusRef={controller.taskPanelReturnFocusRef}
           task={selectedTask}

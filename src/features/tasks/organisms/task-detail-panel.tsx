@@ -15,8 +15,12 @@ import type { ReviewEvidenceSubmission } from "@/features/reviews/model/review-e
 import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import type { ApprovalDecisionAction, AuthenticatedProfile, Profile, ReviewDecision, Sprint, Task, TaskActivity, TaskBlocker, TaskComment, TaskExternalComment, TaskRelation, TaskRelationType, TaskReview, TaskReviewChecklist } from "@/lib/types";
 
+import type { TaskDetailTabId } from "@/features/tasks/molecules/task-detail-tabs";
+
 type Props = {
   detailReadMode?: "scoped" | "complete";
+  tabControl?: { value: TaskDetailTabId; onChange: (tab: TaskDetailTabId) => void };
+  childrenDemandOwned?: boolean;
   restoreFocusRef?: RefObject<HTMLElement | null>;
   task: Task;
   initiative?: Task;

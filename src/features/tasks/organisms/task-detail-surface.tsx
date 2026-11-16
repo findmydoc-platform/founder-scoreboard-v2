@@ -55,6 +55,8 @@ import { classNames, UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 type TaskDetailSurfaceProps = {
   detailReadMode?: "scoped" | "complete";
+  tabControl?: { value: TaskDetailTabId; onChange: (tab: TaskDetailTabId) => void };
+  childrenDemandOwned?: boolean;
   surface?: "page" | "modal";
   task: Task;
   initiative?: Task;
@@ -116,26 +118,48 @@ type TaskDetailSurfaceProps = {
   onDecideApproval: (action: ApprovalDecisionAction, note?: string, basis?: Task) => void;
 };
 
+type TaskDetailReadContext = {
+  detailOwner: PlanningState | null;
+  scopedDetail: boolean;
+  directChildType: Task["taskType"] | null;
+};
+type TaskDetailSurfaceEntryProps = TaskDetailSurfaceProps & TaskDetailReadContext & {
+  activeTab: TaskDetailTabId;
+  setActiveTab: (tab: TaskDetailTabId) => void;
+};
+
 export function TaskDetailSurface(props: TaskDetailSurfaceProps) {
   const detailOwner = usePlanningBusinessState();
   // Protocol capability does not certify target fields or read authority.
   const scopedDetail = props.detailReadMode === "scoped"
     || props.detailReadMode === undefined && detailOwner?.taskDetail(props.task.id).scopedRead === true;
+  const directChildType = props.task.taskType === "epic" ? "initiative"
+    : props.task.taskType === "initiative" ? "deliverable"
+      : props.task.taskType === "deliverable" ? "sub_issue" : null;
+  const context: TaskDetailReadContext = { detailOwner, scopedDetail, directChildType };
+  return props.tabControl
+    ? <TaskDetailSurfaceEntry {...props} {...context} activeTab={props.tabControl.value} setActiveTab={props.tabControl.onChange} />
+    : <LocalTaskDetailSurface props={props} context={context} />;
+}
+
+function LocalTaskDetailSurface({ props, context }: { props: TaskDetailSurfaceProps; context: TaskDetailReadContext }) {
   const [activeTab, setActiveTab] = useState<TaskDetailTabId>(() => {
     const target = props.requestedCommentTarget || "";
     if (target.startsWith("relation:")) return "relationships";
     if (target.startsWith("field:") || target.startsWith("blocker:")) return "overview";
     return target ? "activity" : "overview";
   });
-  const directChildType = props.task.taskType === "epic" ? "initiative"
-    : props.task.taskType === "initiative" ? "deliverable"
-      : props.task.taskType === "deliverable" ? "sub_issue" : null;
+  return <TaskDetailSurfaceEntry {...props} {...context} activeTab={activeTab} setActiveTab={setActiveTab} />;
+}
+
+function TaskDetailSurfaceEntry(props: TaskDetailSurfaceEntryProps) {
+  const { detailOwner, scopedDetail, activeTab, setActiveTab, directChildType } = props;
   useEffect(() => {
-    if (!detailOwner || !scopedDetail || activeTab !== "overview" || !directChildType) return;
+    if (props.childrenDemandOwned || !detailOwner || !scopedDetail || activeTab !== "overview" || !directChildType) return;
     const controller = new AbortController();
     void detailOwner.loadTaskDetail(props.task.id, { area: "children", signal: controller.signal });
     return () => controller.abort();
-  }, [detailOwner, scopedDetail, props.task.id, activeTab, directChildType]);
+  }, [props.childrenDemandOwned, detailOwner, scopedDetail, props.task.id, activeTab, directChildType]);
   if (props.task.detailAvailability === "summary") {
     return (
       <div className="p-6" role="status" aria-live="polite">
@@ -218,13 +242,7 @@ function HydratedTaskDetailSurface({
   onAddRelation,
   onRemoveRelation,
   onDecideApproval,
-}: TaskDetailSurfaceProps & {
-  detailOwner: PlanningState | null;
-  scopedDetail: boolean;
-  activeTab: TaskDetailTabId;
-  setActiveTab: (tab: TaskDetailTabId) => void;
-  directChildType: Task["taskType"] | null;
-}) {
+}: TaskDetailSurfaceEntryProps) {
   const confirmationPending = taskSaves.some(save => save.phase === "unconfirmed" || save.phase === "blocked");
   const pending = requestPending || confirmationPending;
   useEffect(() => {
