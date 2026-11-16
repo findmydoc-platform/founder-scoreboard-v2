@@ -58,6 +58,7 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
       }
       if (path === "/api/planning-revision") return Response.json({ revision: model.board.workspaceRevision });
       if (path === `/api/tasks/${parent.id}/detail-data`) {
+        if (url.searchParams.get("area") !== "children") return Response.json({ error: "Independent child demand required" }, { status: 400 });
         setDetailReads(value => value + 1);
         if (++reads === 1 && failure !== "none") return Response.json({ error: failure === "forbidden" ? "Kein Zugriff auf diese Aufgabe." : "Details sind vorübergehend nicht erreichbar." }, { status: failure === "forbidden" ? 403 : 503 });
         return new Promise<Response>(resolve => { completeChildRead = () => resolve(Response.json({ taskDetail: { ...base, item: { ...parent, detailAvailability: undefined }, children }, unavailable: [] })); });
