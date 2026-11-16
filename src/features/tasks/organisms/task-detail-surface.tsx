@@ -490,8 +490,7 @@ function HydratedTaskDetailSurface({
         <TaskOverviewPanel
           task={task}
           subIssues={directChildren}
-      subIssuesKnown={!scopedDetail || Boolean(scopedView?.childProgress)}
-      childProgress={scopedDetail ? scopedView?.childProgress || null : undefined}
+          subIssuesKnown={!scopedDetail || Boolean(scopedView?.childProgress)}
           onOpenTask={openTask}
           profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}
