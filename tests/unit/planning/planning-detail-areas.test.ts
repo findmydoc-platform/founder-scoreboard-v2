@@ -118,3 +118,33 @@ test("compact child refresh retains full target and child draft content without 
   expect(await editor.save({ description: "Unsaved child draft" })).toMatchObject({ ok: false, kind: "versionConflict" });
   expect(saves).toBe(0);
 });
+
+test("child coverage distinguishes partial, complete-empty and failed refresh while progress and identity remain separate", async () => {
+  const child = { ...task, id: "covered-child", taskType: "sub_issue" as const, parentTaskId: task.id };
+  let coverage: "complete" | "partial" = "partial", children = [child], fail = false, reads = 0;
+  const { planning } = createPlanningState({ userId: "user-a", initialData: { ...emptyPlanningShellState, tasks: [task] }, adapter: {
+    readWorkspace: async () => null, saveTask: async () => ({ task }),
+    readTaskDetail: async () => {
+      reads++;
+      if (fail) throw Object.assign(new Error("Child list unavailable"), { status: 503 });
+      return { model: { ...target, readArea: "children", children, coverage: { children: coverage },
+        ...(coverage === "complete" ? { childProgress: { completed: 0, total: children.length, unfinished: children.length, percentage: 0 } } : {}) } as TaskDetailModel,
+        readAuthority: { userId: "user-a", deadline: target.authorityDeadline! } };
+    },
+  } });
+  expect(planning.taskDetail(task.id)).toMatchObject({ childrenCoverage: "not-loaded", childProgress: null });
+  await planning.loadTaskDetail(task.id, { area: "children" });
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [child], childrenCoverage: "partial", childProgress: null });
+  coverage = "complete";
+  await planning.loadTaskDetail(task.id, { area: "children" });
+  expect(planning.taskDetail(task.id)).toMatchObject({ childrenCoverage: "complete", childProgress: { total: 1, unfinished: 1 } });
+  await planning.loadTaskDetail(task.id, { area: "children" });
+  expect(reads).toBe(2);
+  fail = true;
+  await Reflect.apply(planning.loadTaskDetail, planning, [task.id, { area: "children", refresh: true }]);
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [child], childrenCoverage: "failed", childProgress: null });
+  fail = false; children = [];
+  await planning.loadTaskDetail(task.id, { area: "children" });
+  expect(planning.taskDetail(task.id)).toMatchObject({ children: [], childrenCoverage: "complete-empty", childProgress: { total: 0, unfinished: 0 } });
+  expect(planning.taskDetail(child.id).task?.id).toBe(child.id);
+});
