@@ -1196,7 +1196,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const includesDiscussion = !area || area === "discussion";
       const includesTimeline = !area || area === "timeline";
       const includesRelationships = !area;
-      const includesChildren = !area;
+      const includesChildren = !area || area === "children";
       const existing = detailReads.get(key);
       if (existing) return area ? retainDetailRead(key, taskId, area, existing, options?.signal) : existing;
       const demand = area ? { controller: new AbortController(), consumers: new Set<symbol>(), settled: false, previous: (area === "target" ? detailStatuses.get(taskId) : detailAreaStatuses.get(key)) || "not-loaded" as PlanningReadStatus } : undefined;

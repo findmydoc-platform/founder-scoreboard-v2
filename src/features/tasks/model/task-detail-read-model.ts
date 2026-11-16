@@ -22,7 +22,7 @@ export const taskDetailReadLimits = {
   reviews: 100,
 } as const;
 
-export type TaskDetailReadArea = "target" | "discussion" | "timeline";
+export type TaskDetailReadArea = "target" | "discussion" | "timeline" | "children";
 
 export type TaskDetailUnavailableArea = "discussion" | "relationships" | "timeline";
 
