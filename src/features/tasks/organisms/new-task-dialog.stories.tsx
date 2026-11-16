@@ -304,6 +304,10 @@ async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:b
   const canvas=within(canvasElement),page=within(document.body),trigger=canvas.getByRole("combobox",{name:"Verknüpfte Aufgabe"});
   await waitFor(()=>expect(trigger).toHaveTextContent(storedRelationshipTarget.title));
   await expect(canvas.getByLabelText("Relationship selection context reads")).toHaveTextContent("1");
+  if (subIssue) {
+    const dialog = canvas.getByRole("dialog", { name: "Neues Sub-Issue" });
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Dialog schließen", exact: true })).toHaveFocus());
+  }
   await userEvent.type(canvas.getByPlaceholderText("Optionaler Hinweis zur Abhängigkeit"),"Mein erhaltener Hinweis");
   await userEvent.click(canvas.getByRole("combobox",{name:"Beziehungstyp"}));
   await userEvent.click(await page.findByRole("option",{name:"Blockiert"}));
