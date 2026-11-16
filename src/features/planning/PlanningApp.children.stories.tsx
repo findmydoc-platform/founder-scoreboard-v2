@@ -7,7 +7,7 @@ import { emptyPlanningShellState } from "./model/planning-shell-state";
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn } from "./model/planning-board-query";
 import { taskStatuses } from "@/lib/status";
-import type { TaskStatus } from "@/lib/types";
+import type { Task, TaskStatus } from "@/lib/types";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import { itemPageModel, itemPageProfile, itemPageUser, itemPageHeaderData, mockItemPageBrowser } from "../../../tests/helpers/task-detail-page-browser-fixture";
@@ -61,7 +61,24 @@ function ChildListFlow({ level = "deliverable", failure = "none", summaryFailure
         if (url.searchParams.get("area") !== "children") return Response.json({ error: "Independent child demand required" }, { status: 400 });
         setDetailReads(value => value + 1);
         if (++reads === 1 && failure !== "none") return Response.json({ error: failure === "forbidden" ? "Kein Zugriff auf diese Aufgabe." : "Details sind vorübergehend nicht erreichbar." }, { status: failure === "forbidden" ? 403 : 503 });
-        return new Promise<Response>(resolve => { completeChildRead = () => resolve(Response.json({ taskDetail: { ...base, item: { ...parent, detailAvailability: undefined }, children }, unavailable: [] })); });
+        const deadline = Date.now() + 60_000, observedAt = new Date().toISOString();
+        const omitted: (keyof Task)[] = ["description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "note",
+          "strategy", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason", "dependsOn", "evidenceLink", "assignee", "owner", "createdBy"];
+        const compact = (task: Task) => {
+          const row = { ...task, detailAvailability: "summary" as const };
+          omitted.forEach(field => { delete row[field]; });
+          return row;
+        };
+        return new Promise<Response>(resolve => { completeChildRead = () => resolve(Response.json({
+          readAuthority: { userId: itemPageUser.id, deadline }, taskDetail: {
+            revision: base.revision, readArea: "children", sourceRevision: `fixture-detail:${parent.id}:${base.revision}:children`, observedAt, validUntil: null,
+            authorityDeadline: deadline, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole },
+            supportingData: "omitted", taskOmittedFields: omitted, coverage: { children: "complete" },
+            item: compact(parent), ancestors: base.ancestors.map(compact), children: children.map(compact), relatedItems: [],
+            childProgress: { completed: 1, total: 2, unfinished: 1, percentage: 50 },
+            discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+          }, unavailable: [],
+        })); });
       }
       if (path === `/api/tasks/${children[0].id}/detail-data`) {
         setDetailReads(value => value + 1);
