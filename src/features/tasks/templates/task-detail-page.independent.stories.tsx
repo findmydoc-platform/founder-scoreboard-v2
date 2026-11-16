@@ -80,8 +80,13 @@ export const FailedAreaRetriesWithoutReplacingTheTarget: Story = {
     await waitFor(() => expect([...areas].sort()).toEqual(["discussion", "discussion", "timeline"]));
     await waitFor(() => expect(canvas.getByRole("tab", { name: /Aktivität/ })).toHaveFocus());
     await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
-    await expect(canvas.getByText("Unteraufgaben noch nicht geladen.")).toBeVisible();
-    await expect(canvas.getByRole("button", { name: "Unteraufgaben laden" })).toBeEnabled();
+    await expect(await canvas.findByLabelText("Sub-Issues werden geladen")).toBeVisible();
+    await waitFor(() => expect(areas.filter(area => area === "children")).toHaveLength(1));
+    releases.splice(0).forEach(release => release());
+    await expect(await canvas.findByText("Unteraufgaben konnten nicht geladen werden.")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Unteraufgaben erneut laden" })).toBeEnabled();
+    await expect(canvas.queryByText("Keine direkten Sub-Issues vorhanden.")).not.toBeInTheDocument();
+    await expect(canvas.getByRole("heading", { name: "Reliable planning", level: 1 })).toBe(heading);
     await userEvent.click(canvas.getByRole("tab", { name: /Beziehungen/ }));
     await expect(canvas.getByText("Beziehungen und Blocker noch nicht geladen.")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Beziehungen laden" })).toBeEnabled();
