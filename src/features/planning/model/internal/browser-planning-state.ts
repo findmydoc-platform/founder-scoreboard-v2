@@ -6,7 +6,7 @@ import { sessionAuthority } from "@/features/administrator-access/model/administ
 
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
-import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
+import { requestBacklogModel, requestBacklogSelection } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
 import { supportingReadCoverage, supportingOmittedFields } from "./supporting-read-coverage";
 import { hierarchyReadCoverage, hierarchyOmittedFields } from "./hierarchy-read-coverage";
@@ -484,6 +484,15 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
+      async readBacklogSelection(query, options) {
+        const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        return { data: backlogModelToPlanningShellState(body.model), readAuthority: body.readAuthority, readActor: body.readActor,
+          backlogSelection: body.model.selection, scopeRevision: body.model.selection.scopeRevision,
+          coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+          taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
       },
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {

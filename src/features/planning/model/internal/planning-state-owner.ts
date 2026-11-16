@@ -1,3 +1,4 @@
+import { normalizeBacklogSelection, type BacklogSelection, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import { taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
@@ -54,7 +55,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 type PlanningTableResult = import("../planning-table-result").PlanningTableResult;
 
-export type PlanningWorkspaceRead = { table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
@@ -95,6 +96,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt>;
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
+  readBacklogSelection?: (query: BacklogSelectionQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[]; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority }>;
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
@@ -179,6 +181,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function invalidatePlanningSource(invalidateChildren = true) {
     candidateReads.invalidate();
+    selectedBacklog = undefined; selectedBacklogRead?.controller.abort();
     if (invalidateChildren) for (const [id, list] of childLists) {
       if (list.readStatus === "current" || list.readStatus === "loading") childLists.set(id, { ...list, readStatus: "stale" });
     }
@@ -259,6 +262,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     for (const read of summaryReads.values()) read.controller.abort();
   }
   const hydrationRequests = new Map<AppWorkspace, ReturnType<typeof beginWorkspaceRead>>();
+  let selectedBacklog: { selection: BacklogSelection; generation: number; session: string | undefined; epoch: number; deadline: number } | undefined;
+  let selectedBacklogRead: { key: string; result: Promise<boolean>; controller: AbortController; consumers: Set<symbol> } | undefined;
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
   let boardResult = initialWorkspaceRead?.board;
@@ -998,7 +1003,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginBacklogAssignment: backlogAssignments.begin,
     backlogAssignments: backlogAssignments.views,
     resumeBacklogAssignment: backlogAssignments.resume,
-    backlog: () => { const view = planning.workspace("backlog"); return { model: { revision: "", coverage: { ...(view.tasks.some(task => taskEffectsPending(task.id)) || backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage), ...(commitments.pending() ? { commitments: "partial" as const } : {}), ...(scoreObjections.scoresUnconfirmed()?{scores:"partial" as const}:{} ) }, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
+    loadBacklogSelection,
+    backlog: () => { const view = planning.workspace("backlog"); return { model: { ...(currentBacklogSelection() ? { selection: currentBacklogSelection() } : {}), revision: selectedBacklog?.selection.sourceRevision || "", coverage: { ...(view.tasks.some(task => taskEffectsPending(task.id)) || backlogOrdering.pending() || backlogAssignments.pending() || pending.size ? { ...backlogCoverage, items: "partial" as const } : backlogCoverage), ...(commitments.pending() ? { commitments: "partial" as const } : {}), ...(scoreObjections.scoresUnconfirmed()?{scores:"partial" as const}:{} ) }, items: view.tasks, people: view.readStatus === "forbidden" || !isActive() ? [] : visible.profiles, sprints: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprints, commitments: view.readStatus === "forbidden" || !isActive() ? [] : visible.sprintCommitments }, readStatus: view.readStatus }; },
 
     sprintPlan: () => { isActive(); return sprintPlan.view(); },
     checkSprintPlan: () => sprintPlan.check(),
@@ -1479,6 +1485,76 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     columnReads.set(column, { key, result });
     void result.finally(() => { if (columnReads.get(column)?.result === result) columnReads.delete(column); }).catch(() => undefined);
     return result;
+  }
+  function currentBacklogSelection() {
+    if (!selectedBacklog || !isActive() || selectedBacklog.generation !== sessionGeneration
+      || selectedBacklog.session !== sessionRevision || selectedBacklog.epoch !== planningSourceEpoch
+      || selectedBacklog.deadline <= (adapter.now?.() ?? Date.now())
+      || workspaceStatuses.get("backlog") !== "current") return undefined;
+    return selectedBacklog.selection;
+  }
+  function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal } = {}): Promise<boolean> {
+    const query = normalizeBacklogSelection(input);
+    if (!query || !isActive() || !sessionRevision || !actorIdentity || !adapter.readBacklogSelection || options.signal?.aborted) return Promise.resolve(false);
+    const key = JSON.stringify(query), current = currentBacklogSelection();
+    if (current && JSON.stringify(current.query) === key) return Promise.resolve(true);
+    let pending = selectedBacklogRead;
+    if (!pending || pending.key !== key || pending.controller.signal.aborted) {
+      pending?.controller.abort();
+      const token = beginWorkspaceRead("backlog"), controller = new AbortController();
+      const actor = { id: actorIdentity.id, role: actorIdentity.platformRole };
+      const consumers = new Set<symbol>();
+      workspaceStatuses.set("backlog", "loading");
+      const bindingCurrent = () => readIsCurrent("backlog", token) && token.sourceEpoch === planningSourceEpoch
+        && actorIdentity?.id === actor.id && actorIdentity.platformRole === actor.role && !controller.signal.aborted;
+      // Dispatch synchronously: an explicit view action must not wait for a debounce or another area.
+      const dispatched = adapter.readBacklogSelection(query, { signal: controller.signal });
+      let onAbort!: () => void;
+      const aborted = new Promise<null>(resolve => { onAbort = () => resolve(null); controller.signal.addEventListener("abort", onAbort, { once: true }); });
+      const result = Promise.race([dispatched, aborted]).then(read => {
+        if (!bindingCurrent()) return false;
+        const selection = read?.backlogSelection, now = adapter.now?.() ?? Date.now();
+        const ids = new Set(read?.data.tasks.map(task => task.id));
+        if (!read || !selection || JSON.stringify(normalizeBacklogSelection(selection.query)) !== key
+          || read.readAuthority?.userId !== userId || !Number.isFinite(read.readAuthority.deadline) || read.readAuthority.deadline <= now
+          || read.readActor?.profileId !== actor.id || read.readActor.platformRole !== actor.role
+          || !selection.sourceRevision || !selection.scopeRevision || !Number.isFinite(Date.parse(selection.observedAt))
+          || !Number.isFinite(Date.parse(selection.validUntil)) || Date.parse(selection.validUntil) <= now
+          || !Number.isSafeInteger(selection.total) || selection.total < selection.itemIds.length
+          || !["complete", "partial"].includes(selection.coverage)
+          || new Set([...selection.itemIds, ...selection.contextIds]).size !== selection.itemIds.length + selection.contextIds.length
+          || [...selection.itemIds, ...selection.contextIds].some(id => !ids.has(id))
+          || selection.itemIds.some(id => !Number.isSafeInteger(selection.rankById[id]) || selection.rankById[id] < 1)) {
+          workspaceStatuses.set("backlog", "unavailable"); publish(); return false;
+        }
+        if (!acceptWorkspaceRead("backlog", read, token)) return false;
+        selectedBacklog = { selection, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
+          deadline: Math.min(read.readAuthority.deadline, Date.parse(selection.validUntil)) };
+        memberships.set("backlog", new Set([...selection.itemIds, ...selection.contextIds]));
+        publish(); return true;
+      }).catch(error => {
+        if (!bindingCurrent()) return false;
+        selectedBacklog = undefined;
+        workspaceStatuses.set("backlog", readErrorStatus(error)); publish(); return false;
+      }).finally(() => { controller.signal.removeEventListener("abort", onAbort); if (selectedBacklogRead?.result === result) selectedBacklogRead = undefined; });
+      pending = { key, result, controller, consumers };
+      selectedBacklogRead = pending;
+      publish();
+    }
+    const consumer = Symbol(); pending.consumers.add(consumer);
+    const lease = pending;
+    let aborted = false;
+    const release = () => {
+      aborted = true; lease.consumers.delete(consumer);
+      if (!lease.consumers.size && selectedBacklogRead === lease) {
+        lease.controller.abort(); selectedBacklogRead = undefined;
+        workspaceStatuses.set("backlog", "stale"); publish();
+      }
+    };
+    options.signal?.addEventListener("abort", release, { once: true });
+    return lease.result.then(ok => !aborted && ok).finally(() => {
+      options.signal?.removeEventListener("abort", release); lease.consumers.delete(consumer);
+    });
   }
   function readIsCurrent(workspace: AppWorkspace, token: ReturnType<typeof beginWorkspaceRead>) {
     if (!isActive() || token.generation !== sessionGeneration || token.sessionRevision !== sessionRevision || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
@@ -1962,7 +2038,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (!revision || revision !== queryRevision) planningQueries.clear();
       queryRevision = revision;
     }
-    if (workspace === "backlog") backlogCoverage = result.backlogCoverage || {};
+    if (workspace === "backlog") { backlogCoverage = result.backlogCoverage || {}; if (!result.backlogSelection) selectedBacklog = undefined; }
     const coverage = result.coverage || workspaceReadCoverage(workspace);
     if (coverage.profiles) acceptProfileScope(workspace, result.data.profiles, coverage.profiles === "complete");
     if (coverage.taskRelations) relationshipChanges.acceptRead(result.data.taskRelations, started, coverage.taskRelations === "complete");
@@ -2050,6 +2126,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function suspendProtected() {
     candidateReads.clear();
+    selectedBacklog = undefined; selectedBacklogRead?.controller.abort();
     failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
     boardInteractions.clear();
@@ -2279,6 +2356,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { selectedBacklogRead?.controller.abort(); candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
   } };
 }
