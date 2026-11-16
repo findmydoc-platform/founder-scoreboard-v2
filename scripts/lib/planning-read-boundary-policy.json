@@ -1185,6 +1185,13 @@
       "target": "active_tasks",
       "fingerprint": "8af64c87c03beb1a875e6b32bcbfaa57e7fef095ebe42cb212f8c50bcae1a874",
       "contract": "BACKLOG-SELECTED"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-backlog-support-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_backlog_support",
+      "fingerprint": "29155065d7ef5c95894cdd1f3f9b9e869089a458a6f062537319f420c1d898a4",
+      "contract": "BACKLOG-SUPPORT"
     }
   ]
 }
