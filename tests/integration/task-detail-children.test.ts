@@ -45,3 +45,30 @@ test("independent direct children enumerate above provider limits with complete 
   expect(opened.status).toBe(200);
   expect((await opened.json()).taskDetail.item).toMatchObject({ id: lastChild, description: "Private full child content" });
 }), 120_000);
+
+test("a same-count direct-child reparent during hydration rejects mixed membership and progress", () => withPlanningCredentialDatabase(async f => {
+  const sibling = `${f.prefix}-sibling`, first = `${f.prefix}-first`, second = `${f.prefix}-second`;
+  await f.db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,approval_status,owner)
+    values($1,'findmydoc-founder-execution','Sibling Initiative','initiative',$2,'Offen','P2','approved',$3)`, [sibling, `${f.prefix}-epic`, f.actors.founder.profileId]);
+  for (const [id, parentId] of [[first, f.initiativeId], [second, sibling]]) await f.db.query(`insert into public.tasks(id,project_id,title,task_type,parent_task_id,status,priority,approval_status,owner)
+    values($1,'findmydoc-founder-execution','Concurrent direct child','deliverable',$2,'Offen','P2','approved',$3)`, [id, parentId, f.actors.founder.profileId]);
+  const transport = globalThis.fetch;
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; }), held = new Promise<void>(resolve => { entered = resolve; });
+  const { vi } = await import("vitest");
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url), response = await transport(request);
+    if (url.pathname.endsWith("/active_tasks") && url.searchParams.get("parent_task_id") === `eq.${f.initiativeId}`) { entered(); await gate; }
+    return response;
+  });
+  const { GET } = await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts", { "server-only": {} });
+  const pending: Promise<Response> = GET(f.request("founder", `/api/tasks/${f.initiativeId}/detail-data?area=children`), { params: Promise.resolve({ id: f.initiativeId }) });
+  try {
+    const firstOutcome = await Promise.race([held.then(() => "children-dispatched"), pending.then(response => `settled-${response.status}`)]);
+    expect(firstOutcome).toBe("children-dispatched");
+    await f.db.query("update public.tasks set parent_task_id=case id when $1 then $2 else $3 end where id=any($4)", [first, sibling, f.initiativeId, [first, second]]);
+  } finally { release(); }
+  const response = await pending;
+  expect(response.status).toBe(409);
+  const body = await response.json(); expect(body).not.toHaveProperty("taskDetail"); expect(body).not.toHaveProperty("readAuthority");
+}), 120_000);
