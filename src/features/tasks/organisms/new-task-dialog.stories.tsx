@@ -306,7 +306,7 @@ async function exerciseCreationRelationship(canvasElement:HTMLElement,subIssue:b
   await expect(canvas.getByLabelText("Relationship selection context reads")).toHaveTextContent("1");
   if (subIssue) {
     const dialog = canvas.getByRole("dialog", { name: "Neues Sub-Issue" });
-    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Dialog schließen", exact: true })).toHaveFocus());
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Dialog schließen" })).toHaveFocus());
   }
   await userEvent.type(canvas.getByPlaceholderText("Optionaler Hinweis zur Abhängigkeit"),"Mein erhaltener Hinweis");
   await userEvent.click(canvas.getByRole("combobox",{name:"Beziehungstyp"}));
