@@ -34,3 +34,26 @@ test("Deliverable parent discovery finds sparse Initiative candidates beyond loa
   // Discovery must select before hydration, rather than enumerate the workspace.
   expect(f.observed.slice(before).some(entry => /\/(active_tasks|tasks)$/.test(entry.path))).toBe(false);
 }), 120_000);
+
+test("candidate discovery retains mapped-role admission and denies direct user RPC access", () => withPlanningCredentialDatabase(async f => {
+  await f.db.query("update public.tasks set title=$1 where id=$2", [f.initiativeId, f.initiativeId]);
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const scope = { view: "candidates", kind: "initiative", query: f.initiativeId, limit: 20 };
+  const path = `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`;
+  for (const role of ["ceo", "deputy", "founder", "viewer"] as const) {
+    const response = await GET(f.request(role, path));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.candidates.items.map((item: { id: string }) => item.id)).toEqual([f.initiativeId]);
+    expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  for (const role of ["unmapped", "administrator"] as const) {
+    const response = await GET(f.request(role, path));
+    expect(response.status).toBe(403);
+    expect(await response.json()).not.toHaveProperty("candidates");
+  }
+  for (const role of ["founder", "unmapped", "anonymous"] as const) {
+    const response = await f.rpc("planning_initiative_candidates", { p_actor_profile_id: f.actors.founder.profileId, p_query: "", p_limit: 20 }, role);
+    expect(response.status).toBe(role === "anonymous" ? 401 : 403);
+  }
+}), 120_000);

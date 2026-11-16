@@ -6,7 +6,8 @@
     "src/features/planning-items/server/workspace-profile-avatars.ts",
     "src/features/planning-items/server/planning-card-summary.ts",
     "src/features/planning-items/server/planning-detail-source.ts",
-    "src/features/planning-items/server/planning-children-read-source.ts"
+    "src/features/planning-items/server/planning-children-read-source.ts",
+    "src/features/planning-items/server/planning-item-candidates-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -141,6 +142,13 @@
       "reason": "The fixed detail capability requests compact direct children independently. Counted enumeration covers the complete active direct-parent scope in stable manual/id order before progress is certified. Original actor/source/time/deadline checks remain at publication; complete dependent action readers retain their separate legacy basis.",
       "evidence": "tests/integration/task-detail-children.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/planning/planning-child-consistency.test.ts; src/features/planning/PlanningApp.children.stories.tsx; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
       "expiresWhen": "Revalidate whenever child membership, progress, compact field coverage or authority changes."
+    },
+    "CANDIDATES": {
+      "consumer": "Initiative candidate discovery for Item selectors",
+      "owner": "Planning and Tasks feature owners",
+      "reason": "The fixed credential-bound operation discovers nontrashed project Initiative identities and labels through a service-only SQL statement. Literal title matching and existing sort_order/id semantics precede the page limit. Fresh user-bound Actor/source publication and independent original authority limits remain required; discovery never authorizes a write or supplies complete canonical Item fields.",
+      "evidence": "tests/integration/planning-item-candidates.test.ts; tests/migrations/20261116170022_planning_initiative_candidates.test.mjs",
+      "expiresWhen": "Revalidate when candidate eligibility, selection, continuation or the declared credential-bound caller changes; each UI selector still needs its own migration evidence."
     }
   },
   "allowedEdges": [
@@ -228,6 +236,11 @@
       "from": "src/features/planning-items/server/planning-children-read-source.ts",
       "to": "src/features/planning-items/server/planning-card-summary.ts",
       "contract": "CHILDREN"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-item-candidates-read-source.ts",
+      "contract": "CANDIDATES"
     }
   ],
   "readSites": [

@@ -12,6 +12,12 @@ The approval record remains [#634](https://github.com/findmydoc-platform/founder
 
 ## Shared guarantees
 
+### Initiative candidate discovery
+
+`GET /api/planning-board-data` accepts a `scope` with `view: "candidates"`, `kind: "initiative"`, a literal title `query` and a bounded `limit`. This distinct candidate operation retains the existing Board-read admission and original authority deadline. It returns ordered scalar identities and labels with an exact matching count, explicit page coverage and a bound continuation. The service-only `planning_initiative_candidates` function applies project, nontrashed Initiative membership and literal case-normalized title matching before `sort_order` and identity ordering and the limit. It does not enumerate or hydrate a workspace. Candidate membership preserves the existing Initiative option population; creation and reparenting still validate current parent approval, type, lifecycle and revisions independently.
+
+Continuation signatures bind the normalized query, page size, actor and credential context to the original source, evaluation time, temporal bound and authority deadline. Publication uses the existing user-bound fresh Actor/source certificate. Changed or expired bases return a continuation conflict rather than mixed results. Candidate rows do not certify canonical Item field coverage. This API capability does not establish that a selector has migrated; per-selector UI discovery and retained selected context require their own inventory evidence. Its focused executable contract is `tests/integration/planning-item-candidates.test.ts`, with privilege and existing-record preservation checked by the matching migration test.
+
 ### Scope, selection and coverage
 
 Completeness follows the task's authorized scope. Collection membership, contextual records and Item existence are separate. A partial collection can be useful; exact totals, direct-child progress, blocker signals and dependent actions need their own complete bases. Missing, not loaded, loading, partial, stale, unverified, unavailable and forbidden are distinct from proven empty. Never turn unknown into zero, finished or unblocked.
