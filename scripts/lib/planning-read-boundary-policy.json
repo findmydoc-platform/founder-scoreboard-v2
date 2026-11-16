@@ -645,7 +645,7 @@
       "kind": "from",
       "target": "active_tasks",
       "fingerprint": "41caf66a3c4c9594149c1f93475d17526af04bb59e73fb912abe89fdcdaa264e",
-      "contract": "DETAIL",
+      "contract": "CHILDREN",
       "references": 1
     },
     {
@@ -1098,19 +1098,27 @@
       "references": 1
     },
     {
-      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
-      "kind": "from",
-      "target": "active_tasks",
-      "fingerprint": "f5f5b9443bc5b1e6aa5003c4f4a74b4039051c15ef2a15405d1dca236081f5f9",
-      "contract": "DETAIL",
-      "references": 1
-    },
-    {
       "from": "src/features/planning-items/server/planning-children-read-source.ts",
       "kind": "from",
       "target": "active_tasks",
       "fingerprint": "2352065ea0e0f84ab95948ccc21593ccad7b89fbc536bc8be3497f879ab1a54d",
       "contract": "CHILDREN",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "6395a92e1ba04490aebd4652d87680f5f224c829dee12b890e177dd6d34546c9",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "29681c8d9a2ed6aa7fd2571353db743079f919ac0dd612db087a649a76c16c0c",
+      "contract": "DETAIL",
       "references": 1
     }
   ]
