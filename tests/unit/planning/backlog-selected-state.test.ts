@@ -94,3 +94,21 @@ test("selected Backlog shares its transport until the final consumer releases an
     expect(owner.planning.taskDetail(parent.id).task).toBeNull();
   } finally { owner.internal.dispose(); }
 });
+
+test("known source replacement invalidates selected Backlog membership and rejects an in-flight old-source response", async () => {
+  const held = deferred<SelectedRead>(); let source = "selected-backlog-source";
+  const data = { ...emptyPlanningShellState, tasks: [selected], profiles: [actor] };
+  const owner = createPlanningState({ userId: "selected-backlog-user", initialData: data, initialCurrentProfile: actor,
+    initialSession: { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 },
+    adapter: { saveTask: async () => ({ task: selected }), readWorkspace: async () => ({ data, scopeRevision: "selected-backlog-source", taskCoverage: "partial" }),
+      readPlanningSourceVersion: async () => source, readBacklogSelection: async () => held.promise } });
+  try {
+    await owner.planning.refreshWorkspace("planning");
+    const pending = owner.planning.loadBacklogSelection(query);
+    source = "replacement-backlog-source";
+    expect(await owner.planning.checkPlanningSource()).toBe("changed");
+    held.resolve(response()); expect(await pending).toBe(false);
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.backlog().readStatus).not.toBe("current");
+  } finally { owner.internal.dispose(); }
+});
