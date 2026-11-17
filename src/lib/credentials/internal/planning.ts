@@ -333,18 +333,41 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       return result;
     },
     async loadBacklog(query?: BacklogSelectionQuery | import("@/features/backlog/model/backlog-support").BacklogSupportQuery | import("@/features/backlog/model/backlog-rank-target").BacklogRankQuery, options?: { signal?: AbortSignal }) {
-      if (action !== "planning.backlog.read" || await current()) return { status: "forbidden" as const };
-      if (!query) return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
-      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
-      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
-      const context = { authorized: true, actorProfileId: profile?.id || null,
-        authorityDeadline: readAuthority?.deadline, publicationSource, signal,
-        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
-          .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") };
-      const result = query.view === "backlog-support" ? await loadPlanningBacklogSupport(service, context, query)
-        : query.view === "backlog-rank" ? await loadPlanningBacklogRankTarget(service, context, query) : await loadPlanningBacklogSelection(service, context, query);
-      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
-      return result.status === "ready" && readAuthority ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline) } } : result;
+      const selected = query?.view === "backlog";
+      if (action !== "planning.backlog.read" || !selected && await current()) return { status: "forbidden" as const };
+      let admissionChecked = false, admissionDenied = false;
+      const admitSelection = async () => {
+        admissionChecked = true;
+        admissionDenied = true;
+        const denial = await current();
+        admissionDenied = Boolean(denial);
+        return denial;
+      };
+      try {
+        if (!query) return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+        const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+        const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+        const context = { authorized: true, actorProfileId: profile?.id || null,
+          authorityDeadline: readAuthority?.deadline, publicationSource, signal,
+          authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+            .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") };
+        // The selected RPC keeps its fresh dispatch guard. Local rejection still needs admission before disclosure.
+        const selectedService = selected ? planningService(strictService, admitSelection, () => {
+          if (!detailEnvironmentCurrent()) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+          assertKnown();
+        }) : null;
+        const result = query.view === "backlog-support" ? await loadPlanningBacklogSupport(service, context, query)
+          : query.view === "backlog-rank" ? await loadPlanningBacklogRankTarget(service, context, query)
+            : selectedService ? await loadPlanningBacklogSelection(selectedService, context, query) : { status: "unavailable" as const };
+        if (selected && !admissionChecked) await admitSelection();
+        if (admissionDenied) return { status: "forbidden" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        return result.status === "ready" && readAuthority ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline) } } : result;
+      } catch (error) {
+        if (selected && !admissionChecked) await admitSelection();
+        if (admissionDenied) return { status: "forbidden" as const };
+        throw error;
+      }
     },
     async loadSprint() {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };

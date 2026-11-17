@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 import { buildBacklogOverviewViewModel, buildBacklogTableViewModel, DEFAULT_BACKLOG_FILTERS } from "@/features/backlog/model/backlog-view-model";
@@ -41,6 +41,93 @@ test("selected Backlog searches the full authorized description scope before pag
   expect(second.model.selection.itemIds).toEqual(expected.slice(20,40));expect(second.model.selection.sourceRevision).toBe(selected.sourceRevision);
   expect(second.readAuthority.deadline).toBeLessThanOrEqual(body.readAuthority.deadline);
   expect((await read({...filters,query:query+" changed"},selected.continuation)).status).toBe(409);
+}),120_000);
+
+test.each(["current", "role", "unmapped", "revoked", "deadline"] as const)("selected Backlog admits local cursor rejection without privileged dispatch after %s boundary", boundary => withPlanningCredentialDatabase(async f => {
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const scope={view:"backlog" as const,filters:{...DEFAULT_BACKLOG_FILTERS,query:f.prefix},limit:20};
+  const permission=await authorizeCredentialAction({credential:{kind:"session-request",request:f.request("founder","/api/backlog-data")},action:"planning.backlog.read"});
+  expect(permission.ok).toBe(true);
+  if(!permission.ok||!permission.readAuthority)throw new Error("Expected original Selected authority");
+  const originalDeadline=permission.readAuthority.deadline;
+  const invalidSignature=Buffer.from(JSON.stringify({offset:1,source:"untrusted-source",observedAt:new Date().toISOString(),validUntil:new Date(originalDeadline).toISOString(),deadline:originalDeadline,binding:"0".repeat(64)})).toString("base64url");
+  let restoreClock: (()=>void) | undefined;
+  try {
+    if(boundary==="role")await f.db.query("update public.profiles set platform_role='viewer' where id=$1",[f.actors.founder.profileId]);
+    if(boundary==="unmapped")await f.db.query("update public.profiles set auth_user_id=null where id=$1",[f.actors.founder.profileId]);
+    if(boundary==="revoked")await f.db.query("delete from auth.sessions where id=$1",[f.actors.founder.sessionId]);
+    if(boundary==="deadline") {
+      const clock=vi.spyOn(Date,"now").mockReturnValue(originalDeadline);
+      restoreClock=()=>clock.mockRestore();
+    }
+    for(const continuation of ["invalid-json",invalidSignature]) {
+      const before=f.observed.length;
+      const result=await permission.planning.loadBacklog({...scope,continuation});
+      expect(result).toEqual({status:boundary==="current"?"staleContinuation":"forbidden"});
+      expect(result).not.toHaveProperty("model");
+      const dispatches=f.observed.slice(before);
+      expect(dispatches.filter(row=>row.path==="/rest/v1/rpc/planning_backlog_selection"||row.path==="/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+      if(boundary==="current")expect(dispatches.filter(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.actor==="founder")).toHaveLength(1);
+      expect(permission.readAuthority.deadline).toBe(originalDeadline);
+    }
+    const result=await permission.planning.loadBacklog(scope);
+    expect(result.status).toBe(boundary==="current"?"ready":"forbidden");
+    if(boundary!=="current")expect(result).not.toHaveProperty("model");
+  } finally { restoreClock?.(); }
+}),120_000);
+
+test.each(["fresh-profile", "publication-role", "publication-source"] as const)("selected Backlog retains the %s fence around privileged dispatch", boundary => withPlanningCredentialDatabase(async f => {
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const scope={view:"backlog",filters:{...DEFAULT_BACKLOG_FILTERS,query:f.prefix},limit:20};
+  const transport=globalThis.fetch;
+  let profiles=0,changed=false;
+  vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const request=new Request(input,init),path=new URL(request.url).pathname;
+    if(path==="/rest/v1/rpc/current_authenticated_profile") {
+      profiles++;
+      if(boundary==="fresh-profile"&&profiles===2) {
+        await f.db.query("update public.profiles set platform_role='viewer' where id=$1",[f.actors.founder.profileId]);
+        changed=true;
+      }
+    }
+    const response=await transport(request);
+    if(path==="/rest/v1/rpc/planning_backlog_selection"&&!changed) {
+      expect(response.status).toBe(200);
+      if(boundary==="publication-role")await f.db.query("update public.profiles set platform_role='viewer' where id=$1",[f.actors.founder.profileId]);
+      if(boundary==="publication-source")await f.db.query("update public.tasks set title=title||' changed source' where id=$1",[f.initiativeId]);
+      changed=true;
+    }
+    return response;
+  });
+  try {
+    const response=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(changed).toBe(true);
+    expect(response.status).toBe(boundary==="publication-source"?409:403);
+    const body=await response.json();expect(body).not.toHaveProperty("model");
+    if(boundary==="publication-source")expect(body.code).toBe("stale_continuation");
+    expect(f.observed.filter(row=>row.path==="/rest/v1/rpc/planning_backlog_selection")).toHaveLength(boundary==="fresh-profile"?0:1);
+    expect(f.observed.filter(row=>row.path==="/rest/v1/rpc/planning_board_publication_context"&&row.actor==="founder")).toHaveLength(boundary==="fresh-profile"?0:1);
+  } finally { vi.stubGlobal("fetch",transport); }
+}),120_000);
+
+test("selected Backlog retains the original credential environment before privileged dispatch", () => withPlanningCredentialDatabase(async f => {
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const scope={view:"backlog" as const,filters:{...DEFAULT_BACKLOG_FILTERS,query:f.prefix},limit:20};
+  const permission=await authorizeCredentialAction({credential:{kind:"session-request",request:f.request("founder","/api/backlog-data")},action:"planning.backlog.read"});
+  expect(permission.ok).toBe(true);
+  if(!permission.ok||!permission.readAuthority)throw new Error("Expected original Selected environment binding");
+  const originalDeadline=permission.readAuthority.deadline,before=f.observed.length;
+  try {
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY","replaced-synthetic-service-key");
+    const result=await permission.planning.loadBacklog(scope);
+    expect(result).toEqual({status:"unavailable"});
+    expect(result).not.toHaveProperty("model");
+    expect(f.observed.slice(before).filter(row=>row.path==="/rest/v1/rpc/planning_backlog_selection"||row.path==="/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+    expect(permission.readAuthority.deadline).toBe(originalDeadline);
+  } finally { vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY",f.local.SERVICE_ROLE_KEY); }
+  const recovered=await permission.planning.loadBacklog(scope);
+  expect(recovered.status).toBe("ready");
+  expect(permission.readAuthority.deadline).toBe(originalDeadline);
 }),120_000);
 
 test("selected Backlog retains mapped reader roles and denies unmapped or direct user selection", () => withPlanningCredentialDatabase(async f => {
@@ -121,7 +208,7 @@ test("filtered Backlog returns exact bounded Parent progress without hydrating i
   expect(body.model.selection.sourceRevision).toBeTruthy();expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
 }),120_000);
 
-test("selected Backlog hydrates only authorized page references without separate data HTTP dispatches", () => withPlanningCredentialDatabase(async f => {
+test("selected Backlog hydrates bounded references with one fresh pre-RPC admission and no separate data HTTP dispatches", () => withPlanningCredentialDatabase(async f => {
   const query=`${f.prefix} atomic hydration`,sprintId=`${f.prefix}-hydration-sprint`;
   await f.db.query("insert into public.sprints(id,project_id,name,status,start_date,end_date) values($1,'findmydoc-founder-execution','Bounded reference Sprint','planning','2026-11-16','2026-11-29')",[sprintId]);
   await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,sort_order,approval_status,owner,assignee,created_by,sprint_id)
@@ -150,4 +237,9 @@ test("selected Backlog hydrates only authorized page references without separate
   expect(second.readAuthority.deadline).toBeLessThanOrEqual(body.readAuthority.deadline);
   expect(dispatches.some(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.actor==="founder")).toBe(true);
   expect(dispatches.filter(row=>["/rest/v1/active_tasks","/rest/v1/profiles","/rest/v1/sprints"].includes(row.path)).map(row=>row.path)).toEqual([]);
+  const selectedDispatch = dispatches.findIndex(row=>row.path==="/rest/v1/rpc/planning_backlog_selection");
+  expect(selectedDispatch).toBeGreaterThan(-1);
+  // Initial session admission remains separate from the fresh guard at the privileged RPC.
+  expect(dispatches.slice(0,selectedDispatch).filter(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.actor==="founder")).toHaveLength(2);
+  expect(dispatches.slice(selectedDispatch+1).filter(row=>row.path==="/rest/v1/rpc/planning_board_publication_context"&&row.actor==="founder")).toHaveLength(1);
 }),120_000);
