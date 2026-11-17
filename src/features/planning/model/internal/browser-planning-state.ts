@@ -556,7 +556,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         }
         if (workspace === "backlog") {
           const { response, body } = await requestBacklogModel(ownedApiClient);
-          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status, code: body?.code });
+          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
           return { data: backlogModelToPlanningShellState(body.model), coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
         }
         if (isSupportingWorkspace(workspace)) {
