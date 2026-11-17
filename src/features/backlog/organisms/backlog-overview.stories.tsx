@@ -321,6 +321,7 @@ function SelectedInitiativeBacklogStory() {
 
 export const SelectedInitiativeBacklogTraversesCompactPagesWithoutLosingCompletedMembership:Story={
  name:"Selected Initiative Backlog traverses compact pages including completed membership",render:()=> <SelectedInitiativeBacklogStory/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.level":"initiative","backlog.query":"Strategischer Suchtext"}}}},
  beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);url.searchParams.set("backlog.level","initiative");url.searchParams.set("backlog.query","Strategischer Suchtext");window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
  play:async({canvasElement})=>{
   const canvas=within(canvasElement);
