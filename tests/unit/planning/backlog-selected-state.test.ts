@@ -134,7 +134,7 @@ test("selected Backlog rejects a continuation from a replaced source before publ
   try {
     expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
     expect(await owner.planning.loadBacklogSelection(nextQuery)).toBe(false);
-    expect(owner.planning.taskDetail(other.id).task).toBeUndefined();
+    expect(owner.planning.taskDetail(other.id).task).toBeNull();
     expect(owner.planning.taskDetail(selected.id).task?.note).toBe(selected.note);
   } finally { owner.internal.dispose(); }
 });
