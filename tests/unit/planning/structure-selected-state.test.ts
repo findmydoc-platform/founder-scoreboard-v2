@@ -51,7 +51,9 @@ test("Structure keeps root and parent receipts independent but rejects older sou
     expect(await state.planning.loadStructure(children)).toBe(true);
     expect(state.planning.structure(children).selection?.itemIds).toEqual([child.id]);
     now = newer.readAuthority.deadline + 1; expect(state.planning.structure(children).readStatus).toBe("stale");
-    const oldResponse = response(roots, "old-source"); held.resolve(oldResponse); expect(await old).toBe(false);
+    const oldResponse = response(roots, "old-source"); oldResponse.readAuthority.deadline = now + 60_000;
+    oldResponse.model = { ...oldResponse.model, structure: { ...oldResponse.model.structure, validUntil: new Date(now + 60_000).toISOString() } };
+    held.resolve(oldResponse); expect(await old).toBe(false);
     expect(state.planning.structure(roots).selection).toBeUndefined();
   } finally { state.internal.dispose(); }
 });
