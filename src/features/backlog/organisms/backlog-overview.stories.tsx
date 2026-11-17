@@ -200,7 +200,7 @@ function SelectedBacklogScopeStory() {
     assigneeId:profile.id,ownerId:profile.id,assignee:profile.name,owner:profile.name,hours:1,updatedAt:"2026-11-01T12:00:00Z"});});
   const done=taskDetailStoryTask({id:"scoped-completed",title:"Erledigter Kontext",parentTaskId:parent.id,status:"Erledigt"});
   const fullModel:BacklogModel={revision:"scoped-source",items:[parent,...rows,done],people:[profile],sprints:[sprint],
-    commitments:[{id:"scoped-commitment",sprintId:sprint.id,profileId:profile.id,commitmentLevel:"Standard",weeklyHours:13,note:"",updatedAt:"2026-11-01T12:00:00Z"}],
+    commitments:[{id:1,sprintId:sprint.id,profileId:profile.id,commitmentLevel:"Standard",weeklyHours:13,note:"",updatedAt:"2026-11-01T12:00:00Z"}],
     coverage:{items:"complete",people:"complete",sprints:"complete",commitments:"complete",strategies:"complete",raci:"complete",links:"complete"}};
   const full=buildBacklogViewModel(fullModel,"all"),match=buildBacklogTableViewModel(fullModel,{...DEFAULT_BACKLOG_FILTERS,query:"Verdeckter Suchtext"});
   const deadline=Date.now()+60_000,userId="scoped-backlog-user";
