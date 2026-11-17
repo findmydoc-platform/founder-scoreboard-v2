@@ -1,5 +1,7 @@
 "use client";
 
+import { backlogSelectionRead } from "../planning-backlog-hydration";
+
 import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { githubUserConnectionStateFromStatus } from "../github-app-connection";
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
@@ -39,6 +41,7 @@ import type { AppWorkspace } from "../workspace-routes";
 
 export type PlanningPageState = {
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
+  initialBacklogRead?: import("../planning-backlog-hydration").PlanningBacklogHydration;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialData: PlanningShellState;
@@ -107,6 +110,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     if (runtime.userId && (!authority || authority.userId !== runtime.userId || !Number.isFinite(authority.deadline) || authority.deadline <= Date.now())) throw new Error("Die ursprüngliche Leseberechtigung konnte nicht bestätigt werden.");
   }
   const owner = createPlanningState({
+    initialBacklogRead: options.initialBacklogRead,
     initialWorkspaceRead: options.initialWorkspaceRead,
     initialServerHeaderRead: options.initialServerHeaderRead,
     initialSession: options.initialWorkspaceRead?.session || options.initialTaskDetailRead?.session,
@@ -520,10 +524,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
         if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
-        return { data: backlogModelToPlanningShellState(body.model), readAuthority: body.readAuthority, readActor: body.readActor,
-          backlogSelection: body.model.selection, scopeRevision: body.model.selection.scopeRevision,
-          coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
-          taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
+        return backlogSelectionRead(body.model, body.readAuthority!, body.readActor);
       },
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {

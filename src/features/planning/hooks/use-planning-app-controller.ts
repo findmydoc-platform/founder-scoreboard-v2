@@ -11,6 +11,7 @@ import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-
 type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
+  initialBacklogRead,
   initialWorkspaceRead,
   initialTaskDetailRead,
   initialServerHeaderRead,
@@ -29,6 +30,7 @@ export function usePlanningAppController({
 }: PlanningAppControllerOptions) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
+    initialBacklogRead,
     initialWorkspaceRead,
     initialTaskDetailRead,
     initialServerHeaderRead,

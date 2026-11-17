@@ -19,6 +19,7 @@ import type { AuthenticatedProfile, PlanningShellState, PlanningHeaderData, Task
 
 export type PlanningBootstrapStateOptions = {
   initialServerHeaderRead?: import("../model/planning-server-header-read").PlanningServerHeaderRead;
+  initialBacklogRead?: import("../model/planning-backlog-hydration").PlanningBacklogHydration;
   initialWorkspaceRead?: import("../model/planning-workspace-hydration").PlanningWorkspaceHydration;
   initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
@@ -36,6 +37,7 @@ export type PlanningBootstrapStateOptions = {
 };
 
 export function usePlanningBootstrapState({
+  initialBacklogRead,
   initialWorkspaceRead,
   initialTaskDetailRead,
   initialServerHeaderRead,
@@ -55,7 +57,7 @@ export function usePlanningBootstrapState({
   const safeInitialData = useMemo(() => normalizePlanningShellState(initialData), [initialData]);
   const safeInitialHeaderData = useMemo(() => normalizePlanningHeaderData(initialHeaderData), [initialHeaderData]);
   const initialClientData = useMemo(() => safeInitialData, [safeInitialData]);
-  const stateOwner = usePlanningStateOwner({ initialTaskDetailRead, initialServerHeaderRead, initialWorkspaceRead, initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
+  const stateOwner = usePlanningStateOwner({ initialBacklogRead, initialTaskDetailRead, initialServerHeaderRead, initialWorkspaceRead, initialDecisionLogResult, initialData: initialClientData, initialHeaderData: safeInitialHeaderData, initialCurrentProfile, initialUserId: initialAuthUser?.id || "", initialWorkspace, initialAdministratorAccess: administratorAccess });
   const { data, planningState } = stateOwner;
   const { workspace, setWorkspace, navigateWorkspaceHref } = usePlanningWorkspace(initialWorkspace, planningState);
   const viewState = usePlanningViewState({

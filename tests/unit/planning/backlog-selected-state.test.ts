@@ -7,10 +7,11 @@ import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-stor
 import type { Task } from "@/lib/types";
 
 const actor = { id: "selected-backlog-reader", name: "Synthetic reader", platformRole: "founder" as const, orgRole: "Founder", githubLogin: "", weeklyCapacity: 40 };
-const selected = taskDetailStoryTask({ id: "selected-backlog-child", title: "Selected child", parentTaskId: "selected-backlog-parent", updatedAt: "2026-11-01T12:00:00Z", note: "Existing canonical note", evidenceLinks: ["https://evidence.example.test/known"] });
+const selectedVersion = "2026-11-01T12:00:00Z";
+const selected = taskDetailStoryTask({ id: "selected-backlog-child", title: "Selected child", parentTaskId: "selected-backlog-parent", updatedAt: selectedVersion, note: "Existing canonical note", evidenceLinks: ["https://evidence.example.test/known"] });
 const parent = taskDetailStoryTask({ id: "selected-backlog-parent", title: "Required context", taskType: "initiative", parentTaskId: "", updatedAt: "2026-11-01T12:00:00Z" });
 const query = normalizeBacklogSelection({ view: "backlog", filters: { ...DEFAULT_BACKLOG_FILTERS, query: "selected" }, limit: 20 })!;
-type SelectedRead = PlanningWorkspaceRead & { backlogSelection: BacklogSelection; readActor: { profileId: string; platformRole: typeof actor.platformRole } };
+type SelectedRead = PlanningWorkspaceRead & { readAuthority: { userId: string; deadline: number }; backlogSelection: BacklogSelection; readActor: { profileId: string; platformRole: typeof actor.platformRole } };
 type PagedPort = { loadBacklogSelection(query: BacklogSelectionQuery, options?: { append?: boolean }): Promise<boolean> };
 type SelectedPort = { loadBacklogSelection?(query: BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal }): Promise<boolean> };
 function deferred<T>() { let resolve!: (value:T)=>void; const promise=new Promise<T>(done=>{resolve=done;});return{promise,resolve}; }
@@ -222,4 +223,247 @@ test("small Parent membership proof expires with its original selected receipt",
   const owner=selectedOwner(async()=>frame,()=>now);
   try{expect(await owner.planning.loadBacklogSelection(unfiltered)).toBe(true);expect(owner.planning.backlog().parentMembershipCompleteIds).toEqual([parent.id]);now=frame.readAuthority!.deadline;expect(owner.planning.backlog().parentMembershipCompleteIds).toEqual([]);expect(owner.planning.backlog().model.selection).toBeUndefined();}
   finally{owner.internal.dispose();}
+});
+
+
+test("a cold Backlog owner admits the exact server-selected receipt after browser session binding without another selected request", async () => {
+  const frame = response();
+  let now = Date.now();
+  frame.backlogSelection = { ...frame.backlogSelection, validUntil: new Date(now + 1_000).toISOString() };
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const reads: BacklogSelectionQuery[] = [];
+  const options = {
+    userId: session.userId,
+    initialWorkspace: "backlog" as const,
+    initialCurrentProfile: actor,
+    initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: frame },
+    adapter: {
+      now: () => now,
+      saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("Cold selected hydration cannot read a workspace"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { reads.push(scope); return frame; },
+    },
+  };
+  const owner = createPlanningState(options);
+  try {
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.taskDetail(selected.id).task).toBeNull();
+    owner.internal.bindSession(session);
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(reads).toEqual([]);
+    expect(owner.planning.backlog()).toMatchObject({ readStatus: "current", model: { selection: frame.backlogSelection } });
+    expect(owner.planning.taskDetail(parent.id).task?.id).toBe(parent.id);
+    expect(owner.planning.taskDetail(selected.id).task?.title).toBe(selected.title);
+    expect(owner.planning.taskDetail(selected.id).task?.description).toBeUndefined();
+    expect(owner.planning.backlog().supportReadStatus).toMatchObject({ controls: "not-loaded", sprints: "not-loaded" });
+    expect(frame.readAuthority.deadline).toBeGreaterThan(Date.parse(frame.backlogSelection.validUntil));
+    now = Date.parse(frame.backlogSelection.validUntil) + 1;
+    expect(owner.planning.backlog().readStatus).toBe("stale");
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(reads).toEqual([]);
+  } finally { owner.internal.dispose(); }
+});
+
+
+test.each(["session", "actor", "deadline", "temporal", "query", "read", "generation", "read then write"] as const)("cold Backlog seed rejects an intervening %s boundary and uses only the selected fallback", async boundary => {
+  const seeded = response(), fresh = response();
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const profile = boundary === "actor" ? { ...actor, id: "replacement-reader" } : actor;
+  fresh.readActor = { profileId: profile.id, platformRole: profile.platformRole };
+  if (boundary === "deadline") seeded.readAuthority = { ...seeded.readAuthority!, deadline: Date.now() - 1 };
+  if (boundary === "temporal") seeded.backlogSelection = { ...seeded.backlogSelection, validUntil: new Date(Date.now() - 1).toISOString() };
+  const activeQuery = boundary === "query" ? normalizeBacklogSelection({ ...query, filters: { ...query.filters, query: "replacement" } })! : query;
+  fresh.backlogSelection = { ...fresh.backlogSelection, query: activeQuery };
+  const reads: BacklogSelectionQuery[] = [];
+  const saved = { ...selected, title: "Confirmed newer title", updatedAt: "2026-11-02T12:00:00Z" };
+  if (boundary === "read then write") fresh.data = { ...fresh.data, tasks: [saved, parent] };
+  const options = { userId: session.userId, initialWorkspace: "backlog" as const, initialCurrentProfile: profile, initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: seeded }, adapter: {
+      saveTask: async () => ({ task: saved }),
+      readWorkspace: async () => { throw new Error("No workspace hydration fallback"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { reads.push(scope); return fresh; },
+      readBacklogSupport: async () => null,
+      readTaskDetail: async () => ({ readAuthority: fresh.readAuthority, model: {
+        revision: selectedVersion, sourceRevision: fresh.backlogSelection.sourceRevision, readArea: "target" as const,
+        observedAt: fresh.backlogSelection.observedAt, validUntil: fresh.backlogSelection.validUntil, authorityDeadline: fresh.readAuthority.deadline,
+        readActor: fresh.readActor, project: emptyPlanningShellState.project, item: selected, ancestors: [parent], people: [profile], sprints: [],
+        children: [], relatedItems: [], coverage: {}, discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+      } }),
+    } };
+  const owner = createPlanningState(options);
+  try {
+    owner.internal.bindSession(boundary === "session" ? { ...session, revision: "new-session" } : session);
+    if (boundary === "generation") owner.internal.bindSession({ ...session, revision: "next-generation" });
+    if (boundary === "read") await owner.planning.loadBacklogSupport({ view: "backlog-support", area: "controls", day: "2026-11-17" });
+    if (boundary === "generation") {
+      expect(await owner.planning.loadBacklogSelection(activeQuery, { immediate: true })).toBe(false);
+      expect(reads).toEqual([]);
+      expect(owner.planning.backlog().model.selection).toBeUndefined();
+      expect(owner.planning.taskDetail(selected.id).task).toBeNull();
+      return;
+    }
+    if (boundary === "read then write") {
+      expect(await owner.planning.loadTaskDetail(selected.id, { area: "target" })).toMatchObject({ ok: true });
+      expect(await owner.planning.saveTask(selected, { title: saved.title })).toMatchObject({ ok: true, task: saved });
+    }
+    expect(await owner.planning.loadBacklogSelection(activeQuery, { immediate: true })).toBe(true);
+    expect(reads).toEqual([activeQuery]);
+    expect(owner.planning.backlog().model.selection?.query).toEqual(activeQuery);
+    if (boundary === "read then write") expect(owner.planning.taskDetail(selected.id).task?.title).toBe(saved.title);
+  } finally { owner.internal.dispose(); }
+});
+
+
+test("an independent public Header read preserves cold Backlog seed eligibility", async () => {
+  const frame = response();
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const header = deferred<import("@/lib/types").PlanningHeaderData>();
+  const selectedReads: BacklogSelectionQuery[] = [];
+  let headerReads = 0;
+  const options = { userId: session.userId, initialWorkspace: "backlog" as const, initialCurrentProfile: actor, initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: frame }, adapter: {
+      saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { selectedReads.push(scope); return frame; },
+      readHeader: async () => { headerReads++; return header.promise; },
+    } };
+  const owner = createPlanningState(options);
+  let pendingHeader: Promise<boolean> | undefined;
+  try {
+    owner.internal.bindSession(session);
+    pendingHeader = owner.planning.refreshHeader(["notifications"]);
+    expect(headerReads).toBe(1);
+    expect(owner.planning.header().slots.notifications.readStatus).toBe("loading");
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(selectedReads).toEqual([]);
+    expect(owner.planning.backlog().model.selection?.query).toEqual(query);
+  } finally {
+    const { emptyPlanningHeaderData } = await import("@/lib/planning-header-data");
+    header.resolve(emptyPlanningHeaderData);
+    await pendingHeader;
+    owner.internal.dispose();
+  }
+});
+
+
+test("a newer authorized Candidate source prevents an older cold Backlog seed from becoming current", async () => {
+  const seeded = response(), fresh = response();
+  seeded.backlogSelection = { ...seeded.backlogSelection, sourceRevision: "1", scopeRevision: "cold-source-1" };
+  fresh.backlogSelection = { ...fresh.backlogSelection, sourceRevision: "2", scopeRevision: "cold-source-2" };
+  const freshItem = { ...selected, title: "Selected after source change", updatedAt: "2026-11-02T12:00:00Z" };
+  fresh.data = { ...fresh.data, tasks: [freshItem, parent] };
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const candidateQuery: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery = { view: "candidates", kind: "initiative", query: "", limit: 20 };
+  const candidateReceipt: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt = {
+    candidates: { items: [{ id: parent.id, title: parent.title, taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: selectedVersion }],
+      total: 1, coverage: "complete", continuation: null, sourceRevision: "2", observedAt: fresh.backlogSelection.observedAt, validUntil: fresh.backlogSelection.validUntil },
+    readAuthority: fresh.readAuthority, readActor: fresh.readActor,
+  };
+  const selectedReads: BacklogSelectionQuery[] = [], publishedSources: string[] = [];
+  let candidateReads = 0;
+  const options = { userId: session.userId, initialWorkspace: "backlog" as const, initialCurrentProfile: actor, initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: seeded }, adapter: {
+      saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { selectedReads.push(scope); return fresh; },
+      readCandidates: async () => { candidateReads++; return candidateReceipt; },
+    } };
+  const owner = createPlanningState(options);
+  const unsubscribe = owner.planning.subscribe(() => {
+    const selection = owner.planning.backlog().model.selection;
+    if (selection) publishedSources.push(selection.sourceRevision);
+  });
+  try {
+    owner.internal.bindSession(session);
+    expect(await owner.planning.loadCandidates(candidateQuery, { immediate: true })).toMatchObject({ ok: true });
+    expect(candidateReads).toBe(1);
+    expect(owner.planning.candidates(candidateQuery)).toMatchObject({ readStatus: "current", coverage: "complete", items: candidateReceipt.candidates.items });
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(publishedSources).not.toContain("1");
+    expect(selectedReads).toEqual([query]);
+    expect(owner.planning.backlog().model.selection?.sourceRevision).toBe("2");
+    expect(owner.planning.taskDetail(selected.id).task?.title).toBe(freshItem.title);
+  } finally { unsubscribe(); owner.internal.dispose(); }
+});
+
+
+test.each(["Candidate", "Target"] as const)("a %s read started by the public loading subscriber prevents consumed cold seed publication", async kind => {
+  const seeded = response(), fresh = response();
+  seeded.backlogSelection = { ...seeded.backlogSelection, sourceRevision: "1", scopeRevision: "cold-source-1" };
+  fresh.backlogSelection = { ...fresh.backlogSelection, sourceRevision: "2", scopeRevision: "cold-source-2" };
+  const freshItem = { ...selected, title: "Fresh overlapping target", updatedAt: "2026-11-02T12:00:00Z" };
+  fresh.data = { ...fresh.data, tasks: [freshItem, parent] };
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const candidateQuery: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery = { view: "candidates", kind: "initiative", query: "", limit: 20 };
+  const selectedReads: BacklogSelectionQuery[] = [], publications: string[] = [];
+  let competing: Promise<unknown> | undefined, started = false;
+  const options = { userId: session.userId, initialWorkspace: "backlog" as const, initialCurrentProfile: actor, initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: seeded }, adapter: {
+      saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { selectedReads.push(scope); return fresh; },
+      readCandidates: async () => ({ candidates: { items: [], total: 0, coverage: "complete" as const, continuation: null,
+        sourceRevision: "2", observedAt: fresh.backlogSelection.observedAt, validUntil: fresh.backlogSelection.validUntil }, readAuthority: fresh.readAuthority, readActor: fresh.readActor }),
+      readTaskDetail: async () => ({ readAuthority: fresh.readAuthority, model: {
+        revision: "2026-11-02T12:00:00Z", sourceRevision: JSON.stringify(["2", "0", null, null]), readArea: "target" as const,
+        observedAt: fresh.backlogSelection.observedAt, validUntil: fresh.backlogSelection.validUntil, authorityDeadline: fresh.readAuthority.deadline,
+        readActor: fresh.readActor, project: emptyPlanningShellState.project, item: freshItem, ancestors: [parent], people: [actor], sprints: [],
+        children: [], relatedItems: [], coverage: {}, discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [],
+      } }),
+    } };
+  const owner = createPlanningState(options);
+  const unsubscribe = owner.planning.subscribe(() => {
+    const state = owner.planning.backlog();
+    if (!started && state.readStatus === "loading") {
+      started = true;
+      competing = kind === "Candidate" ? owner.planning.loadCandidates(candidateQuery, { immediate: true }) : owner.planning.loadTaskDetail(selected.id, { area: "target" });
+    }
+    if (state.model.selection) publications.push(state.model.selection.sourceRevision);
+  });
+  try {
+    owner.internal.bindSession(session);
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(started).toBe(true);
+    expect(await competing).toMatchObject({ ok: true });
+    expect(publications).not.toContain("1");
+    expect(selectedReads).toEqual([query]);
+    expect(owner.planning.backlog().model.selection?.sourceRevision).toBe("2");
+    expect(owner.planning.taskDetail(selected.id).task?.title).toBe(freshItem.title);
+  } finally { unsubscribe(); owner.internal.dispose(); }
+});
+
+
+test("a first support read with newer source invalidates the cold seed and requires one selected fallback", async () => {
+  const seeded = response(), fresh = response();
+  seeded.backlogSelection = { ...seeded.backlogSelection, sourceRevision: "1", scopeRevision: "cold-source-1" };
+  fresh.backlogSelection = { ...fresh.backlogSelection, sourceRevision: "2", scopeRevision: "cold-source-2" };
+  const session = { userId: "selected-backlog-user", user: { id: "selected-backlog-user" }, revision: "selected-backlog-session", expiresAt: (Date.now() + 3_600_000) / 1000 };
+  const supportQuery = { view: "backlog-support" as const, area: "controls" as const, day: "2026-11-17" };
+  const reads: BacklogSelectionQuery[] = [];
+  const options = { userId: session.userId, initialWorkspace: "backlog" as const, initialCurrentProfile: actor, initialData: emptyPlanningShellState,
+    initialBacklogRead: { query, session, read: seeded }, adapter: {
+      saveTask: async () => ({ task: selected }),
+      readWorkspace: async () => { throw new Error("No workspace fallback"); },
+      readBacklogSelection: async (scope: BacklogSelectionQuery) => { reads.push(scope); return fresh; },
+      readBacklogSupport: async () => ({ data: emptyPlanningShellState, readAuthority: fresh.readAuthority, readActor: fresh.readActor, backlogControls: {
+        sourceRevision: "2", scopeRevision: "cold-controls", observedAt: fresh.backlogSelection.observedAt, validUntil: fresh.backlogSelection.validUntil, coverage: "complete" as const,
+        levelTotals: { epic: 0, initiative: 1, deliverable: 1 }, scopeCounts: { all: 1, proposals: 0, ready: 0, unscheduled: 1 },
+        statuses: { epic: ["Offen"], initiative: ["Offen"], deliverable: ["Offen"] }, assignees: [], epics: [], initiatives: [],
+      } }),
+    } };
+  const owner = createPlanningState(options);
+  try {
+    owner.internal.bindSession(session);
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(reads).toEqual([]);
+    expect(owner.planning.backlog().model.selection?.sourceRevision).toBe("1");
+    expect(await owner.planning.loadBacklogSupport(supportQuery)).toBe(true);
+    expect(owner.planning.backlog().model.controls?.sourceRevision).toBe("2");
+    expect(owner.planning.backlog().model.selection).toBeUndefined();
+    expect(owner.planning.backlog().readStatus).toBe("stale");
+    expect(await owner.planning.loadBacklogSelection(query, { immediate: true })).toBe(true);
+    expect(reads).toEqual([query]);
+    expect(owner.planning.backlog().model.selection?.sourceRevision).toBe("2");
+  } finally { owner.internal.dispose(); }
 });

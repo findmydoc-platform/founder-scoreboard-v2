@@ -1,3 +1,7 @@
+import { headers } from "next/headers";
+import { readBacklogUrlFilters } from "@/features/backlog/model/backlog-url-filters";
+import { normalizeBacklogSelection } from "@/features/backlog/model/backlog-selection";
+import { backlogSelectionRead, type PlanningBacklogHydration } from "@/features/planning/model/planning-backlog-hydration";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
@@ -20,12 +24,24 @@ import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
 import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 
-async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
+async function loadBacklogPageData(profile?: AuthenticatedProfile | null, params = new URLSearchParams()) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  const [backlog, header] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader()]);
+  const requestHeaders = await headers();
+  // Fetch Metadata limits this optimization to a document request, never authorization.
+  const documentRequest = requestHeaders.get("sec-fetch-dest") === "document" && requestHeaders.get("sec-fetch-mode") === "navigate"
+    && requestHeaders.get("purpose") !== "prefetch" && !requestHeaders.get("sec-purpose")?.includes("prefetch");
+  const query = normalizeBacklogSelection({ view: "backlog", filters: readBacklogUrlFilters(params), limit: 20 });
+  const [backlog, header, selected] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader(),
+    documentRequest && query && permission.readSession ? permission.planning.loadBacklog(query) : undefined]);
+  let initialBacklogRead: PlanningBacklogHydration | undefined;
+  if (selected?.status === "ready" && selected.model.selection && "readAuthority" in selected && selected.readAuthority && permission.readSession && permission.profile && query) {
+    const readActor = { profileId: permission.profile.id, platformRole: permission.profile.platformRole };
+    initialBacklogRead = { query, session: permission.readSession,
+      read: { ...backlogSelectionRead(selected.model, selected.readAuthority, readActor), backlogSelection: selected.model.selection, readActor } };
+  }
   return backlog.status === "ready" && header.ok
-    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
+    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData, initialBacklogRead }
     : { status: "unavailable" as const };
 }
 
@@ -90,7 +106,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
   } catch { return { status: "unavailable" as const }; }
 }
 
-export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput) {
+export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput, backlogParams?: URLSearchParams) {
   if (requiresSupabaseAuth()) {
     const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
@@ -135,7 +151,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
     }
 
     if (initialWorkspace === "backlog") {
-      const backlog = await loadBacklogPageData(auth.profile);
+      const backlog = await loadBacklogPageData(auth.profile, backlogParams);
       if (backlog.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
       }
@@ -144,6 +160,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialData={backlogModelToPlanningShellState(backlog.model)}
           initialHeaderData={backlog.headerData}
           initialWorkspace="backlog"
+          initialBacklogRead={backlog.initialBacklogRead}
           initialBacklogModel={backlog.model}
           source="supabase"
           authRequired
@@ -242,13 +259,14 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
   if (initialWorkspace === "administration") redirect("/planning");
 
   if (initialWorkspace === "backlog") {
-    const backlog = await loadBacklogPageData();
+    const backlog = await loadBacklogPageData(undefined, backlogParams);
     if (backlog.status !== "ready") return <WorkspaceDataUnavailablePage workspace="backlog" />;
     return (
       <PlanningApp
         initialData={backlogModelToPlanningShellState(backlog.model)}
         initialHeaderData={backlog.headerData}
         initialWorkspace="backlog"
+        initialBacklogRead={backlog.initialBacklogRead}
         initialBacklogModel={backlog.model}
         source="supabase"
         authRequired={false}

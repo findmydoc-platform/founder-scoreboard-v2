@@ -112,12 +112,13 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialTaskDetailRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialTaskDetailRead, initialBacklogRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
+  initialBacklogRead?: import("../planning-backlog-hydration").PlanningBacklogHydration;
   initialSession?: BrowserSessionSnapshot;
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialHeaderData?: PlanningHeaderData;
@@ -146,6 +147,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let initialized = active;
   let requiresBoundHydration = false;
   let sequence = 0;
+  let coldBacklogSeed = initialWorkspace === "backlog" && !initialSession && !initialData.tasks.length ? initialBacklogRead : undefined;
+  let coldBacklogSeedEligible = Boolean(coldBacklogSeed);
+  function discardColdBacklogSeed() { coldBacklogSeed = undefined; coldBacklogSeedEligible = false; }
   let sessionGeneration = 0;
   let sessionExpiresAt = initialSession?.expiresAt;
   let sessionRevision = initialSession?.revision;
@@ -959,7 +963,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     structure: structureReads.view,
     candidates: candidateReads.candidates,
     candidate: candidateReads.candidate,
-    loadCandidates: candidateReads.loadCandidates,
+    loadCandidates: (query, options) => {
+      discardColdBacklogSeed();
+      return candidateReads.loadCandidates(query, options);
+    },
     planningInteraction() { isActive(); return planningInteraction; },
     rememberPlanningInteraction(patch) {
       if (!isActive()) return;
@@ -1373,6 +1380,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     beginTaskEdit: taskId => editing.begin(taskId),
     saveTask: (task, patch) => saveTaskWithContext(task, patch, Symbol(task.id)),
     loadTaskDetail(taskId, options) {
+      if (!options?.area || options.area === "target") discardColdBacklogSeed();
       if (options?.signal?.aborted || !isActive() || !adapter.readTaskDetail) return Promise.resolve({ ok: false });
       const area = options?.area;
       const key = area ? taskId+":"+area : taskId;
@@ -1854,7 +1862,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean } = {}): Promise<boolean> {
     const query = normalizeBacklogSelection(input);
+    if (coldBacklogSeed && JSON.stringify(query) !== JSON.stringify(normalizeBacklogSelection(coldBacklogSeed.query))) coldBacklogSeed = undefined;
     if (!query || !isActive() || !sessionRevision || !actorIdentity || !adapter.readBacklogSelection || options.signal?.aborted) return Promise.resolve(false);
+    const readSelected = adapter.readBacklogSelection;
     const section = query.section;
     const receipt = () => section ? orphanBacklogSelections.get(section) : selectedBacklog;
     const setReceipt = (value: BacklogSelectionReceipt | undefined) => { if (section) { if (value) orphanBacklogSelections.set(section, value); else orphanBacklogSelections.delete(section); } else selectedBacklog = value; };
@@ -1875,18 +1885,35 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     let pending = pendingRead();
     if (!pending || pending.key !== requestKey || pending.controller.signal.aborted) {
       pending?.controller.abort();
-      const token = beginWorkspaceRead("backlog", undefined, section), controller = new AbortController();
+      const seed = coldBacklogSeed;
+      coldBacklogSeed = undefined;
+      const useSeed = seed && !options.refresh && !options.append && !query.continuation && !section
+        && sequence === 0 && sessionGeneration === 0 && planningSourceEpoch === 0 && !confirmed.tasks.length
+        && seed.session.userId === userId && seed.session.revision === sessionRevision && seed.session.expiresAt === sessionExpiresAt
+        && seed.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now())
+        && seed.read.readAuthority.userId === userId && seed.read.readAuthority.deadline > (adapter.now?.() ?? Date.now())
+        && Date.parse(seed.read.backlogSelection.validUntil) > (adapter.now?.() ?? Date.now())
+        && seed.read.readActor.profileId === actorIdentity.id && seed.read.readActor.platformRole === actorIdentity.platformRole
+        && Boolean(seed.read.backlogSelection.sourceRevision && seed.read.backlogSelection.scopeRevision);
+      let token = beginWorkspaceRead("backlog", undefined, section);
+      const controller = new AbortController();
       const actor = { id: actorIdentity.id, role: actorIdentity.platformRole };
       const consumers = new Set<symbol>();
       if (!previousPage) setStatus("loading");
       const bindingCurrent = () => readIsCurrent("backlog", token) && token.sourceEpoch === planningSourceEpoch
         && actorIdentity?.id === actor.id && actorIdentity.platformRole === actor.role && !controller.signal.aborted;
       // Dispatch synchronously: an explicit view action must not wait for a debounce or another area.
-      const dispatched = adapter.readBacklogSelection(query, { signal: controller.signal });
+      const dispatched = useSeed ? Promise.resolve(seed.read) : readSelected(query, { signal: controller.signal });
       let onAbort!: () => void;
       const aborted = new Promise<null>(resolve => { onAbort = () => resolve(null); controller.signal.addEventListener("abort", onAbort, { once: true }); });
-      const result = Promise.race([dispatched, aborted]).then(read => {
+      const freshSelectedRead = (): Promise<boolean> => {
+        if (!bindingCurrent()) return Promise.resolve(false);
+        token = beginWorkspaceRead("backlog", undefined, section);
+        return Promise.race([readSelected(query, { signal: controller.signal }), aborted]).then(read => receive(read, false));
+      };
+      const receive = (read: PlanningWorkspaceRead | null, fromSeed: boolean): boolean | Promise<boolean> => {
         if (!bindingCurrent()) return false;
+        if (fromSeed && !coldBacklogSeedEligible) return freshSelectedRead();
         const selection = read?.backlogSelection, now = adapter.now?.() ?? Date.now();
         const ids = new Set(read?.data.tasks.map(task => task.id));
         if (!read || !selection || JSON.stringify(normalizeBacklogSelection(selection.query)) !== key
@@ -1920,6 +1947,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
             ...(previous.parentProgressById || selection.parentProgressById ? { parentProgressById: { ...previous.parentProgressById, ...selection.parentProgressById } } : {}) };
         }
         if (!acceptBacklogSource(selection.sourceRevision, token)) {
+          if (fromSeed) return freshSelectedRead();
           setStatus("stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token)) return false;
@@ -1928,7 +1956,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         displayedBacklogMembers.set(section || "level", new Set([...acceptedSelection.itemIds, ...acceptedSelection.contextIds]));
         publishBacklogMembers();
         publish(); return true;
-      }).catch(error => {
+      };
+      const result = Promise.race([dispatched, aborted]).then(read => receive(read, Boolean(useSeed))).catch(error => {
         if (!bindingCurrent()) return false;
         if (query.continuation && typeof error === "object" && error !== null && "status" in error && error.status === 409 && "code" in error && error.code === "stale_continuation") {
           setReceipt(undefined); setStatus("stale"); publish(); return false;
@@ -2625,6 +2654,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (account !== userId) endSession();
   }
   function bindSession(session: BrowserSessionSnapshot | null) {
+    if (coldBacklogSeed && (!session || coldBacklogSeed.session.userId !== session.userId
+      || coldBacklogSeed.session.revision !== session.revision || coldBacklogSeed.session.expiresAt !== session.expiresAt)) coldBacklogSeed = undefined;
     let authorityChanged = false;
     sessionChanged(session?.userId || null);
     if (session?.userId === userId && !ended) {

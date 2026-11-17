@@ -8,26 +8,13 @@ import { BacklogRankTable } from "@/features/backlog/molecules/backlog-rank-tabl
 import { BacklogScopeTabs } from "@/features/backlog/molecules/backlog-scope-tabs";
 import { BacklogSprintPane } from "@/features/backlog/molecules/backlog-sprint-pane";
 import { PlanningBacklogTree, type BacklogPlanningLevel } from "@/features/backlog/molecules/planning-backlog-tree";
-import { DEFAULT_BACKLOG_FILTERS, buildBacklogOverviewViewModel, buildSelectedBacklogOverviewViewModel, backlogUsesGlobalRank, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
+import { DEFAULT_BACKLOG_FILTERS, buildBacklogOverviewViewModel, buildSelectedBacklogOverviewViewModel, backlogUsesGlobalRank, type BacklogReadinessFilter, type BacklogScope } from "@/features/backlog/model/backlog-view-model";
 import { PlanningLevelSelect } from "@/features/planning/molecules/planning-level-select";
 import type { Sprint, Task } from "@/lib/types";
 import { classNames, UiNotice, UiButton } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar } from "@/shared/molecules/filter-toolbar";
-import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
-
-const backlogFilterSchema: TableUrlSchema<BacklogTableFilters> = {
-  level: enumUrlField("deliverable", ["epic", "initiative", "deliverable"] as const),
-  query: stringUrlField(),
-  scope: enumUrlField("all", ["all", "proposals", "ready", "unscheduled"] as const),
-  status: stringUrlField("Alle"),
-  readiness: enumUrlField("all", ["all", "ready", "incomplete"] as const),
-  priority: stringUrlField("Alle"),
-  epic: stringUrlField("Alle"),
-  initiative: stringUrlField("Alle"),
-  assignee: stringUrlField("Alle"),
-  sort: enumUrlField("rank", ["rank", "priority", "title", "approval", "initiative", "assignee", "readiness", "status"] as const),
-  direction: enumUrlField("asc", ["asc", "desc"] as const),
-};
+import { useTableUrlState } from "@/shared/hooks/use-table-url-state";
+import { backlogFilterSchema } from "../model/backlog-url-filters";
 
 type BacklogOverviewProps = {
   readMode: "legacy" | "selected";
