@@ -83,7 +83,7 @@ function ScopedRefreshFlow({ mode = "backlog" }: { mode?: Scenario }) {
     }}).then(cleanup=>{if(!active)cleanup();else{restore=cleanup;setReady(true);}});
     return()=>{active=false;restore?.();if(previous===null)localStorage.removeItem(key);else localStorage.setItem(key,previous);};
   },[mode]);
-  return <>{Object.entries(counts).map(([key,count])=><output key={key} aria-label={`Scoped ${key} reads`}>{count}</output>)}{ready?<PlanningStateProvider><PlanningApp initialWorkspace={mode==="backlog"?"backlog":"planning"} initialWorkspaceRead={mode==="structure-expired"?initial.read:undefined} initialData={{...emptyPlanningShellState,profiles:[itemPageProfile],...(mode==="structure-expired"?{tasks:initial.model.items}:{})}} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase"><ReceiptProbe mode={mode}/></PlanningApp></PlanningStateProvider>:null}</>;
+  return <>{Object.entries(counts).map(([key,count])=><output key={key} aria-label={`Scoped ${key} reads`}>{count}</output>)}{ready?<PlanningStateProvider><PlanningApp initialWorkspace={mode==="backlog"?"backlog":"planning"} initialBacklogModel={mode==="backlog"?{revision:"",items:[],people:[itemPageProfile],sprints:[],commitments:[],coverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial",strategies:"partial",raci:"partial",links:"partial"}}:undefined} initialWorkspaceRead={mode==="structure-expired"?initial.read:undefined} initialData={{...emptyPlanningShellState,profiles:[itemPageProfile],...(mode==="structure-expired"?{tasks:initial.model.items}:{})}} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase"><ReceiptProbe mode={mode}/></PlanningApp></PlanningStateProvider>:null}</>;
 }
 const meta={title:"Planning/Visible scoped source refresh",component:ScopedRefreshFlow,parameters:{layout:"fullscreen",nextjs:{appDirectory:true,navigation:{pathname:"/backlog"}}},beforeEach:()=>{
   const originalInterval=window.setInterval,originalClearInterval=window.clearInterval,originalTimeout=window.setTimeout,originalClearTimeout=window.clearTimeout;
@@ -106,6 +106,7 @@ export const ActiveBacklogChecksSourceAndRefreshesOnlyNeededScopesWithoutRenewin
  args:{mode:"backlog"},
  play:async({canvasElement})=>{
   const canvas=within(canvasElement),reads=(key:string,count:number)=>waitFor(()=>expect(canvas.getByLabelText(`Scoped ${key} reads`)).toHaveTextContent(String(count)));
+  await canvas.findByRole("searchbox",{name:"Backlog durchsuchen"});
   await reads("membership",1);await reads("controls",1);await reads("sprints",1);
   await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));
   await advance(59_999);await reads("source",0);await advance(1);await reads("source",1);await reads("membership",1);
@@ -141,6 +142,6 @@ export const ExpiredStructureReceiptCannotBorrowTheOlderBoardAuthorityWindow:Sto
   const sourceBefore=Number(canvas.getByLabelText("Scoped source reads").textContent);
   await advance(60_000);await waitFor(()=>expect(canvas.getByLabelText("Scoped membership reads")).toHaveTextContent("2"));
   await expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("2");await expect(canvas.getByLabelText("Scoped source reads")).toHaveTextContent(String(sourceBefore));
-  await expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original");await expect(canvas.getByLabelText("Scoped hidden reads")).toHaveTextContent("0");
+  await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));await expect(canvas.getByLabelText("Scoped hidden reads")).toHaveTextContent("0");
  },
 };
