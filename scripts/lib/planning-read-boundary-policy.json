@@ -1199,7 +1199,7 @@
       "from": "src/features/planning-items/server/planning-backlog-read-source.ts",
       "kind": "rpc",
       "target": "planning_backlog_selection",
-      "fingerprint": "fbf72f098d5c55474c6e16ecedb982240e0aa852f627c357c9523f56ed48af02",
+      "fingerprint": "e40c75a1f55a8a390aed9ab188bca789a8075767007270d610bed64003d86001",
       "contract": "BACKLOG-SELECTED"
     },
     {
