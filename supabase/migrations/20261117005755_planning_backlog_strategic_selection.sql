@@ -80,7 +80,7 @@ basis as materialized (
 )
 select case
   when not exists(select 1 from public.profiles where id=p_actor_profile_id and platform_role in ('ceo','deputy','founder','viewer')) then jsonb_build_object('status','forbidden')
-  when p_filters is null or p_filters->>'level'<>'deliverable' or p_limit not between 1 and 100 or p_offset<0 then jsonb_build_object('status','unavailable')
+  when p_filters is null or p_filters->>'level' not in ('deliverable','initiative') or p_limit not between 1 and 100 or p_offset<0 then jsonb_build_object('status','unavailable')
   when p_source_revision is not null and (p_source_revision<>basis.source_revision or p_evaluated_at is null or p_valid_until is null)
     or temporal.valid_until<=statement_timestamp() then jsonb_build_object('status','staleContinuation')
   else jsonb_build_object('status','ready','source_revision',basis.source_revision,'observed_at',basis.observed_at,'valid_until',temporal.valid_until,
