@@ -53,3 +53,20 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
   const refreshed=await read("orphanInitiatives");expect(refreshed.status).toBe(200);const refreshedSelection=(await refreshed.json()).model.selection;
   expect(refreshedSelection.itemIds).toEqual([`${f.prefix}-orphan-initiative-done`]);expect(refreshedSelection.total).toBe(1);
 }),120_000);
+
+
+test("Epic orphan rollups are complete in the independent controls receipt before membership pages", () => withPlanningCredentialDatabase(async f => {
+  for(const kind of ["initiative","deliverable"]){
+    await f.db.query(`insert into public.tasks(id,project_id,title,task_type,status,priority,sort_order,approval_status,owner)
+      select $1||'-rollup-'||$2||'-'||n,'findmydoc-founder-execution','Synthetic orphan rollup',$2,case when n=1008 then 'Erledigt' else 'Offen' end,'P3',n,$3,$4 from generate_series(1,1008) n`,[f.prefix,kind,kind==="deliverable"?"proposed":"approved",f.actors.founder.profileId]);
+  }
+  const {loadPlanningWorkspaceModel}=await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts",{"server-only":{}});
+  const client=createClient(f.local.API_URL,f.local.SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  const reference=await loadPlanningWorkspaceModel(client,{authorized:true,actorProfileId:f.actors.founder.profileId,query:{view:"complete"}});
+  expect(reference.status).toBe("ready");if(reference.status!=="ready")throw new Error("Complete orphan rollup reference was unavailable");
+  for(const kind of ["initiative","deliverable"]){const rows:Task[]=reference.model.items.filter((row:Task)=>row.taskType===kind&&!row.parentTaskId);expect(rows).toHaveLength(1008);expect(rows.filter(row=>row.status==="Erledigt").map(row=>row.id)).toEqual([`${f.prefix}-rollup-${kind}-1008`]);}
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const response=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog-support",area:"controls",day:"2026-11-01"}))}`));expect(response.status).toBe(200);
+  const body=await response.json();expect(body.model.controls.orphanProgress).toEqual({orphanInitiatives:{total:1008,completed:1,unfinished:1007},orphanDeliverables:{total:1008,completed:1,unfinished:1007}});
+  expect(body.model.items).toEqual([]);expect(body.readActor.profileId).toBe(f.actors.founder.profileId);expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+}),120_000);
