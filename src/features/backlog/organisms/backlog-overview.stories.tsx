@@ -274,7 +274,8 @@ export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetrySt
   await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Vorschläge\s*336$/})).toBeVisible();
   await expect(tabs.getByRole("button",{name:/^Bereit\s*336$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Ohne Sprint\s*672$/})).toBeVisible();
   const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});await userEvent.click(search);fireEvent.change(search,{target:{value:"Verdeckter Suchtext"}});
-  const link=await canvas.findByRole("link",{name:"Nur über Beschreibung gefunden"});await expect(link).toHaveAttribute("href","/tasks/scoped-candidate-1008");
+  const selectedGroup=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  const link=await selectedGroup.findByRole("link",{name:"Nur über Beschreibung gefunden"});await expect(link).toHaveAttribute("href","/tasks/scoped-candidate-1008");
   await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(search).toHaveFocus();
   reference.failSprint();await expect(await canvas.findByText("Sprintplanung konnte nicht geladen werden.")).toBeVisible();await expect(link).toBeVisible();await expect(search).toHaveFocus();
   await userEvent.click(canvas.getByRole("button",{name:"Sprintplanung erneut laden"}));await expect(await canvas.findByText("336h / 13h")).toBeVisible();await expect(link).toBeVisible();
