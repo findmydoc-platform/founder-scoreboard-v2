@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { PlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
 import type { PlanningFilterPreferences } from "@/lib/types";
@@ -118,11 +118,12 @@ function SelectedStructureGroup(props: SelectedStructureProps & { initiative: Ta
   const query: PlanningStructureQuery = { view: "structure", area: "children", parentId: initiative.id, filters: { ...props.filters, sort: "priority", direction: "asc" }, limit: 20 };
   const signature = JSON.stringify(query);
   const [loadingMore, setLoadingMore] = useState(false);
+  const lease = useRef<AbortController | null>(null);
   useEffect(() => {
     if (!expanded) return;
-    const controller = new AbortController();
+    const controller = new AbortController(); lease.current = controller;
     void state.loadStructure(JSON.parse(signature) as PlanningStructureQuery, { signal: controller.signal });
-    return () => controller.abort();
+    return () => { lease.current?.abort(); lease.current = null; };
   }, [state, expanded, signature]);
   const read = state.structure(query);
   return <DataSurface>
@@ -133,10 +134,10 @@ function SelectedStructureGroup(props: SelectedStructureProps & { initiative: Ta
     </div>
     {expanded ? <div className="grid gap-3 p-4">
       {read.readStatus === "loading" || read.readStatus === "not-loaded" ? <p>Aufgaben werden geladen.</p> : null}
-      {read.readStatus === "unavailable" || read.readStatus === "stale" ? <><p>Aufgaben konnten nicht geladen werden.</p><UiButton type="button" onClick={() => void state.loadStructure(query, { refresh: true })}>Aufgaben erneut laden</UiButton></> : null}
+      {read.readStatus === "unavailable" || read.readStatus === "stale" ? <><p>Aufgaben konnten nicht geladen werden.</p><UiButton type="button" onClick={() => { lease.current?.abort(); const controller = new AbortController(); lease.current = controller; void state.loadStructure(query, { refresh: true, signal: controller.signal }); }}>Aufgaben erneut laden</UiButton></> : null}
       {read.readStatus === "forbidden" ? <p>Aufgaben sind nicht verfügbar.</p> : null}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{read.selection?.itemIds.map(id => { const task = state.taskDetail(id).task; return task ? <TaskCard key={id} task={task} assigneeProfile={props.assigneeProfileForTask(task)} relations={props.relations} allTasks={props.allTasks} blockers={props.blockers} onOpenTask={props.onOpenTask} /> : null; })}</div>
-      {read.selection?.continuation ? <UiButton type="button" disabled={loadingMore} onClick={() => { setLoadingMore(true); void state.loadStructure({ ...query, continuation: read.selection!.continuation! }, { append: true }).finally(() => setLoadingMore(false)); }}>Weitere Deliverables laden</UiButton> : null}
+      {read.selection?.continuation ? <UiButton type="button" disabled={loadingMore} onClick={() => { lease.current?.abort(); const controller = new AbortController(); lease.current = controller; setLoadingMore(true); void state.loadStructure({ ...query, continuation: read.selection!.continuation! }, { append: true, signal: controller.signal }).finally(() => { if (!controller.signal.aborted) setLoadingMore(false); }); }}>Weitere Deliverables laden</UiButton> : null}
     </div> : null}
   </DataSurface>;
 }
