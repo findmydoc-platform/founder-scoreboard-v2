@@ -42,7 +42,7 @@ export function createPlanningStructureReads(ports: {
     if (!pending || pending.key !== requestKey || pending.controller.signal.aborted) {
       pending?.controller.abort();
       const controller = new AbortController(), consumers = new Set<symbol>(), started = ports.begin();
-      if (!previous) value.status = "loading";
+      if (!previous && !view(query).selection) value.status = "loading";
       const current = () => value.pending?.controller === controller && !controller.signal.aborted && same(binding, ports.binding());
       const result = ports.read(query, { signal: controller.signal }).then(read => {
         if (!current()) return false;
@@ -91,7 +91,7 @@ export function createPlanningStructureReads(ports: {
     current.count++; mounted.set(signature, current);
     return () => { if (--current.count === 0) { current.controller.abort(); if (mounted.get(signature) === current) mounted.delete(signature); } };
   }
-  function refresh() { return Promise.all([...mounted.values()].map(value => load(value.query, { refresh: true, signal: value.controller.signal }))).then(results => results.every(Boolean)); }
+  function refresh() { const visible = [...mounted.values()]; return Promise.all(visible.map(value => load(value.query, { refresh: true, signal: value.controller.signal }))).then(results => results.every(Boolean)); }
   return { view, load, clear, mount, refresh, mounted: () => mounted.size > 0 };
 
 }
