@@ -11,6 +11,7 @@ export function createPlanningStructureReads(ports: {
   begin: () => number; accept: (read: StructureRead, started: number) => boolean;
 }) {
   const entries = new Map<string, Entry>();
+  const mounted = new Map<string, { query: PlanningStructureQuery; count: number; controller: AbortController }>();
   let acceptedSource: string | undefined, acceptedSequence = 0;
   const key = (query: PlanningStructureQuery) => JSON.stringify({ ...query, continuation: undefined });
   const scope = (query: PlanningStructureQuery) => query.area === "roots" ? "roots" : query.parentId;
@@ -24,6 +25,7 @@ export function createPlanningStructureReads(ports: {
   }
   function clear() {
     for (const entry of entries.values()) entry.pending?.controller.abort();
+    for (const value of mounted.values()) value.controller.abort(); mounted.clear();
     entries.clear(); acceptedSource = undefined; acceptedSequence = 0;
   }
   function load(input: PlanningStructureQuery, options: { signal?: AbortSignal; append?: boolean; refresh?: boolean } = {}): Promise<boolean> {
@@ -84,5 +86,12 @@ export function createPlanningStructureReads(ports: {
     options.signal?.addEventListener("abort", release, { once: true });
     return lease.result.then(ok => !aborted && ok).finally(() => { options.signal?.removeEventListener("abort", release); lease.consumers.delete(consumer); });
   }
-  return { view, load, clear };
+  function mount(query: PlanningStructureQuery) {
+    const signature = key(query), current = mounted.get(signature) || { query: { ...query, continuation: undefined }, count: 0, controller: new AbortController() };
+    current.count++; mounted.set(signature, current);
+    return () => { if (--current.count === 0) { current.controller.abort(); if (mounted.get(signature) === current) mounted.delete(signature); } };
+  }
+  function refresh() { return Promise.all([...mounted.values()].map(value => load(value.query, { refresh: true, signal: value.controller.signal }))).then(results => results.every(Boolean)); }
+  return { view, load, clear, mount, refresh, mounted: () => mounted.size > 0 };
+
 }

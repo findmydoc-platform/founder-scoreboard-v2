@@ -103,7 +103,7 @@ const rootQuery: PlanningStructureQuery = { view: "structure", area: "roots", li
 function SelectedTaskStructureView(props: SelectedStructureProps) {
   const state = props.planningState;
   const roots = state.structure(rootQuery);
-  useEffect(() => { const controller = new AbortController(); void state.loadStructure(rootQuery, { signal: controller.signal }); return () => controller.abort(); }, [state]);
+  useEffect(() => { const release = state.activateStructure(rootQuery), controller = new AbortController(); void state.loadStructure(rootQuery, { signal: controller.signal }); return () => { controller.abort(); release(); }; }, [state]);
   return <div className="grid gap-4">
     <div className="flex justify-end gap-2"><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(true)}>Alle einklappen</UiButton><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(false)}>Alle ausklappen</UiButton></div>
     {roots.readStatus === "loading" || roots.readStatus === "not-loaded" ? <p>Initiativen werden geladen.</p> : null}
@@ -121,9 +121,10 @@ function SelectedStructureGroup(props: SelectedStructureProps & { initiative: Ta
   const lease = useRef<AbortController | null>(null);
   useEffect(() => {
     if (!expanded) return;
+    const release = state.activateStructure(JSON.parse(signature) as PlanningStructureQuery);
     const controller = new AbortController(); lease.current = controller;
     void state.loadStructure(JSON.parse(signature) as PlanningStructureQuery, { signal: controller.signal });
-    return () => { lease.current?.abort(); lease.current = null; };
+    return () => { lease.current?.abort(); lease.current = null; release(); };
   }, [state, expanded, signature]);
   const read = state.structure(query);
   return <DataSurface>

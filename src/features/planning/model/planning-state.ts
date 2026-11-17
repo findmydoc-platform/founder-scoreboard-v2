@@ -99,6 +99,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
   moveBacklogRelative(source: Task, action: import("@/features/backlog/model/backlog-ordering").BacklogMoveAction, options?: { signal?: AbortSignal }): Promise<import("@/features/backlog/model/backlog-ordering").BacklogOrderResult | null>;
+  activateStructure(query: import("./planning-structure-query").PlanningStructureQuery): () => void;
   loadStructure(query: import("./planning-structure-query").PlanningStructureQuery, options?: { signal?: AbortSignal; append?: boolean; refresh?: boolean }): Promise<boolean>;
   structure(query: import("./planning-structure-query").PlanningStructureQuery): { readStatus: PlanningReadStatus; selection?: import("./planning-structure-query").PlanningStructureSelection };
   loadLegacyBacklog(): Promise<boolean>;

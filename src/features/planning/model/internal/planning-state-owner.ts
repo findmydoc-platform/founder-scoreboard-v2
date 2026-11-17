@@ -904,6 +904,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    activateStructure: structureReads.mount,
     loadStructure: structureReads.load,
     structure: structureReads.view,
     candidates: candidateReads.candidates,
@@ -1516,6 +1517,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     refreshWorkspace(workspace) {
       if (!isActive()) return Promise.resolve(false);
+      if (workspace === "planning" && structureReads.mounted()) return structureReads.refresh();
       if (workspace === "backlog" && backlogSelectionQuery) {
         const queries = [backlogSelectionQuery, ...(backlogSelectionQuery.filters.level === "epic" ? orphanSections.flatMap(section => { const query = orphanBacklogQueries.get(section); return query ? [query] : []; }) : [])];
         return Promise.all(queries.map(query => loadBacklogSelection({ ...query, continuation: undefined }, { immediate: true, refresh: true }))).then(results => results.every(Boolean));
