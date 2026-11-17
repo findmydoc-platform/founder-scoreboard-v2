@@ -187,7 +187,7 @@ export const AlternativeViewsRetainBoardPages: Story = {
       if (label === "Gantt") {
         await expect(await canvas.findByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
       }
-      if (label === "Tabelle") await canvas.findByRole("table");
+      if (label === "Tabelle") await canvas.findByRole("heading", { name: "Aufgaben" });
       const lastLink = await canvas.findByRole("link", { name: "Completed work 25" });
       await expect(lastLink).toBeVisible();await expect(lastLink).toHaveAttribute("href", "/tasks/history-24");
       await userEvent.click(canvas.getByRole("button", { name: "Board" }));
