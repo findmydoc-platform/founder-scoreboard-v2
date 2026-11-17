@@ -120,3 +120,34 @@ test("filtered Backlog returns exact bounded Parent progress without hydrating i
   expect(body.readActor).toEqual({profileId:f.actors.founder.profileId,platformRole:"founder"});
   expect(body.model.selection.sourceRevision).toBeTruthy();expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
 }),120_000);
+
+test("selected Backlog hydrates only authorized page references without separate data HTTP dispatches", () => withPlanningCredentialDatabase(async f => {
+  const query=`${f.prefix} atomic hydration`,sprintId=`${f.prefix}-hydration-sprint`;
+  await f.db.query("insert into public.sprints(id,project_id,name,status,start_date,end_date) values($1,'findmydoc-founder-execution','Bounded reference Sprint','planning','2026-11-16','2026-11-29')",[sprintId]);
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,sort_order,approval_status,owner,assignee,created_by,sprint_id)
+    select $1||'-atomic-'||lpad(n::text,4,'0'),'findmydoc-founder-execution','Bounded hydration Item '||n,$2,'deliverable',$3,'Offen','P2',n,'approved',$4,$4,$5,$6
+    from generate_series(1,21) n`,[f.prefix,query,f.initiativeId,f.actors.founder.profileId,f.actors.ceo.profileId,sprintId]);
+  const expected=Array.from({length:21},(_,index)=>`${f.prefix}-atomic-${String(index+1).padStart(4,'0')}`),selectedIds=[...expected.slice(0,20),`${f.prefix}-epic`,f.initiativeId];
+  const {hydrateBacklogItems}=await importTestModule("src/features/planning-items/server/planning-backlog-read-source.ts",{"server-only":{}});
+  const client=createClient(f.local.API_URL,f.local.SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  const reference=await hydrateBacklogItems(client,{authorized:true,actorProfileId:f.actors.founder.profileId},selectedIds);
+  expect(reference).not.toBeNull();
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const scope={view:"backlog",filters:{...DEFAULT_BACKLOG_FILTERS,query},limit:20};
+  const before=f.observed.length;
+  const first=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));expect(first.status).toBe(200);const body=await first.json();
+  const dispatches=f.observed.slice(before);
+  expect(body.model.selection.itemIds).toEqual(expected.slice(0,20));expect(body.model.selection.total).toBe(21);
+  expect(new Set(body.model.selection.contextIds)).toEqual(new Set([`${f.prefix}-epic`,f.initiativeId]));
+  expect(body.model.items).toEqual(reference!.items);
+  const byId=(rows:{id:string}[])=>[...rows].sort((left,right)=>left.id.localeCompare(right.id));
+  expect(byId(body.model.people)).toEqual(byId(reference!.people));expect(byId(body.model.sprints)).toEqual(byId(reference!.sprints));
+  expect(body.model.items).toHaveLength(22);expect(body.model.sprints.map((row:{id:string})=>row.id)).toEqual([sprintId]);
+  expect(body.readActor).toEqual({profileId:f.actors.founder.profileId,platformRole:"founder"});expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  expect(body.model.selection.sourceRevision).toBeTruthy();expect(Date.parse(body.model.selection.validUntil)).toBeGreaterThan(Date.now());
+  const next=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({...scope,continuation:body.model.selection.continuation}))}`));expect(next.status).toBe(200);const second=await next.json();
+  expect(second.model.selection.itemIds).toEqual(expected.slice(20));expect(second.model.selection.sourceRevision).toBe(body.model.selection.sourceRevision);
+  expect(second.readAuthority.deadline).toBeLessThanOrEqual(body.readAuthority.deadline);
+  expect(dispatches.some(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.permit)).toBe(true);
+  expect(dispatches.filter(row=>["/rest/v1/active_tasks","/rest/v1/profiles","/rest/v1/sprints"].includes(row.path)).map(row=>row.path)).toEqual([]);
+}),120_000);
