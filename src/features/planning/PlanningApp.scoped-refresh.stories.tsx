@@ -23,6 +23,7 @@ const omitted: (keyof Task)[] = ["description","note","strategy","problemStateme
 const compact = (task: Task, root = false) => { const row={...task,detailAvailability:"summary" as const};for(const field of omitted)if(!root||field!=="description"&&field!=="strategy")Reflect.deleteProperty(row,field);return row; };
 
 let clock: { now: number; advance(milliseconds: number): void };
+let sourceResponses: Promise<void>[] = [];
 let scenario = { version: "1", failSource: false, memberDeadline: "" };
 function ReceiptProbe({ mode }: { mode: Scenario }) {
   const state = usePlanningBusinessState();
@@ -53,7 +54,9 @@ function ScopedRefreshFlow({ mode = "backlog" }: { mode?: Scenario }) {
       const url=new URL(String(input),"http://localhost:3000");
       if(url.pathname==="/api/planning-source-version"){
         setCounts(value=>({...value,source:value.source+1}));
-        return scenario.failSource?Response.json({error:"Source unavailable"},{status:503}):Response.json({version:scenario.version});
+        let consumed!:()=>void;sourceResponses.push(new Promise<void>(resolve=>{consumed=resolve;}));
+        const track=(response:Response):Response=>{const json=response.json.bind(response),clone=response.clone.bind(response);response.json=async()=>{try{return await json();}finally{consumed();}};response.clone=()=>track(clone());return response;};
+        return track(scenario.failSource?Response.json({error:"Source unavailable"},{status:503}):Response.json({version:scenario.version}));
       }
       if(url.pathname!=="/api/backlog-data"&&url.pathname!=="/api/planning-board-data")return undefined;
       const raw=url.searchParams.get("scope"),query=raw?JSON.parse(raw):null;
@@ -90,7 +93,7 @@ const meta={title:"Planning/Visible scoped source refresh",component:ScopedRefre
   const visibility=Object.getOwnPropertyDescriptor(document,"visibilityState");
   const timers=new Map<number,{callback:()=>void;at:number;interval:boolean}>();let nextId=-1;
   clock={now:Date.now(),advance(milliseconds){clock.now+=milliseconds;for(const [id,timer]of [...timers])if(timer.at<=clock.now){if(timer.interval)timer.at=clock.now+60_000;else timers.delete(id);timer.callback();}}};
-  scenario={version:"1",failSource:false,memberDeadline:""};
+  scenario={version:"1",failSource:false,memberDeadline:""};sourceResponses=[];
   const now=vi.spyOn(Date,"now").mockImplementation(()=>clock.now);
   window.setInterval=((handler:TimerHandler,delay?:number,...args:unknown[])=>{if(delay!==60_000||typeof handler!=="function")return originalInterval(handler,delay,...args);const id=nextId--;timers.set(id,{callback:()=>handler(...args),at:clock.now+delay,interval:true});return id;}) as typeof window.setInterval;
   window.clearInterval=((id?:number)=>{if(id!==undefined&&timers.delete(id))return;originalClearInterval(id);}) as typeof window.clearInterval;
@@ -101,6 +104,7 @@ const meta={title:"Planning/Visible scoped source refresh",component:ScopedRefre
 }} satisfies Meta<typeof ScopedRefreshFlow>;
 export default meta;type Story=StoryObj<typeof meta>;
 const advance=async(milliseconds:number)=>{await act(async()=>clock.advance(milliseconds));};
+const settleSource=async(count:number)=>{await sourceResponses[count-1];await act(async()=>{});};
 const visibility=(value:"visible"|"hidden")=>{Object.defineProperty(document,"visibilityState",{configurable:true,value});fireEvent(document,new Event("visibilitychange"));};
 export const ActiveBacklogChecksSourceAndRefreshesOnlyNeededScopesWithoutRenewingReceipts:Story={
  args:{mode:"backlog"},
@@ -109,16 +113,16 @@ export const ActiveBacklogChecksSourceAndRefreshesOnlyNeededScopesWithoutRenewin
   await canvas.findByRole("searchbox",{name:"Backlog durchsuchen"});
   await reads("membership",1);await reads("controls",1);await reads("sprints",1);
   await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));
-  await advance(59_999);await reads("source",0);await advance(1);await reads("source",1);await reads("membership",1);
-  scenario.version="2";await advance(60_000);await reads("source",2);
+  await advance(59_999);await reads("source",0);await advance(1);await reads("source",1);await settleSource(1);await reads("membership",1);
+  scenario.version="2";await advance(60_000);await reads("source",2);await settleSource(2);
   await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("stale:none"));
   await advance(499);await reads("membership",1);await reads("controls",1);await reads("sprints",1);
   await advance(1);await reads("membership",2);await reads("controls",2);await reads("sprints",2);
   await expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original");
-  scenario.failSource=true;await advance(60_000);await reads("source",3);await reads("membership",2);
+  scenario.failSource=true;await advance(60_000);await reads("source",3);await settleSource(3);await reads("membership",2);
   await expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original");
   visibility("hidden");await advance(60_000);fireEvent(window,new Event("online"));await reads("source",3);
-  visibility("visible");await reads("source",4);scenario.failSource=false;fireEvent(window,new Event("online"));await reads("source",5);await reads("membership",2);
+  visibility("visible");await reads("source",4);await settleSource(4);scenario.failSource=false;fireEvent(window,new Event("online"));await reads("source",5);await settleSource(5);await reads("membership",2);
   await expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original");await reads("hidden",0);
  },
 };
