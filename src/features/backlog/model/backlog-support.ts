@@ -7,6 +7,7 @@ type Option = Readonly<{ value: string; label: string }>;
 export type BacklogControls = Receipt & Readonly<{
   levelTotals: Record<PlanningLevel, number>;
   scopeCounts: Record<import("./backlog-view-model").BacklogScope, number>;
+  orphanProgress?: Record<import("./backlog-selection").BacklogOrphanSection, Readonly<{ total: number; completed: number; unfinished: number }>>;
   statuses: Record<PlanningLevel, readonly string[]>;
   assignees: readonly Option[];
   epics: readonly Option[];
@@ -35,7 +36,13 @@ export function validBacklogControls(value: BacklogControls | undefined) {
   }) && ["all", "proposals", "ready", "unscheduled"].every(scope => {
     const count = value.scopeCounts?.[scope as keyof BacklogControls["scopeCounts"]];
     return Number.isSafeInteger(count) && count >= 0 && count <= value.scopeCounts.all;
-  }) && value.scopeCounts.all <= value.levelTotals.deliverable && [value.assignees, value.epics, value.initiatives].every(options);
+  }) && value.scopeCounts.all <= value.levelTotals.deliverable && [value.assignees, value.epics, value.initiatives].every(options)
+    && (value.orphanProgress === undefined || (["orphanInitiatives", "orphanDeliverables"] as const).every(section => {
+      const progress = value.orphanProgress?.[section];
+      return progress && [progress.total, progress.completed, progress.unfinished].every(count => Number.isSafeInteger(count) && count >= 0)
+        && progress.completed + progress.unfinished === progress.total
+        && progress.total <= value.levelTotals[section === "orphanInitiatives" ? "initiative" : "deliverable"];
+    }));
 }
 export function validBacklogBuckets(value: unknown): value is BacklogSprintBasis["buckets"] {
   return Array.isArray(value) && value.length <= 5 && new Set(value.map(bucket => bucket?.sprint?.id)).size === value.length
