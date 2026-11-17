@@ -135,3 +135,21 @@ test.each(["projects", "events", "tools", "team", "notifications"] as const)("%s
   expect(rebound).toBe(true); expect(page.props.workspace).toBe(workspace);
   expect(page.props.initialProtectedDataLoaded).toBeUndefined();
 });
+
+test("Backlog SSR admits the shell without enumerating capped domain rows or certifying empty membership", async () => {
+  planningProtocol();
+  const original = globalThis.fetch, broadReads: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/") && url.searchParams.get("limit") === "1000") broadReads.push(url.pathname);
+    return original(request);
+  });
+  const page = await renderWorkspacePage("backlog");
+  expect(page.props.initialWorkspace).toBe("backlog");
+  expect(broadReads).toEqual([]);
+  expect(page.props.initialCurrentProfile.platformRole).toBe("founder");
+  expect(page.props.initialData.tasks).toEqual([]);
+  expect(page.props.initialBacklogModel).toMatchObject({ items: [], coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial" } });
+  expect(page.props.initialBacklogModel.selection).toBeUndefined();
+  expect(page.props.initialHeaderData.notifications.state).toBe("idle");
+});

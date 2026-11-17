@@ -1,3 +1,4 @@
+import { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } from "../model/backlog-view-model";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
@@ -185,5 +186,87 @@ export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingIt
   await expect(area.getByRole("progressbar",{name:"1 von 3 Deliverables erledigt"})).toBeVisible();
   await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
   await expect(area.queryByRole("link",{name:childAreaCompleted.title})).not.toBeInTheDocument();
+ },
+};
+
+const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void }>();
+function SelectedBacklogScopeStory() {
+ const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0});
+ const [bundle]=useState(()=>{
+  const profile={id:"scoped-backlog-ceo",name:"Synthetic CEO",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
+  const parent=taskDetailStoryTask({id:"scoped-backlog-parent",title:"Vollständiger ausgewählter Kontext",taskType:"initiative",parentTaskId:"",updatedAt:"2026-11-01T12:00:00Z"});
+  const rows=Array.from({length:1008},(_,index)=>{const n=index+1;return taskDetailStoryTask({id:`scoped-candidate-${n}`,title:n===1008?"Nur über Beschreibung gefunden":`Backlog-Zeile ${n}`,
+    description:n===1008?"Verdeckter Suchtext":"Ordinary description",parentTaskId:parent.id,order:n*10,approvalStatus:n%3===1?"proposed":"approved",sprintId:n%3===2?sprint.id:"",
+    assigneeId:profile.id,ownerId:profile.id,assignee:profile.name,owner:profile.name,hours:1,updatedAt:"2026-11-01T12:00:00Z"});});
+  const done=taskDetailStoryTask({id:"scoped-completed",title:"Erledigter Kontext",parentTaskId:parent.id,status:"Erledigt"});
+  const fullModel:BacklogModel={revision:"scoped-source",items:[parent,...rows,done],people:[profile],sprints:[sprint],
+    commitments:[{id:"scoped-commitment",sprintId:sprint.id,profileId:profile.id,commitmentLevel:"Standard",weeklyHours:13,note:"",updatedAt:"2026-11-01T12:00:00Z"}],
+    coverage:{items:"complete",people:"complete",sprints:"complete",commitments:"complete",strategies:"complete",raci:"complete",links:"complete"}};
+  const full=buildBacklogViewModel(fullModel,"all"),match=buildBacklogTableViewModel(fullModel,{...DEFAULT_BACKLOG_FILTERS,query:"Verdeckter Suchtext"});
+  const deadline=Date.now()+60_000,userId="scoped-backlog-user";
+  const receipt=(scope:string)=>({coverage:"complete" as const,scopeRevision:scope,sourceRevision:"scoped-source",observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString()});
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason"];
+  const compact=(task:Task)=>{const value={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete value[field];});return value;};
+  const partial={items:"partial" as const,people:"partial" as const,sprints:"partial" as const,commitments:"partial" as const,strategies:"partial" as const,raci:"partial" as const,links:"partial" as const};
+  const empty:BacklogModel={revision:"scoped-source",items:[],people:[],sprints:[],commitments:[],coverage:partial};
+  let sprintAttempts=0,failSprint=()=>{};
+  const response=(model:BacklogModel)=>({response:new Response(null),body:{model,readAuthority:{userId,deadline},readActor:{profileId:profile.id,platformRole:profile.platformRole}}});
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+    const url=new URL(String(input),"http://localhost:3000"),raw=url.searchParams.get("scope");
+    if(url.pathname==="/api/backlog-data"){
+      const scope=raw?JSON.parse(raw) as {view:string;area?:string;day?:string;filters?:typeof DEFAULT_BACKLOG_FILTERS;limit?:number;continuation?:string}:null;
+      if(!scope){setRequests(value=>({...value,legacy:value.legacy+1}));return{response:new Response(null,{status:503}),body:{error:"Unscoped Backlog is not the selected read contract"} as T};}
+      if(scope.view==="backlog-support"&&scope.area==="controls"){
+        setRequests(value=>({...value,controls:value.controls+1}));
+        const controlData={...receipt("controls"),levelTotals:{epic:0,initiative:1,deliverable:1009},statuses:{epic:[],initiative:["Offen"],deliverable:["Offen","Erledigt"]},
+          epics:[],initiatives:[{value:parent.id,label:parent.title}],assignees:[{value:profile.id,label:profile.name}],scopeCounts:full.scopeCounts};
+        return response({...empty,controls:controlData}) as BrowserApiJsonResult<T>;
+      }
+      if(scope.view==="backlog-support"&&scope.area==="sprints"){
+        setRequests(value=>({...value,sprints:value.sprints+1}));
+        if(++sprintAttempts===1)return new Promise<BrowserApiJsonResult<T>>(resolve=>{failSprint=()=>resolve({response:new Response(null,{status:503}),body:{error:"Synthetic Sprint basis unavailable"} as T});});
+        return response({...empty,sprintBasis:{...receipt("sprints"),day:scope.day!,buckets:full.sprintBuckets}}) as BrowserApiJsonResult<T>;
+      }
+      if(scope.view==="backlog"&&scope.filters){
+        setRequests(value=>({...value,selected:value.selected+1}));
+        const query={view:"backlog" as const,filters:{...scope.filters,level:"deliverable" as const},limit:scope.limit||20,...(scope.continuation?{continuation:scope.continuation}:{})};
+        const selected=buildBacklogTableViewModel(fullModel,query.filters).visibleItems,chosen=selected.slice(0,query.limit);
+        return response({...empty,items:[...(chosen.length?[parent]:[]),...chosen.map(item=>item.task)].map(compact),people:[profile],sprints:[sprint],taskOmittedFields:omitted,
+          selection:{...receipt("selected"),query,itemIds:chosen.map(item=>item.task.id),contextIds:chosen.length?[parent.id]:[],rankById:Object.fromEntries(chosen.map(item=>[item.task.id,item.rank])),
+            total:selected.length,coverage:chosen.length===selected.length?"complete":"partial",continuation:chosen.length===selected.length?null:"selected-next"}}) as BrowserApiJsonResult<T>;
+      }
+    }
+    if(url.pathname===`/api/tasks/${parent.id}/detail-data`)return{response:new Response(null,{status:503}),body:{error:"Synthetic independent child basis unavailable"} as T};
+    throw new Error("Unexpected selected Backlog request");
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const browser=createBrowserPlanningState({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile});
+  browser.runtime.session={userId,revision:"scoped-backlog-session",expiresAt:deadline/1000,user:{id:userId}};browser.runtime.apiClient=client;
+  return{browser,counts:full.scopeCounts,matches:match.visibleItems.map(item=>item.task.id),failSprint:()=>failSprint()};
+ });
+ useEffect(()=>()=>bundle.browser.owner.internal.dispose(),[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ scopedBacklogChecks.set("selected",bundle);
+ return <main><output aria-label="Ausgewählte Backlog-Abfragen">{requests.selected}</output><output aria-label="Backlog-Filterabfragen">{requests.controls}</output>
+  <output aria-label="Sprintbasis-Abfragen">{requests.sprints}</output><output aria-label="Unbegrenzte Backlog-Abfragen">{requests.legacy}</output>
+  <BacklogOverview {...{readMode:"selected" as const}} planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></main>;
+}
+export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetryStaysIndependent:Story={
+ name:"Selected Backlog retains full controls during independent Sprint retry",render:()=> <SelectedBacklogScopeStory/>,
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement),reference=scopedBacklogChecks.get("selected")!;
+  expect(reference.counts).toEqual({all:1008,proposals:336,ready:336,unscheduled:672});expect(reference.matches).toEqual(["scoped-candidate-1008"]);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1"));
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1"));await waitFor(()=>expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("1"));
+  const tabs=within(canvas.getByRole("group",{name:"Backlog-Scope"}));
+  await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Vorschläge\s*336$/})).toBeVisible();
+  await expect(tabs.getByRole("button",{name:/^Bereit\s*336$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Ohne Sprint\s*672$/})).toBeVisible();
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});await userEvent.click(search);fireEvent.change(search,{target:{value:"Verdeckter Suchtext"}});
+  const link=await canvas.findByRole("link",{name:"Nur über Beschreibung gefunden"});await expect(link).toHaveAttribute("href","/tasks/scoped-candidate-1008");
+  await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(search).toHaveFocus();
+  reference.failSprint();await expect(await canvas.findByText("Sprintplanung konnte nicht geladen werden.")).toBeVisible();await expect(link).toBeVisible();await expect(search).toHaveFocus();
+  await userEvent.click(canvas.getByRole("button",{name:"Sprintplanung erneut laden"}));await expect(await canvas.findByText("336h / 13h")).toBeVisible();await expect(link).toBeVisible();
+  await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
  },
 };
