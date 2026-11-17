@@ -88,3 +88,32 @@ test("Backlog metadata preserves mapped read roles and rejects unmapped and dire
     }
   }
 }), 120_000);
+
+test("Workspace Backlog controls retain user-bound authority while using grouped dispatch preparation", () => withPlanningCredentialDatabase(async f => {
+  const scope={view:"backlog-support",area:"controls",day:"2026-11-17"};
+  const reference=(await f.db.query("select public.planning_backlog_support($1,'controls','2026-11-17') value",[f.actors.founder.profileId])).rows[0].value;
+  expect(reference.status).toBe("ready");
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  let founderDispatches:typeof f.observed=[];
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const){
+    const before=f.observed.length;
+    const response=await GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+    expect(response.status).toBe(200);const body=await response.json(),controls=body.model.controls;
+    expect(Object.fromEntries(Object.keys(reference.controls).map(key=>[key,controls[key]]))).toEqual(reference.controls);
+    expect(body.model.items).toEqual([]);expect(body.model.coverage.items).toBe("partial");expect(controls.coverage).toBe("complete");
+    expect(body.readActor).toEqual({profileId:f.actors[actor].profileId,platformRole:actor==="administrator"?"founder":actor});
+    expect(body.readAuthority.userId).toBe(f.actors[actor].userId);expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+    expect(controls.sourceRevision).toBe(reference.source_revision);expect(controls.scopeRevision).toBeTruthy();
+    expect(Date.parse(controls.observedAt)).toBeLessThanOrEqual(Date.now());expect(Date.parse(controls.validUntil)).toBeLessThanOrEqual(body.readAuthority.deadline);
+    const userBound=f.observed.slice(before).filter(row=>row.actor===actor&&row.path.startsWith("/rest/v1/"));
+    expect(userBound.length).toBeGreaterThan(0);expect(userBound.every(row=>row.permit)).toBe(true);
+    expect((await f.db.query("select count(*)::int as remaining from workspace_private.request_permits where user_id=$1",[f.actors[actor].userId])).rows[0].remaining).toBe(0);
+    if(actor==="founder")founderDispatches=f.observed.slice(before);
+  }
+  const userBound=founderDispatches.filter(row=>row.actor==="founder"&&row.path.startsWith("/rest/v1/"));
+  expect(userBound.filter(row=>row.path==="/rest/v1/rpc/current_authenticated_profile")).toHaveLength(3);
+  expect(userBound.filter(row=>row.path==="/rest/v1/rpc/planning_board_publication_context")).toHaveLength(1);
+  expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_dispatch_prepare")).toHaveLength(userBound.length);
+  expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_issue_permit")).toHaveLength(0);
+  expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_access_context")).toHaveLength(1);
+},"linking"),120_000);
