@@ -112,3 +112,29 @@ test("known source replacement invalidates selected Backlog membership and rejec
     expect(owner.planning.backlog().readStatus).not.toBe("current");
   } finally { owner.internal.dispose(); }
 });
+
+
+test("selected Backlog appends only the next page of the same receipt while retaining the first membership and deadline", async () => {
+  const first=response();first.backlogSelection={...first.backlogSelection,total:2,coverage:"partial",continuation:"selected-next"};
+  const nextQuery={...query,continuation:"selected-next"},other={...selected,id:"selected-next-child",title:"Next selected child"};
+  const second:SelectedRead={...first,data:{...first.data,tasks:[other,parent]},backlogSelection:{...first.backlogSelection,query:nextQuery,itemIds:[other.id],rankById:{[other.id]:1009},coverage:"complete",continuation:null}};
+  const owner=selectedOwner(async scope=>scope.continuation?second:first);
+  try {
+    expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
+    expect(await owner.planning.loadBacklogSelection(nextQuery)).toBe(true);
+    expect(owner.planning.backlog().model.selection).toMatchObject({itemIds:[selected.id,other.id],contextIds:[parent.id],rankById:{[selected.id]:1008,[other.id]:1009},total:2,coverage:"complete",continuation:null,validUntil:first.backlogSelection.validUntil});
+  } finally { owner.internal.dispose(); }
+});
+
+test("selected Backlog rejects a continuation from a replaced source before publishing its fields", async () => {
+  const first=response();first.backlogSelection={...first.backlogSelection,total:2,coverage:"partial",continuation:"selected-next"};
+  const nextQuery={...query,continuation:"selected-next"},other={...selected,id:"wrong-source-child",title:"Unaccepted next child"};
+  const second:SelectedRead={...first,data:{...first.data,tasks:[other,parent]},backlogSelection:{...first.backlogSelection,query:nextQuery,itemIds:[other.id],rankById:{[other.id]:1009},sourceRevision:"replaced-source",coverage:"complete",continuation:null}};
+  const owner=selectedOwner(async scope=>scope.continuation?second:first);
+  try {
+    expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
+    expect(await owner.planning.loadBacklogSelection(nextQuery)).toBe(false);
+    expect(owner.planning.taskDetail(other.id).task).toBeUndefined();
+    expect(owner.planning.taskDetail(selected.id).task?.note).toBe(selected.note);
+  } finally { owner.internal.dispose(); }
+});
