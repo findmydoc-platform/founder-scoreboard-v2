@@ -101,7 +101,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   moveBacklogRelative(source: Task, action: import("@/features/backlog/model/backlog-ordering").BacklogMoveAction, options?: { signal?: AbortSignal }): Promise<import("@/features/backlog/model/backlog-ordering").BacklogOrderResult | null>;
   loadLegacyBacklog(): Promise<boolean>;
   loadBacklogSupport(query: import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean>;
-  loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean }): Promise<boolean>;
   backlog(): { supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;

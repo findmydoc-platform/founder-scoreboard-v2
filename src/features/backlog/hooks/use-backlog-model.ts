@@ -22,7 +22,7 @@ export function useBacklogModel(planningState: PlanningState, readMode: "legacy"
     if (!query || !selection?.continuation || pageController.current) return;
     const controller = new AbortController(); pageController.current = controller;
     setPageRequest({ key: JSON.stringify(query), status: "loading" });
-    void planningState.loadBacklogSelection({ ...query, continuation: selection.continuation }, { immediate: true, signal: controller.signal })
+    void planningState.loadBacklogSelection({ ...query, continuation: selection.continuation }, { immediate: true, append: true, signal: controller.signal })
       .then(ok => { if (!controller.signal.aborted) setPageRequest({ key: JSON.stringify(query), status: ok ? "idle" : "unavailable" }); })
       .finally(() => { if (pageController.current === controller) pageController.current = null; });
   }, [planningState, query]);

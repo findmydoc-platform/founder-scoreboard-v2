@@ -284,7 +284,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   let backlogSelectionQuery: BacklogSelectionQuery | undefined;
   const relativeBacklogMoves = new Map<string, { result: Promise<BacklogOrderResult | null>; controller: AbortController; consumers: Set<symbol>; writing: boolean }>();
-  let selectedBacklog: { selection: BacklogSelection; generation: number; session: string | undefined; epoch: number; deadline: number } | undefined;
+  let selectedBacklog: { selection: BacklogSelection; intent: "append" | "replace"; generation: number; session: string | undefined; epoch: number; deadline: number } | undefined;
   let selectedBacklogRead: { key: string; result: Promise<boolean>; controller: AbortController; consumers: Set<symbol> } | undefined;
   let backlogCoverage: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage = {};
   let freshness: "current" | "stale" = "current";
@@ -1671,17 +1671,18 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     return selectedBacklog.selection;
   }
-  function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean } = {}): Promise<boolean> {
+  function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean } = {}): Promise<boolean> {
     const query = normalizeBacklogSelection(input);
     if (!query || !isActive() || !sessionRevision || !actorIdentity || !adapter.readBacklogSelection || options.signal?.aborted) return Promise.resolve(false);
     const key = JSON.stringify(query), current = currentBacklogSelection();
-    const previousPage = query.continuation ? selectedBacklog : undefined;
-    if (query.continuation && (!current || !previousPage || current.continuation !== query.continuation
+    const intent = options.append ? "append" : "replace", requestKey = JSON.stringify([key, intent]);
+    const previousPage = options.append ? selectedBacklog : undefined;
+    if (options.append && (!query.continuation || !current || !previousPage || current.continuation !== query.continuation
       || JSON.stringify({ ...current.query, continuation: undefined }) !== JSON.stringify({ ...query, continuation: undefined }))) return Promise.resolve(false);
     backlogSelectionQuery = query;
-    if (!options.refresh && current && JSON.stringify(current.query) === key) return Promise.resolve(true);
+    if (!options.refresh && current && selectedBacklog?.intent === intent && JSON.stringify(current.query) === key) return Promise.resolve(true);
     let pending = selectedBacklogRead;
-    if (!pending || pending.key !== key || pending.controller.signal.aborted) {
+    if (!pending || pending.key !== requestKey || pending.controller.signal.aborted) {
       pending?.controller.abort();
       const token = beginWorkspaceRead("backlog"), controller = new AbortController();
       const actor = { id: actorIdentity.id, role: actorIdentity.platformRole };
@@ -1729,7 +1730,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           workspaceStatuses.set("backlog", "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token)) return false;
-        selectedBacklog = { selection: acceptedSelection, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
+        selectedBacklog = { selection: acceptedSelection, intent, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
           deadline: Math.min(previousPage?.deadline ?? Infinity, read.readAuthority.deadline, Date.parse(selection.validUntil)) };
         memberships.set("backlog", new Set([...acceptedSelection.itemIds, ...acceptedSelection.contextIds]));
         publish(); return true;
@@ -1742,7 +1743,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         }
         publish(); return false;
       }).finally(() => { controller.signal.removeEventListener("abort", onAbort); if (selectedBacklogRead?.result === result) selectedBacklogRead = undefined; });
-      pending = { key, result, controller, consumers };
+      pending = { key: requestKey, result, controller, consumers };
       selectedBacklogRead = pending;
       publish();
     }
