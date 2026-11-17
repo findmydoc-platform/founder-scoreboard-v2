@@ -61,3 +61,21 @@ test("Structure keeps root and parent receipts independent but rejects older sou
     expect(state.planning.structure(roots).selection).toBeUndefined();
   } finally { state.internal.dispose(); }
 });
+
+test("a typed Structure continuation restarts its mounted class once without the old cursor", async () => {
+  const queries: PlanningStructureQuery[] = [];
+  const state = owner(async query => {
+    queries.push(query);
+    if (query.continuation) throw Object.assign(new Error("Changed Structure source"), { status: 409, code: "stale_continuation" });
+    const value = response(query, queries.length === 1 ? "old-source" : "new-source");
+    value.model = { ...value.model, structure: { ...value.model.structure, total: 2, coverage: "partial", continuation: queries.length === 1 ? "old-page" : "new-page" } };
+    return value;
+  });
+  const release = state.planning.activateStructure(roots);
+  try {
+    expect(await state.planning.loadStructure(roots)).toBe(true);
+    expect(await state.planning.loadStructure({ ...roots, continuation: "old-page" }, { append: true })).toBe(true);
+    expect(queries).toEqual([roots, { ...roots, continuation: "old-page" }, roots]);
+    expect(state.planning.structure(roots)).toMatchObject({ readStatus: "current", selection: { continuation: "new-page", sourceRevision: "new-source" } });
+  } finally { release(); state.internal.dispose(); }
+});
