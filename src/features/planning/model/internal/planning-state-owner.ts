@@ -1674,8 +1674,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function loadBacklogSelection(input: BacklogSelectionQuery, options: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean } = {}): Promise<boolean> {
     const query = normalizeBacklogSelection(input);
     if (!query || !isActive() || !sessionRevision || !actorIdentity || !adapter.readBacklogSelection || options.signal?.aborted) return Promise.resolve(false);
-    backlogSelectionQuery = query;
     const key = JSON.stringify(query), current = currentBacklogSelection();
+    const previousPage = query.continuation ? selectedBacklog : undefined;
+    if (query.continuation && (!current || !previousPage || current.continuation !== query.continuation
+      || JSON.stringify({ ...current.query, continuation: undefined }) !== JSON.stringify({ ...query, continuation: undefined }))) return Promise.resolve(false);
+    backlogSelectionQuery = query;
     if (!options.refresh && current && JSON.stringify(current.query) === key) return Promise.resolve(true);
     let pending = selectedBacklogRead;
     if (!pending || pending.key !== key || pending.controller.signal.aborted) {
@@ -1683,7 +1686,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       const token = beginWorkspaceRead("backlog"), controller = new AbortController();
       const actor = { id: actorIdentity.id, role: actorIdentity.platformRole };
       const consumers = new Set<symbol>();
-      workspaceStatuses.set("backlog", "loading");
+      if (!previousPage) workspaceStatuses.set("backlog", "loading");
       const bindingCurrent = () => readIsCurrent("backlog", token) && token.sourceEpoch === planningSourceEpoch
         && actorIdentity?.id === actor.id && actorIdentity.platformRole === actor.role && !controller.signal.aborted;
       // Dispatch synchronously: an explicit view action must not wait for a debounce or another area.
@@ -1706,18 +1709,38 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || selection.itemIds.some(id => !Number.isSafeInteger(selection.rankById[id]) || selection.rankById[id] < 1)) {
           workspaceStatuses.set("backlog", "unavailable"); publish(); return false;
         }
+        let acceptedSelection = selection;
+        if (previousPage) {
+          const previous = previousPage.selection;
+          const itemIds = [...previous.itemIds, ...selection.itemIds];
+          if (selectedBacklog !== previousPage || !currentBacklogSelection() || previousPage.deadline <= now
+            || previous.sourceRevision !== selection.sourceRevision || previous.scopeRevision !== selection.scopeRevision
+            || previous.observedAt !== selection.observedAt || previous.validUntil !== selection.validUntil
+            || previous.total !== selection.total || new Set(itemIds).size !== itemIds.length
+            || selection.itemIds.length > query.limit || itemIds.length > selection.total
+            || (selection.coverage === "complete" ? itemIds.length !== selection.total || selection.continuation !== null
+              : itemIds.length >= selection.total || typeof selection.continuation !== "string" || !selection.continuation)) {
+            workspaceStatuses.set("backlog", "stale"); publish(); return false;
+          }
+          acceptedSelection = { ...selection, itemIds, contextIds: [...new Set([...previous.contextIds, ...selection.contextIds])].filter(id => !itemIds.includes(id)),
+            rankById: { ...previous.rankById, ...selection.rankById } };
+        }
         if (!acceptBacklogSource(selection.sourceRevision, token)) {
           workspaceStatuses.set("backlog", "stale"); publish(); return false;
         }
         if (!acceptWorkspaceRead("backlog", read, token)) return false;
-        selectedBacklog = { selection, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
-          deadline: Math.min(read.readAuthority.deadline, Date.parse(selection.validUntil)) };
-        memberships.set("backlog", new Set([...selection.itemIds, ...selection.contextIds]));
+        selectedBacklog = { selection: acceptedSelection, generation: token.generation, session: token.sessionRevision, epoch: token.sourceEpoch,
+          deadline: Math.min(previousPage?.deadline ?? Infinity, read.readAuthority.deadline, Date.parse(selection.validUntil)) };
+        memberships.set("backlog", new Set([...acceptedSelection.itemIds, ...acceptedSelection.contextIds]));
         publish(); return true;
       }).catch(error => {
         if (!bindingCurrent()) return false;
-        selectedBacklog = undefined;
-        workspaceStatuses.set("backlog", readErrorStatus(error)); publish(); return false;
+        const status = readErrorStatus(error);
+        if (!previousPage || status === "forbidden" || status === "stale") {
+          selectedBacklog = undefined;
+          workspaceStatuses.set("backlog", status);
+        }
+        publish(); return false;
       }).finally(() => { controller.signal.removeEventListener("abort", onAbort); if (selectedBacklogRead?.result === result) selectedBacklogRead = undefined; });
       pending = { key, result, controller, consumers };
       selectedBacklogRead = pending;

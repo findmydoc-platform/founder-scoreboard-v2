@@ -274,6 +274,12 @@ export function BacklogOverview({
           {backlog.supportReadStatus.sprints === "unavailable" ? <UiButton onClick={() => backlog.loadSupport("sprints")}>Sprintplanung erneut laden</UiButton> : null}
         </UiNotice> : null}
       </div>
+      {scoped && selectionCurrent && model.selection?.continuation ? <div className="grid justify-items-start gap-2">
+        {backlog.pageStatus === "unavailable" ? <UiNotice role="status" tone="warning">Weitere Einträge konnten nicht geladen werden.</UiNotice> : null}
+        <UiButton disabled={backlog.pageStatus === "loading"} onClick={backlog.loadMore}>
+          {backlogLevel === "initiative" ? "Weitere Initiativen laden" : "Weitere Deliverables laden"}
+        </UiButton>
+      </div> : null}
     </div>
   );
 }

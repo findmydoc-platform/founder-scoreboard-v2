@@ -342,9 +342,9 @@ export function buildSelectedBacklogOverviewViewModel(model: BacklogModel, filte
   const selectionCurrent = Boolean(selection && (Object.keys(DEFAULT_BACKLOG_FILTERS) as Array<keyof BacklogTableFilters>).every(key =>
     selection.query.filters[key] === (key === "query" ? filters.query.trim().toLowerCase() : filters[key])));
   const byId = new Map(model.items.map(task => [task.id, task]));
-  const ids = selection?.itemIds || model.items.filter(task => task.taskType === "deliverable").map(task => task.id);
+  const ids = selection?.itemIds || model.items.filter(task => task.taskType === filters.level).map(task => task.id);
   const parents = new Map(model.items.filter(task => task.taskType === "initiative").map(task => [task.id, task]));
-  const records = ids.flatMap(id => { const task = byId.get(id); return task && !taskIsDone(task) ? [buildBacklogItem(task, parents, selection?.rankById[id] || 0)] : []; });
+  const records = ids.flatMap(id => { const task = byId.get(id); return task && task.taskType === filters.level && (filters.level !== "deliverable" || !taskIsDone(task)) ? [buildBacklogItem(task, parents, selection?.rankById[id] || 0)] : []; });
   const controls = model.controls;
   const options = (label: string, values: readonly { value: string; label: string }[] | undefined, selected: string) => {
     const result = [{ value: "Alle", label }, ...(values || [])];
@@ -357,7 +357,7 @@ export function buildSelectedBacklogOverviewViewModel(model: BacklogModel, filte
     assignee: { label: "Zuständig", value: filters.assignee, options: controls?.assignees },
   };
   return { ...previous, selectionCurrent, allItems: records, visibleItems: records,
-    orderedTasks: records.map(item => item.task).sort(byBacklogOrder), visibleLevelTasks: records.map(item => item.task), visibleTaskIds: new Set(ids),
+    orderedTasks: records.map(item => item.task).sort(byBacklogOrder), levelTasks: records.map(item => item.task), visibleLevelTasks: records.map(item => item.task), visibleTaskIds: new Set(ids),
     rankEditingEnabled: previous.rankEditingEnabled && selectionCurrent,
     scopeCounts: controls?.scopeCounts, sprintBuckets: [...(model.sprintBasis?.buckets || [])],
     activeFilters: previous.activeFilters.map(filter => {
@@ -367,7 +367,7 @@ export function buildSelectedBacklogOverviewViewModel(model: BacklogModel, filte
     filterOptions: { ...previous.filterOptions,
       assignees: options("Alle Zuständigen", controls?.assignees, filters.assignee), epics: options("Alle Epics", controls?.epics, filters.epic),
       initiatives: options("Alle Initiativen", controls?.initiatives, filters.initiative),
-      statuses: [{ value: "Alle", label: "Alle Status" }, ...(controls?.statuses.deliverable || []).map(status => ({ value: status, label: status }))],
+      statuses: [{ value: "Alle", label: "Alle Status" }, ...(controls?.statuses[filters.level] || []).map(status => ({ value: status, label: status }))],
     },
   };
 }
