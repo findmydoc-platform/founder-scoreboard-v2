@@ -502,6 +502,13 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         return { data: { ...emptyPlanningShellState, sprints: sprintRows }, coverage: sprintRows.length ? { sprints: "partial" } : {}, taskCoverage: "none",
           readAuthority: body.readAuthority, readActor: body.readActor, backlogControls: body.model.controls, backlogSprintBasis: body.model.sprintBasis };
       },
+      async readStructure(query, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-query").PlanningStructureModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
+        if (!response.ok || !body?.model?.structure) throw Object.assign(new Error(body?.error || "Struktur konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        if (!body.readAuthority || !body.readActor) throw new Error("Die Leseberechtigung fehlt.");
+        return { model: body.model, readAuthority: body.readAuthority, readActor: body.readActor };
+      },
       async readBacklogSelection(query, options) {
         const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
         if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });

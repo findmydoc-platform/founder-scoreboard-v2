@@ -1,3 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import type { PlanningState } from "@/features/planning/model/planning-state";
+import type { PlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
+import type { PlanningFilterPreferences } from "@/lib/types";
 import { ChevronRight } from "lucide-react";
 import { TaskTypeIcon } from "@/features/tasks/atoms/task-type-indicator";
 import { TaskCard } from "@/features/tasks/molecules/task-card";
@@ -7,7 +13,7 @@ import type { Profile, Task, TaskBlocker, TaskRelation } from "@/lib/types";
 import { UiBadge, UiButton } from "@/shared/atoms/ui-primitives";
 import { DataSurface } from "@/shared/molecules/data-surface";
 
-type TaskStructureViewProps = {
+type LegacyStructureProps = {
   initiatives: Task[];
   visibleTasks: Task[];
   relations: TaskRelation[];
@@ -20,7 +26,7 @@ type TaskStructureViewProps = {
   onSetAllInitiativeCollapse: (collapsed: boolean) => void;
 };
 
-export function TaskStructureView({
+function LegacyTaskStructureView({
   initiatives,
   visibleTasks,
   relations,
@@ -31,7 +37,7 @@ export function TaskStructureView({
   onOpenTask,
   onToggleInitiative,
   onSetAllInitiativeCollapse,
-}: TaskStructureViewProps) {
+}: LegacyStructureProps) {
   const subIssuesByParent = groupSubIssuesByParent(allTasks);
 
   return (
@@ -86,4 +92,51 @@ export function TaskStructureView({
       })}
     </div>
   );
+}
+
+
+type SelectedStructureProps = LegacyStructureProps & { readMode: "selected"; planningState: PlanningState; filters: PlanningFilterPreferences };
+export function TaskStructureView(props: LegacyStructureProps | SelectedStructureProps) {
+  return "readMode" in props && props.readMode === "selected" ? <SelectedTaskStructureView {...props} /> : <LegacyTaskStructureView {...props} />;
+}
+const rootQuery: PlanningStructureQuery = { view: "structure", area: "roots", limit: 20 };
+function SelectedTaskStructureView(props: SelectedStructureProps) {
+  const state = props.planningState;
+  const roots = state.structure(rootQuery);
+  useEffect(() => { const controller = new AbortController(); void state.loadStructure(rootQuery, { signal: controller.signal }); return () => controller.abort(); }, [state]);
+  return <div className="grid gap-4">
+    <div className="flex justify-end gap-2"><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(true)}>Alle einklappen</UiButton><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(false)}>Alle ausklappen</UiButton></div>
+    {roots.readStatus === "loading" || roots.readStatus === "not-loaded" ? <p>Initiativen werden geladen.</p> : null}
+    {roots.readStatus === "unavailable" || roots.readStatus === "stale" ? <UiButton type="button" onClick={() => void state.loadStructure(rootQuery, { refresh: true })}>Initiativen erneut laden</UiButton> : null}
+    {roots.selection?.itemIds.map(id => { const task = state.taskDetail(id).task; return task ? <SelectedStructureGroup key={id} {...props} initiative={task} /> : null; })}
+    {roots.selection?.continuation ? <UiButton type="button" onClick={() => void state.loadStructure({ ...rootQuery, continuation: roots.selection!.continuation! }, { append: true })}>Weitere Initiativen laden</UiButton> : null}
+  </div>;
+}
+function SelectedStructureGroup(props: SelectedStructureProps & { initiative: Task }) {
+  const { planningState: state, initiative } = props;
+  const expanded = Boolean(props.expandedInitiatives[initiative.id]);
+  const query: PlanningStructureQuery = { view: "structure", area: "children", parentId: initiative.id, filters: { ...props.filters, sort: "priority", direction: "asc" }, limit: 20 };
+  const signature = JSON.stringify(query);
+  const [loadingMore, setLoadingMore] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const controller = new AbortController();
+    void state.loadStructure(JSON.parse(signature) as PlanningStructureQuery, { signal: controller.signal });
+    return () => controller.abort();
+  }, [state, expanded, signature]);
+  const read = state.structure(query);
+  return <DataSurface>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+      <button type="button" onClick={() => props.onToggleInitiative(initiative.id)} aria-expanded={expanded} className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus:ring-2 focus:ring-blue-100">
+        <ChevronRight size={16} className={expanded ? "rotate-90" : ""} /><span><span className="block font-semibold">{initiative.title}</span><span className="block text-sm text-slate-600">{initiative.strategy?.goal || initiative.description}</span></span>
+      </button><UiBadge tone="white">{read.selection ? `${read.selection.total} Aufgaben` : "Aufgaben noch nicht geladen"}</UiBadge>
+    </div>
+    {expanded ? <div className="grid gap-3 p-4">
+      {read.readStatus === "loading" || read.readStatus === "not-loaded" ? <p>Aufgaben werden geladen.</p> : null}
+      {read.readStatus === "unavailable" || read.readStatus === "stale" ? <><p>Aufgaben konnten nicht geladen werden.</p><UiButton type="button" onClick={() => void state.loadStructure(query, { refresh: true })}>Aufgaben erneut laden</UiButton></> : null}
+      {read.readStatus === "forbidden" ? <p>Aufgaben sind nicht verfügbar.</p> : null}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{read.selection?.itemIds.map(id => { const task = state.taskDetail(id).task; return task ? <TaskCard key={id} task={task} assigneeProfile={props.assigneeProfileForTask(task)} relations={props.relations} allTasks={props.allTasks} blockers={props.blockers} onOpenTask={props.onOpenTask} /> : null; })}</div>
+      {read.selection?.continuation ? <UiButton type="button" disabled={loadingMore} onClick={() => { setLoadingMore(true); void state.loadStructure({ ...query, continuation: read.selection!.continuation! }, { append: true }).finally(() => setLoadingMore(false)); }}>Weitere Deliverables laden</UiButton> : null}
+    </div> : null}
+  </DataSurface>;
 }

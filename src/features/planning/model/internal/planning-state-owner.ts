@@ -53,6 +53,7 @@ import { createProfileSettingsState } from "./profile-settings-state";
 import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/features/profile/model/profile-settings-contract";
 import { createTaskEditing } from "./task-editing";
 import { applyPlanningItemApprovalPatch } from "../approval-domain";
+import { createPlanningStructureReads, type StructureRead } from "./planning-structure-reads";
 import { createPlanningCandidateReads } from "./planning-candidate-reads";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
@@ -102,6 +103,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBacklogRankTarget?: (query: BacklogRankQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readBacklogSupport?: (query: BacklogSupportQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
+  readStructure?: (query: import("../planning-structure-query").PlanningStructureQuery, options: { signal: AbortSignal }) => Promise<StructureRead>;
   readBacklogSelection?: (query: BacklogSelectionQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
   readTaskDetail?: (taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal }) => Promise<{ model: TaskDetailModel; unavailable?: TaskDetailUnavailableArea[]; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority }>;
@@ -153,6 +155,28 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let planningSourceEpoch = 0;
   const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
+
+  const structureReads = createPlanningStructureReads({ read: adapter.readStructure, publish, now: () => adapter.now?.() ?? Date.now(),
+    binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }),
+    begin: () => ++sequence,
+    accept: (read, started) => {
+      const replacements = new Map<string, Task>();
+      for (const task of read.model.items) {
+        if (lifecycle.isRemoved(task) || (taskDeniedAt.get(task.id) || 0) > started || (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started) return false;
+        const previous = confirmed.tasks.find(row => row.id === task.id);
+        const next = { ...previous, ...task };
+        for (const field of read.model.taskOmittedFields) if (previous) Object.assign(next, { [field]: previous[field] });
+        acceptTaskFieldCoverage(task, read.model.taskOmittedFields);
+        if (previous && previous.detailAvailability !== "summary") {
+          next.detailAvailability = "stale"; detailStatuses.set(task.id, "stale");
+        }
+        replacements.set(task.id, next); taskReadAt.set(task.id, started);
+      }
+      const known = new Set(confirmed.tasks.map(task => task.id));
+      confirmed = { ...confirmed, tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...[...replacements.values()].filter(task => !known.has(task.id))] };
+      acceptProfileScope("planning", read.model.people, false);
+      return true;
+    } });
 
   let planningInteraction: import("../planning-state").PlanningInteraction = { selectedTaskId: null };
   const boardInteractions = new Set<symbol>();
@@ -880,6 +904,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    loadStructure: structureReads.load,
+    structure: structureReads.view,
     candidates: candidateReads.candidates,
     candidate: candidateReads.candidate,
     loadCandidates: candidateReads.loadCandidates,
@@ -2376,7 +2402,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function suspendProtected() {
     backlogSelectionQuery = undefined;
     for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
-    candidateReads.clear();
+    candidateReads.clear(); structureReads.clear();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearOrphanBacklog(true); displayedBacklogMembers.clear(); clearBacklogSupport();
     failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
@@ -2609,6 +2635,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); administration.clear(); unsubscribeSession?.(); },
   } };
 }
