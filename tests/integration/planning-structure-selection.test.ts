@@ -32,4 +32,14 @@ test("Structure pages all Initiative roots including proposed and completed reco
     if(!continuation){const last=body.model.items.find((row:Task)=>row.id===lastId);expect(last).toMatchObject({status:"Erledigt",approvalStatus:"proposed",description:"Current root description 1008",strategy:{goal:"Current offpage strategic goal"},detailAvailability:"summary"});}
   }while(continuation);
   expect(ids).toEqual(expected);expect(new Set(ids).size).toBe(1009);
+  const scope={view:"structure",area:"roots",limit:20};
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const){
+    const response=await GET(f.request(actor,`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));expect(response.status).toBe(200);
+    const body=await response.json();expect(body.model.structure.itemIds).toEqual(expected.slice(0,20));expect(body.readActor.profileId).toBe(f.actors[actor].profileId);
+  }
+  expect((await GET(f.request("unmapped",`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`))).status).toBe(403);
+  for(const actor of ["founder","unmapped","anonymous"] as const){
+    const response=await f.rpc("planning_structure_selection",{p_actor_profile_id:f.actors.founder.profileId,p_limit:20,p_offset:0,p_source_revision:null,p_evaluated_at:null,p_valid_until:null},actor);
+    expect(response.status).toBe(actor==="anonymous"?401:403);
+  }
 }),120_000);

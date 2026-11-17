@@ -10,7 +10,8 @@
     "src/features/planning-items/server/planning-item-candidates-read-source.ts",
     "src/features/planning-items/server/planning-backlog-read-source.ts",
     "src/features/planning-items/server/planning-backlog-support-read-source.ts",
-    "src/features/planning-items/server/planning-backlog-rank-read-source.ts"
+    "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
+    "src/features/planning-items/server/planning-structure-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -173,6 +174,13 @@
       "reason": "The service-only fixed resolver selects at most one relative target from the complete unfinished Deliverable class before any page limit. It retains numeric rank and German ID ties, original displayed source version, source revision, fresh mapped Actor publication and original deadline. Boundary no-ops hydrate nothing; the shared bounded context hydrator reads only the known target. This is not full membership, canonical source replacement, optimistic renumbering authority or a write permission.",
       "evidence": "tests/integration/backlog-rank-target.test.ts; tests/migrations/20261116230848_planning_backlog_rank_target.test.mjs",
       "expiresWhen": "Revalidate when relative actions, eligibility, ordering, source/target versions, authority or bounded hydration changes."
+    },
+    "STRUCTURE-ROOTS": {
+      "consumer": "Selected Structure Initiative roots and bounded header context",
+      "owner": "Planning and Planning Item feature owners",
+      "reason": "The credential-bound service-only root scope preserves all nontrashed Initiatives including proposed and completed rows, in the existing source order/ID sequence before paging. Only returned root and ancestor IDs enter the shared bounded hydrator. This root projection reads description and complete strategy fields for those known IDs because they are visible header context; omitted notes, evidence and other canonical fields remain unknown. Fresh Actor/source publication, signed continuations and each original authority deadline remain required. This root receipt does not certify Deliverable membership, child progress, relationships or a complete hierarchy.",
+      "evidence": "tests/integration/planning-structure-selection.test.ts; tests/migrations/20261117022303_planning_structure_roots.test.mjs",
+      "expiresWhen": "Revalidate when Structure root membership, source ordering, bounded context field coverage, continuation or authorization changes; the visible Structure and opened-child callers need separate evidence."
     }
   },
   "allowedEdges": [
@@ -295,6 +303,21 @@
       "from": "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
       "to": "src/features/planning-items/server/planning-card-summary.ts",
       "contract": "BACKLOG-RANK"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-structure-read-source.ts",
+      "contract": "STRUCTURE-ROOTS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-structure-read-source.ts",
+      "to": "src/features/planning-items/server/planning-backlog-read-source.ts",
+      "contract": "STRUCTURE-ROOTS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-structure-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "STRUCTURE-ROOTS"
     }
   ],
   "readSites": [

@@ -1,3 +1,4 @@
+import { loadPlanningStructureSelection } from "@/features/planning-items/server/planning-structure-read-source";
 import { loadPlanningBacklogRankTarget } from "@/features/planning-items/server/planning-backlog-rank-read-source";
 import { loadPlanningBacklogSupport } from "@/features/planning-items/server/planning-backlog-support-read-source";
 import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
@@ -432,6 +433,18 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
         : { status: "forbidden" as const };
       return result;
+    },
+    async loadStructure(query: import("@/features/planning/model/planning-structure-query").PlanningStructureQuery, options?: { signal?: AbortSignal }) {
+      if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningStructureSelection(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource,
+        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+          .update(JSON.stringify(["planning-structure-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } } : result;
     },
     async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BacklogLoadResult } from "@/features/backlog/model/backlog-read-model";
 import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import type { PlanningWorkspaceLoadContext } from "../model/planning-workspace-model";
-import type { DbProfile, DbSprint, DbTask } from "@/lib/planning-row-types";
+import type { DbProfile, DbSprint, DbTask, DbPlanningItemStrategy } from "@/lib/planning-row-types";
 import { taskRowSelect } from "@/lib/planning-row-types";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { mapProfile } from "@/lib/planning-profile-mappers";
@@ -75,7 +75,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
   } catch { return { status: "unavailable" }; }
 }
 
-export async function hydrateBacklogItems(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selectedIds: string[]) {
+export async function hydrateBacklogItems(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, selectedIds: string[], options: { hierarchyRoots?: boolean } = {}) {
   const taskRows: DbTask[] = [];
   for (let from = 0; from < selectedIds.length; from += 50) {
     const read = supabase.from("active_tasks").select(taskRowSelect).eq("project_id", "findmydoc-founder-execution").in("id", selectedIds.slice(from, from + 50)).returns<DbTask[]>();
@@ -100,6 +100,14 @@ export async function hydrateBacklogItems(supabase: SupabaseClient, context: Pla
     if (rows.error) return null;
     sprintRows.push(...rows.data || []);
   }
-  const people = peopleRows.map(mapProfile);
-  return { items: selectedIds.map(id => compactPlanningCard(mapTaskRow(rowById.get(id)!, people))), people, sprints: sprintRows.map(mapSprint) };
+  const strategies: DbPlanningItemStrategy[] = [];
+  if (options.hierarchyRoots) for (let from = 0; from < selectedIds.length; from += 50) {
+    const read = supabase.from("planning_item_strategy").select("task_id,goal,success_criteria,scope_constraints").in("task_id", selectedIds.slice(from, from + 50)).returns<DbPlanningItemStrategy[]>();
+    const rows = await (context.signal ? read.abortSignal(context.signal) : read);
+    if (rows.error || !rows.data) return null;
+    strategies.push(...rows.data);
+  }
+  const people = peopleRows.map(mapProfile), strategyById = new Map(strategies.map(row => [row.task_id, row]));
+  const omitted = options.hierarchyRoots ? planningCardOmittedFields.filter(field => field !== "description" && field !== "strategy") : planningCardOmittedFields;
+  return { items: selectedIds.map(id => compactPlanningCard(mapTaskRow(rowById.get(id)!, people, { strategy: strategyById.get(id) }), omitted)), people, sprints: sprintRows.map(mapSprint) };
 }
