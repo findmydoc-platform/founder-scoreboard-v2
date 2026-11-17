@@ -1,3 +1,5 @@
+import type { Task } from "@/lib/types";
+import { taskStatuses } from "@/lib/status";
 import { DEFAULT_BACKLOG_FILTERS, type BacklogTableFilters } from "./backlog-view-model";
 
 export type BacklogOrphanSection = "orphanInitiatives" | "orphanDeliverables";
@@ -61,4 +63,21 @@ export function normalizeBacklogSelection(input: unknown): BacklogSelectionQuery
     epic: String(filters.epic), initiative: String(filters.initiative), assignee: String(filters.assignee),
     sort: filters.sort as BacklogTableFilters["sort"], direction: filters.direction as BacklogTableFilters["direction"],
   }, ...(section !== "level" ? { section: section as BacklogOrphanSection } : {}), limit: value.limit as number | undefined ?? 20, ...(typeof value.continuation === "string" ? { continuation: value.continuation } : {}) };
+}
+
+export function completeBacklogParentMembership(selection: BacklogSelection | undefined, task: (id: string) => Task | undefined, blocked: (id: string) => boolean = () => false): string[] {
+  if (!selection || selection.query.section || selection.query.filters.level !== "deliverable"
+    || (Object.keys(DEFAULT_BACKLOG_FILTERS) as Array<keyof BacklogTableFilters>).some(key => selection.query.filters[key] !== DEFAULT_BACKLOG_FILTERS[key])
+    || !selection.parentProgressById || !validBacklogParentProgress(selection.parentProgressById, selection.contextIds)
+    || new Set(selection.itemIds).size !== selection.itemIds.length) return [];
+  const candidates = Object.entries(selection.parentProgressById).filter(([,progress]) => progress.unfinished <= selection.itemIds.length);
+  if (!candidates.length) return [];
+  const members = selection.itemIds.map(id => task(id));
+  if (members.some((row,index) => !row || row.id !== selection.itemIds[index] || row.taskType !== "deliverable" || !row.updatedAt
+    || ![...taskStatuses,"Pausiert"].includes(row.status) || row.status === "Erledigt" || !row.parentTaskId)) return [];
+  return candidates.flatMap(([id, progress]) => {
+    const parent = task(id), children = members.filter(row => row!.parentTaskId === id);
+    return parent?.id === id && parent.taskType === "initiative" && parent.updatedAt && !blocked(id) && children.every(row => !blocked(row!.id))
+      && children.length === progress.unfinished ? [id] : [];
+  });
 }

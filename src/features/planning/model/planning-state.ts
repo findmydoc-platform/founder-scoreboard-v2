@@ -108,7 +108,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   loadLegacyBacklog(): Promise<boolean>;
   loadBacklogSupport(query: import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean>;
   loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean }): Promise<boolean>;
-  backlog(): { invalidationEpoch: number; orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
+  backlog(): { parentMembershipCompleteIds: readonly string[]; invalidationEpoch: number; orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
   scoreObjectionScore(sprintId: string, profileId: string): { score: import("@/lib/types").FounderSprintScore | null; complete: boolean };

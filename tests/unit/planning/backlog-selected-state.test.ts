@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createPlanningState, type PlanningWorkspaceRead } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import { normalizeBacklogSelection, type BacklogSelection, type BacklogParentProgress, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
+import { normalizeBacklogSelection, completeBacklogParentMembership, type BacklogSelection, type BacklogParentProgress, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import { DEFAULT_BACKLOG_FILTERS } from "@/features/backlog/model/backlog-view-model";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { Task } from "@/lib/types";
@@ -198,4 +198,28 @@ test("selected Parent progress cannot certify unrelated context or inconsistent 
     try{expect(await owner.planning.loadBacklogSelection(query)).toBe(false);expect(owner.planning.backlog().model.selection).toBeUndefined();expect(owner.planning.taskDetail(selected.id).task).toEqual(previous);expect(owner.planning.taskDetail(parent.id).task).toBeNull();}
     finally{owner.internal.dispose();}
   }
+});
+
+test("small Parent membership needs exact authorized selected identities and a current matching rollup",()=>{
+  const first=response().backlogSelection;
+  const row={...selected},second={...selected,id:"other-confirmed-child"};
+  const complete:BacklogSelection={...first,query:{...query,filters:{...DEFAULT_BACKLOG_FILTERS}},itemIds:[row.id,second.id],total:2,parentProgressById:{[parent.id]:{total:3,completed:1,unfinished:2,percentage:33}}};
+  const records=new Map([row,second,parent].map(task=>[task.id,task]));const lookedUp:string[]=[];
+  const lookup=(id:string)=>{lookedUp.push(id);return records.get(id);};
+  expect(completeBacklogParentMembership(complete,lookup)).toEqual([parent.id]);expect(new Set(lookedUp)).toEqual(new Set([row.id,second.id,parent.id]));
+  expect(completeBacklogParentMembership({...complete,itemIds:[row.id]},id=>records.get(id))).toEqual([]);
+  expect(completeBacklogParentMembership({...complete,query},id=>records.get(id))).toEqual([]);
+  expect(completeBacklogParentMembership({...complete,itemIds:[row.id,row.id]},id=>records.get(id))).toEqual([]);
+  expect(completeBacklogParentMembership(complete,id=>id===second.id?{...second,parentTaskId:"different-parent"}:records.get(id))).toEqual([]);
+  expect(completeBacklogParentMembership(complete,id=>id===second.id?{...second,status:"Unknown status"}:records.get(id))).toEqual([]);
+  expect(completeBacklogParentMembership(complete,id=>records.get(id),id=>id===second.id)).toEqual([]);
+  expect(completeBacklogParentMembership(undefined,id=>records.get(id))).toEqual([]);
+});
+
+test("small Parent membership proof expires with its original selected receipt",async()=>{
+  let now=Date.now();const frame=response(),unfiltered={...query,filters:{...DEFAULT_BACKLOG_FILTERS}};
+  frame.backlogSelection={...frame.backlogSelection,query:unfiltered,parentProgressById:{[parent.id]:{total:2,completed:1,unfinished:1,percentage:50}}};
+  const owner=selectedOwner(async()=>frame,()=>now);
+  try{expect(await owner.planning.loadBacklogSelection(unfiltered)).toBe(true);expect(owner.planning.backlog().parentMembershipCompleteIds).toEqual([parent.id]);now=frame.readAuthority!.deadline;expect(owner.planning.backlog().parentMembershipCompleteIds).toEqual([]);expect(owner.planning.backlog().model.selection).toBeUndefined();}
+  finally{owner.internal.dispose();}
 });

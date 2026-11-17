@@ -207,6 +207,7 @@ export function BacklogOverview({
           {!scoped || selectionCurrent || model.items.length ? <PlanningBacklogTree
             childOwner={planningState}
             orphanGroups={backlog.orphanGroups}
+            parentMembershipCompleteIds={selectionCurrent ? backlog.parentMembershipCompleteIds : undefined}
             parentProgressById={selectionCurrent ? model.selection?.parentProgressById : undefined}
             collectionCoverage={selectionCurrent ? model.coverage?.items : undefined}
             independentMembership={selectionCurrent && !filters.query.trim() && filters.status === "Alle" && filters.priority === "Alle" && filters.assignee === "Alle" && filters.scope === "all" && filters.readiness === "all"}

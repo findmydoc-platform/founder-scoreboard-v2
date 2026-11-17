@@ -29,6 +29,7 @@ type OrphanGroupView = {
 type PlanningBacklogTreeProps = {
   orphanGroups?: Record<import("../model/backlog-selection").BacklogOrphanSection, OrphanGroupView>;
   childOwner?: PlanningState;
+  parentMembershipCompleteIds?: readonly string[];
   parentProgressById?: import("../model/backlog-selection").BacklogSelection["parentProgressById"];
   collectionCoverage?: "complete" | "partial";
   independentMembership?: boolean;
@@ -308,7 +309,8 @@ function Group({
   );
 }
 
-function ParentGroup({ owner, parent, parentProgress, collectionCoverage, independentMembership, tasks, rollupTasks, itemType, title, groupId, collapsed, onToggle, renderRow }: {
+function ParentGroup({ owner, parent, parentProgress, membershipComplete, collectionCoverage, independentMembership, tasks, rollupTasks, itemType, title, groupId, collapsed, onToggle, renderRow }: {
+  membershipComplete?: boolean;
   parentProgress?: import("../model/backlog-selection").BacklogParentProgress;
   owner?: PlanningState; parent?: Task; collectionCoverage?: "complete" | "partial"; independentMembership: boolean;
   tasks: Task[]; rollupTasks: Task[]; itemType: GroupItemType; title: string; groupId: string; collapsed: boolean; onToggle: () => void;
@@ -316,7 +318,7 @@ function ParentGroup({ owner, parent, parentProgress, collectionCoverage, indepe
 }) {
   const lease = useRef<AbortController | null>(null);
   const parentId = parent?.id;
-  const independent = Boolean(owner && parentId && collectionCoverage === "partial" && (independentMembership || !parentProgress));
+  const independent = Boolean(owner && parentId && collectionCoverage === "partial" && (independentMembership ? !membershipComplete : !parentProgress));
   useEffect(() => {
     if (!owner || !parentId || !independent || collapsed) return;
     const controller = new AbortController(); lease.current = controller;
@@ -344,6 +346,7 @@ function ParentGroup({ owner, parent, parentProgress, collectionCoverage, indepe
 export function PlanningBacklogTree({
   childOwner,
   parentProgressById,
+  parentMembershipCompleteIds,
   orphanGroups,
   collectionCoverage,
   independentMembership = false,
@@ -425,7 +428,7 @@ export function PlanningBacklogTree({
   const visibleOrphanInitiatives = orphanInitiatives.filter(visibleAtCurrentLevel);
   const visibleOrphanDeliverables = orphanDeliverables.filter(visibleAtCurrentLevel);
   const group = (groupId: string, itemType: GroupItemType, title: string, tasks: Task[], rollupTasks = tasks, parent?: Task) => (
-    <ParentGroup owner={childOwner} parent={parent} parentProgress={parent ? parentProgressById?.[parent.id] : undefined} collectionCoverage={collectionCoverage} independentMembership={independentMembership} tasks={tasks} renderRow={task => row(task)}
+    <ParentGroup owner={childOwner} parent={parent} membershipComplete={parent ? parentMembershipCompleteIds?.includes(parent.id) : false} parentProgress={parent ? parentProgressById?.[parent.id] : undefined} collectionCoverage={collectionCoverage} independentMembership={independentMembership} tasks={tasks} renderRow={task => row(task)}
       key={groupId}
       collapsed={collapsedGroups.has(groupId)}
       groupId={groupId}
