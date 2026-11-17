@@ -26,7 +26,7 @@ function useBacklogOrphanSection(planningState: PlanningState, section: BacklogO
     if (!query || readStatus !== "stale") return;
     const timer = setTimeout(() => request(false, true), 500);
     return () => clearTimeout(timer);
-  }, [query, readStatus, request]);
+  }, [query, readStatus, request, shared.invalidationEpoch]);
   return { readStatus, selection: shared.model.orphanSelections?.[section], progress: shared.model.controls?.orphanProgress?.[section], pageStatus,
     reload: () => request(false, true), loadMore: () => {
       if (!query || !planningState.backlog().model.orphanSelections?.[section]?.continuation) return;
@@ -85,10 +85,19 @@ export function useBacklogModel(planningState: PlanningState, readMode: "legacy"
     void planningState.loadBacklogSupport({ view: "backlog-support", area, day }, { signal: controller.signal });
   }, [planningState, day]);
   useEffect(() => {
-    if (readMode !== "selected") return;
-    if (["not-loaded", "stale"].includes(shared.supportReadStatus.controls)) loadSupport("controls");
-    if (scoped && filters.level === "deliverable" && (["not-loaded", "stale"].includes(shared.supportReadStatus.sprints) || shared.model.sprintBasis && shared.model.sprintBasis.day !== day)) loadSupport("sprints");
-  }, [readMode, scoped, filters.level, shared.supportReadStatus.controls, shared.supportReadStatus.sprints, shared.model.sprintBasis, day, loadSupport, awaitingAdmission]);
+    if (!scoped || !["not-loaded", "stale"].includes(shared.supportReadStatus.controls)) return;
+    if (shared.supportReadStatus.controls === "stale") {
+      const timer = setTimeout(() => loadSupport("controls"), 500); return () => clearTimeout(timer);
+    }
+    loadSupport("controls");
+  }, [scoped, shared.supportReadStatus.controls, shared.invalidationEpoch, loadSupport, awaitingAdmission]);
+  useEffect(() => {
+    if (!scoped || filters.level !== "deliverable") return;
+    if (shared.supportReadStatus.sprints === "stale") {
+      const timer = setTimeout(() => loadSupport("sprints"), 500); return () => clearTimeout(timer);
+    }
+    if (shared.supportReadStatus.sprints === "not-loaded" || shared.model.sprintBasis && shared.model.sprintBasis.day !== day) loadSupport("sprints");
+  }, [scoped, filters.level, shared.supportReadStatus.sprints, shared.invalidationEpoch, shared.model.sprintBasis, day, loadSupport, awaitingAdmission]);
   useEffect(() => {
     const controllers = supportControllers.current;
     return () => { pending.current?.controller.abort(); clearTimeout(pending.current?.timer); for (const controller of controllers.values()) controller.abort(); };
@@ -97,7 +106,7 @@ export function useBacklogModel(planningState: PlanningState, readMode: "legacy"
     if (!query || shared.readStatus !== "stale") return;
     const timer = setTimeout(() => { void planningState.refreshWorkspace("backlog"); }, 500);
     return () => clearTimeout(timer);
-  }, [planningState, query, shared.readStatus]);
+  }, [planningState, query, shared.readStatus, shared.invalidationEpoch]);
   const commitSearch = useCallback((value: string) => {
     if (!query) return;
     const next = normalizeBacklogSelection({ ...query, filters: { ...query.filters, query: value } });

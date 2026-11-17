@@ -121,7 +121,8 @@ export function usePlanningBootstrapState({
   const focusMode = usePlanningFocusMode();
   const remoteChanges = usePlanningRemoteChanges({
     planningState,
-    enabled: source === "supabase" && auth.protectedDataLoaded && workspace === "planning",
+    enabled: source === "supabase" && auth.protectedDataLoaded && (workspace === "planning" || workspace === "backlog"),
+    workspace: workspace === "backlog" ? "backlog" : "planning",
     refreshCurrentWorkspaceModel: dataRefresh.refreshCurrentWorkspaceModel,
     scopeRevision: planningState.board().scopeRevision,
     authoritativeRevision: planningState.board().result?.workspaceRevision,

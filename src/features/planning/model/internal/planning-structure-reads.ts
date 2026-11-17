@@ -151,7 +151,27 @@ export function createPlanningStructureReads(ports: {
     current.count++; mounted.set(signature, current);
     return () => { if (--current.count === 0) { current.controller.abort(); if (mounted.get(signature) === current) mounted.delete(signature); } };
   }
+  function observationBasis() {
+    const visible = [...mounted.values()];
+    const views = visible.map(value => view(value.query));
+    const support = controlMount ? controls() : undefined;
+    const sources = [...views.map(value => value.selection?.sourceRevision), ...(support ? [support.controls?.sourceRevision] : [])];
+    const current = views.every(value => value.readStatus === "current" && value.selection) && (!support || support.readStatus === "current");
+    return { key: JSON.stringify(visible.map(value => key(value.query))), source: current && sources.length && sources.every(source => source === sources[0]) ? sources[0] : undefined,
+      forbidden: views.some(value => value.readStatus === "forbidden") || support?.readStatus === "forbidden",
+      pending: visible.flatMap(value => { const pending = entries.get(scope(value.query))?.pending; return pending ? [pending.result] : []; }).concat(controlMount && controlPending ? [controlPending.result] : []) };
+  }
+  function ensureCurrent() {
+    const visible = [...mounted.values()], support = controlMount;
+    const reads = visible.flatMap(value => { const entry = entries.get(scope(value.query)); return entry?.pending ? [entry.pending.result] : view(value.query).readStatus === "current" ? [] : [load(value.query, { refresh: true, signal: value.controller.signal })]; });
+    if (support) { if (controlPending) reads.push(controlPending.result); else if (controls().readStatus !== "current") reads.push(loadControls({ refresh: true, signal: support.controller.signal })); }
+    return Promise.all(reads).then(results => results.every(Boolean));
+  }
+  function deny() {
+    for (const entry of entries.values()) { entry.pending?.controller.abort(); entry.pending = undefined; entry.selection = undefined; entry.status = "forbidden"; }
+    controlPending?.controller.abort(); controlPending = undefined; controlReceipt = undefined; controlStatus = "forbidden";
+  }
   function refresh() { const visible = [...mounted.values()], support = controlMount; return Promise.all([...visible.map(value => load(value.query, { refresh: true, signal: value.controller.signal })), ...(support ? [loadControls({ refresh: true, signal: support.controller.signal })] : [])]).then(results => results.every(Boolean)); }
-  return { view, load, clear, mount, refresh, controls, loadControls, mountControls, mounted: () => mounted.size > 0 };
+  return { view, load, clear, mount, refresh, controls, loadControls, mountControls, observationBasis, ensureCurrent, deny, mounted: () => mounted.size > 0 };
 
 }

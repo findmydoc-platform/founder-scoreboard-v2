@@ -86,8 +86,8 @@ import type { AdministrationPeopleState } from "@/features/administration/model/
 export interface PlanningState extends PlanningCandidateAccess, PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
-  checkPlanningSource(): Promise<PlanningSourceObservation>;
-  activatePlanningView(): () => void;
+  checkPlanningSource(workspace?: "planning" | "backlog"): Promise<PlanningSourceObservation>;
+  activatePlanningView(workspace?: "planning" | "backlog"): () => void;
   beginBoardInteraction(): () => void;
   planningInteraction(): Readonly<PlanningInteraction>;
   rememberPlanningInteraction(patch: Partial<PlanningInteraction>): void;
@@ -108,7 +108,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   loadLegacyBacklog(): Promise<boolean>;
   loadBacklogSupport(query: import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean>;
   loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean }): Promise<boolean>;
-  backlog(): { orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
+  backlog(): { invalidationEpoch: number; orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
   scoreObjectionScore(sprintId: string, profileId: string): { score: import("@/lib/types").FounderSprintScore | null; complete: boolean };
