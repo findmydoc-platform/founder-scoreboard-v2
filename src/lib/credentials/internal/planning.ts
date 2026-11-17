@@ -1,3 +1,4 @@
+import { loadPlanningStructureControls } from "@/features/planning-items/server/planning-structure-controls-read-source";
 import { loadPlanningStructureSelection } from "@/features/planning-items/server/planning-structure-read-source";
 import { loadPlanningBacklogRankTarget } from "@/features/planning-items/server/planning-backlog-rank-read-source";
 import { loadPlanningBacklogSupport } from "@/features/planning-items/server/planning-backlog-support-read-source";
@@ -433,6 +434,16 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
         : { status: "forbidden" as const };
       return result;
+    },
+    async loadStructureControls(options?: { signal?: AbortSignal }) {
+      if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningStructureControls(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } } : result;
     },
     async loadStructure(query: import("@/features/planning/model/planning-structure-query").PlanningStructureQuery, options?: { signal?: AbortSignal }) {
       if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };

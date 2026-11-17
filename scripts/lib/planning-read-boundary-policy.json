@@ -11,7 +11,8 @@
     "src/features/planning-items/server/planning-backlog-read-source.ts",
     "src/features/planning-items/server/planning-backlog-support-read-source.ts",
     "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
-    "src/features/planning-items/server/planning-structure-read-source.ts"
+    "src/features/planning-items/server/planning-structure-read-source.ts",
+    "src/features/planning-items/server/planning-structure-controls-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -188,6 +189,13 @@
       "reason": "The fixed Structure adapter delegates to the established database Planning selection basis with an additional validated Initiative parent conjunction before ordering and limits. Existing approval, completed-row, full-text/owner/risk/quick and date predicates remain in that basis. Structure keeps its existing priority/order/source-ID order independently of table-sort controls. The Structure parent and normalized filters bind the independent continuation key; the delegated user-bound publication fence supplies the raw source revision without a cache. This selection does not certify full child or relationship coverage.",
       "evidence": "tests/integration/planning-structure-selection.test.ts; tests/migrations/20261117024037_planning_structure_child_selection.test.mjs",
       "expiresWhen": "Revalidate when Structure child eligibility, parent conjunction, reused Planning predicates/order, continuation, source or authorization changes."
+    },
+    "STRUCTURE-CONTROLS": {
+      "consumer": "Structure filter controls",
+      "owner": "Planning Structure owner",
+      "reason": "Complete scalar profile, Sprint, Initiative and workstream options from the existing Table populations, independent of paged membership. No canonical Task, hierarchy snapshot or mutation authority.",
+      "evidence": "tests/integration/planning-structure-controls.test.ts; tests/migrations/20261117032638_planning_structure_controls.test.mjs",
+      "expiresWhen": "Revalidate when Structure filter population, source or authorization changes."
     }
   },
   "allowedEdges": [
@@ -330,6 +338,11 @@
       "from": "src/features/planning-items/server/planning-structure-read-source.ts",
       "to": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "contract": "STRUCTURE-CHILDREN"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-structure-controls-read-source.ts",
+      "contract": "STRUCTURE-CONTROLS"
     }
   ],
   "readSites": [
