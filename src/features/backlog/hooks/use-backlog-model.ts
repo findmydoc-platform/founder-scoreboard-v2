@@ -17,7 +17,6 @@ function useBacklogOrphanSection(planningState: PlanningState, section: BacklogO
     const continuation = append ? current.model.orphanSelections?.[section]?.continuation : undefined;
     if (append && !continuation) return;
     lease.current?.abort(); const controller = new AbortController(); lease.current = controller;
-    if (append) setPageStatus("loading");
     void planningState.loadBacklogSelection({ ...query, ...(continuation ? { continuation } : {}) }, { immediate: true, append, refresh, signal: controller.signal })
       .then(ok => { if (!controller.signal.aborted) setPageStatus(ok ? "idle" : "unavailable"); });
   }, [planningState, query, section]);
@@ -29,7 +28,10 @@ function useBacklogOrphanSection(planningState: PlanningState, section: BacklogO
     return () => clearTimeout(timer);
   }, [query, readStatus, request]);
   return { readStatus, selection: shared.model.orphanSelections?.[section], progress: shared.model.controls?.orphanProgress?.[section], pageStatus,
-    reload: () => request(false, true), loadMore: () => request(true) };
+    reload: () => request(false, true), loadMore: () => {
+      if (!query || !planningState.backlog().model.orphanSelections?.[section]?.continuation) return;
+      setPageStatus("loading"); request(true);
+    } };
 }
 
 export function useBacklogModel(planningState: PlanningState, readMode: "legacy" | "selected", filters: BacklogTableFilters) {
