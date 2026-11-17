@@ -30,7 +30,8 @@ function ReceiptProbe({ mode }: { mode: Scenario }) {
     if (!state) return "not-loaded:none";
     const selected = mode === "backlog" ? state.backlog() : state.structure(roots);
     const until = mode === "backlog" ? state.backlog().model.selection?.validUntil : state.structure(roots).selection?.validUntil;
-    return `${selected.readStatus}:${until && until === scenario.memberDeadline ? "original" : "none"}`;
+    const support = mode === "backlog" ? state.backlog().supportReadStatus : { controls: state.structureControls().readStatus, sprints: "current" };
+    return `${selected.readStatus}:${until && until === scenario.memberDeadline ? "original" : "none"}:${support.controls}:${support.sprints}`;
   };
   const value = useSyncExternalStore(state?.subscribe || (() => () => {}), snapshot, snapshot);
   return <output aria-label="Current receipt evidence">{value}</output>;
@@ -106,6 +107,7 @@ export const ActiveBacklogChecksSourceAndRefreshesOnlyNeededScopesWithoutRenewin
  play:async({canvasElement})=>{
   const canvas=within(canvasElement),reads=(key:string,count:number)=>waitFor(()=>expect(canvas.getByLabelText(`Scoped ${key} reads`)).toHaveTextContent(String(count)));
   await reads("membership",1);await reads("controls",1);await reads("sprints",1);
+  await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));
   await advance(59_999);await reads("source",0);await advance(1);await reads("source",1);await reads("membership",1);
   scenario.version="2";await advance(60_000);await reads("source",2);
   await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("stale:none"));
@@ -124,7 +126,9 @@ export const CurrentStructureOnlyReceiptUsesALightweightCheckInsteadOfReloadingC
  play:async({canvasElement})=>{
   const canvas=within(canvasElement);await userEvent.click(await canvas.findByRole("button",{name:"Struktur"}));
   await waitFor(()=>expect(canvas.getByLabelText("Scoped membership reads")).toHaveTextContent("1"));await waitFor(()=>expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("1"));
-  await advance(60_000);await waitFor(()=>expect(canvas.getByLabelText("Scoped source reads")).toHaveTextContent("1"));
+  await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));
+  const sourceBefore=Number(canvas.getByLabelText("Scoped source reads").textContent);
+  await advance(60_000);await waitFor(()=>expect(canvas.getByLabelText("Scoped source reads")).toHaveTextContent(String(sourceBefore+1)));
   await expect(canvas.getByLabelText("Scoped membership reads")).toHaveTextContent("1");await expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("1");
  },
 };
@@ -133,8 +137,10 @@ export const ExpiredStructureReceiptCannotBorrowTheOlderBoardAuthorityWindow:Sto
  play:async({canvasElement})=>{
   const canvas=within(canvasElement);await userEvent.click(await canvas.findByRole("button",{name:"Struktur"}));
   await waitFor(()=>expect(canvas.getByLabelText("Scoped membership reads")).toHaveTextContent("1"));await waitFor(()=>expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("1"));
+  await waitFor(()=>expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original:current:current"));
+  const sourceBefore=Number(canvas.getByLabelText("Scoped source reads").textContent);
   await advance(60_000);await waitFor(()=>expect(canvas.getByLabelText("Scoped membership reads")).toHaveTextContent("2"));
-  await expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("2");await expect(canvas.getByLabelText("Scoped source reads")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Scoped controls reads")).toHaveTextContent("2");await expect(canvas.getByLabelText("Scoped source reads")).toHaveTextContent(String(sourceBefore));
   await expect(canvas.getByLabelText("Current receipt evidence")).toHaveTextContent("current:original");await expect(canvas.getByLabelText("Scoped hidden reads")).toHaveTextContent("0");
  },
 };
