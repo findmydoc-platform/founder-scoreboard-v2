@@ -25,7 +25,7 @@ test("Structure pages all Initiative roots including proposed and completed reco
     const response=await GET(f.request("founder",`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`));expect(response.status).toBe(200);
     const body=await response.json();expect(body.model).toHaveProperty("structure");const selected=body.model.structure;
     expect(selected.query).toEqual(query);expect(selected.total).toBe(1009);expect(selected.contextIds).toEqual([epicId]);expect(selected.itemIds.length).toBeLessThanOrEqual(100);expect(body.model.items.length).toBeLessThanOrEqual(101);
-    expect(body.model.items.find((row:Task)=>row.id===epicId)).toMatchObject({status:"Erledigt",updatedAt:"2000-01-01T00:00:00+00:00"});
+    const ancestor=body.model.items.find((row:Task)=>row.id===epicId);expect(ancestor.status).toBe("Erledigt");expect(Date.parse(ancestor.updatedAt)).toBe(Date.UTC(2000,0,1));
     expect(body.readActor).toEqual({profileId:f.actors.founder.profileId,platformRole:"founder"});expect(body.readAuthority.deadline).toBeLessThanOrEqual(deadline);expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());deadline=body.readAuthority.deadline;
     expect(body.model.taskOmittedFields).toEqual(expect.arrayContaining(["note","evidenceLinks"]));
     ids.push(...selected.itemIds);continuation=selected.continuation||undefined;
