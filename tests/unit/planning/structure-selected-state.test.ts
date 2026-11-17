@@ -39,8 +39,12 @@ test("Structure rejects a foreign actor and replaced session and expires its unc
   try {
     expect(await state.planning.loadStructure(roots)).toBe(false);
     const late = state.planning.loadStructure(roots); state.internal.bindSession({ ...session, revision: "replacement" }); held.resolve(good); expect(await late).toBe(false);
-    expect(await state.planning.loadStructure(roots)).toBe(true); now = good.readAuthority.deadline + 1;
-    expect(state.planning.structure(roots)).toMatchObject({ readStatus: "stale", selection: undefined });
+    expect(await state.planning.loadStructure(roots)).toBe(false);
+    const current = owner(async () => good, () => now);
+    try {
+      expect(await current.planning.loadStructure(roots)).toBe(true); now = good.readAuthority.deadline + 1;
+      expect(current.planning.structure(roots)).toMatchObject({ readStatus: "stale", selection: undefined });
+    } finally { current.internal.dispose(); }
   } finally { state.internal.dispose(); }
 });
 test("Structure keeps root and parent receipts independent but rejects older source responses after a newer scope expires", async () => {
