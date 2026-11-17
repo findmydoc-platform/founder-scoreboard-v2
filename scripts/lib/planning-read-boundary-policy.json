@@ -1284,6 +1284,13 @@
       "target": "planning_item_strategy",
       "fingerprint": "790ede2d1c947bf177faa06be95f311993539237065667fcae4a5977cc2b2ba2",
       "contract": "STRUCTURE-ROOTS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-structure-controls-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_structure_controls",
+      "fingerprint": "7e1e45e6aebf5a7296be323872ee6f31f753c7919308166a6698013ecdb92f56",
+      "contract": "STRUCTURE-CONTROLS"
     }
   ]
 }
