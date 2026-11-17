@@ -2406,6 +2406,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     let authorityChanged = false;
     sessionChanged(session?.userId || null);
     if (session?.userId === userId && !ended) {
+      const initialBacklogBinding = !sessionRevision && initialWorkspace === "backlog";
       if (sessionRevision && sessionRevision !== session.revision) {
         const selectedQuery = boardQuery;
         suspendProtected();
@@ -2416,6 +2417,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }
       sessionRevision = session.revision;
       sessionExpiresAt = session.expiresAt;
+      if (initialBacklogBinding) { workspaceStatuses.set("backlog", "not-loaded"); publish(); }
     }
     return isActive() && authorityChanged;
   }

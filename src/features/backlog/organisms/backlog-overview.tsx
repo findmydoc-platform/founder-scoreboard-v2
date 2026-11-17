@@ -204,7 +204,7 @@ export function BacklogOverview({
         backlogLevel === "deliverable" && "xl:grid-cols-[minmax(0,1fr)_340px]",
       )}>
         <div className="grid min-w-0 gap-4">
-          <PlanningBacklogTree
+          {!scoped || selectionCurrent || model.items.length ? <PlanningBacklogTree
             childOwner={planningState}
             collectionCoverage={selectionCurrent ? model.coverage?.items : undefined}
             independentMembership={selectionCurrent && !filters.query.trim() && filters.status === "Alle" && filters.priority === "Alle" && filters.assignee === "Alle" && filters.scope === "all" && filters.readiness === "all"}
@@ -221,7 +221,7 @@ export function BacklogOverview({
             sprintBuckets={viewModel.sprintBuckets}
             sprintById={sprintById}
             visibleTaskIds={visibleTaskIds}
-          />
+          /> : null}
           {backlogLevel === "deliverable" && selectionCurrent ? (
             <details className="overflow-hidden rounded-lg border border-slate-200 bg-white" data-tour-id="backlog-deliverable-ranking">
               <summary className="cursor-pointer border-l-4 border-blue-700 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">

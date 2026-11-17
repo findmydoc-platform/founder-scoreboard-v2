@@ -8,6 +8,7 @@ import type { BacklogTableFilters } from "../model/backlog-view-model";
 export function useBacklogModel(planningState: PlanningState, readMode: "legacy" | "selected", filters: BacklogTableFilters) {
   const shared = planningState.backlog(), previous = useRef<BacklogSelectionQuery | null>(null), legacyRequested = useRef(false);
   const scoped = readMode === "selected" && filters.level === "deliverable";
+  const awaitingAdmission = shared.readStatus === "not-loaded";
   const query = useMemo(() => scoped ? normalizeBacklogSelection({ view: "backlog", filters, limit: 20 }) : null, [scoped, filters]);
   const pending = useRef<{ key: string; controller: AbortController; timer?: ReturnType<typeof setTimeout>; start(): void } | null>(null);
   const supportControllers = useRef(new Map<"controls" | "sprints", AbortController>());
@@ -29,9 +30,9 @@ export function useBacklogModel(planningState: PlanningState, readMode: "legacy"
     } else {
       const changed = Boolean(previous.current); previous.current = null;
       pending.current?.controller.abort(); clearTimeout(pending.current?.timer); pending.current = null;
-      if (!legacyRequested.current) { legacyRequested.current = true; if (changed || !shared.model.coverage?.items) void planningState.loadLegacyBacklog(); }
+      if (!legacyRequested.current || awaitingAdmission) { legacyRequested.current = true; if (changed || !shared.model.coverage?.items) void planningState.loadLegacyBacklog(); }
     }
-  }, [planningState, query, request, shared.model.coverage?.items]);
+  }, [planningState, query, request, shared.model.coverage?.items, awaitingAdmission]);
   const loadSupport = useCallback((area: "controls" | "sprints") => {
     if (planningState.backlog().supportReadStatus[area] === "loading") return;
     supportControllers.current.get(area)?.abort();
@@ -42,7 +43,7 @@ export function useBacklogModel(planningState: PlanningState, readMode: "legacy"
     if (readMode !== "selected") return;
     if (["not-loaded", "stale"].includes(shared.supportReadStatus.controls)) loadSupport("controls");
     if (scoped && (["not-loaded", "stale"].includes(shared.supportReadStatus.sprints) || shared.model.sprintBasis && shared.model.sprintBasis.day !== day)) loadSupport("sprints");
-  }, [readMode, scoped, shared.supportReadStatus.controls, shared.supportReadStatus.sprints, shared.model.sprintBasis, day, loadSupport]);
+  }, [readMode, scoped, shared.supportReadStatus.controls, shared.supportReadStatus.sprints, shared.model.sprintBasis, day, loadSupport, awaitingAdmission]);
   useEffect(() => {
     const controllers = supportControllers.current;
     return () => { pending.current?.controller.abort(); clearTimeout(pending.current?.timer); for (const controller of controllers.values()) controller.abort(); };

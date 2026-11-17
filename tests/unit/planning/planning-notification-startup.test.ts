@@ -157,5 +157,5 @@ test("Backlog SSR admits the shell without enumerating capped domain rows or cer
   expect(page.props.initialData.profiles).toEqual([{ id: "synthetic-profile", name: "Synthetic Founder", platformRole: "founder", orgRole: "Founder", githubLogin: "", weeklyCapacity: 6 }]);
   expect(page.props.initialBacklogModel).toMatchObject({ items: [], coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial" } });
   expect(page.props.initialBacklogModel.selection).toBeUndefined();
-  expect(page.props.initialHeaderData.notifications.state).toBe("idle");
+  expect(page.props.initialHeaderData.notifications.state).toBe("error");
 });

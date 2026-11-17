@@ -1,3 +1,4 @@
+import { createBrowserPlanningLifetime } from "@/features/planning/model/internal/browser-planning-lifetime";
 import { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } from "../model/backlog-view-model";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -189,7 +190,7 @@ export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingIt
  },
 };
 
-const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void }>();
+const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void; connectSession(): void }>();
 function SelectedBacklogScopeStory() {
  const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0});
  const [bundle]=useState(()=>{
@@ -239,11 +240,15 @@ function SelectedBacklogScopeStory() {
     if(url.pathname===`/api/tasks/${parent.id}/detail-data`)return{response:new Response(null,{status:503}),body:{error:"Synthetic independent child basis unavailable"} as T};
     throw new Error("Unexpected selected Backlog request");
   },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
-  const browser=createBrowserPlanningState({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile});
-  browser.runtime.session={userId,revision:"scoped-backlog-session",expiresAt:deadline/1000,user:{id:userId}};browser.runtime.apiClient=client;
-  return{browser,counts:full.scopeCounts,matches:match.visibleItems.map(item=>item.task.id),failSprint:()=>failSprint()};
+  const session={userId,revision:"scoped-backlog-session",expiresAt:deadline/1000,user:{id:userId}};
+  let connectSession=()=>{};
+  const sessionReady=new Promise<typeof session>(resolve=>{connectSession=()=>resolve(session);});
+  const lifetime=createBrowserPlanningLifetime({current:()=>sessionReady,subscribe:()=>()=>{}});
+  const browser=lifetime.page({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile})!;
+  browser.runtime.apiClient=client;
+  return{browser,lifetime,counts:full.scopeCounts,matches:match.visibleItems.map(item=>item.task.id),failSprint:()=>failSprint(),connectSession:()=>connectSession()};
  });
- useEffect(()=>()=>bundle.browser.owner.internal.dispose(),[bundle]);
+ useEffect(()=>{const disconnect=bundle.lifetime.connect();return()=>{disconnect();bundle.browser.owner.internal.dispose();};},[bundle]);
  useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
  scopedBacklogChecks.set("selected",bundle);
  return <main><output aria-label="Ausgewählte Backlog-Abfragen">{requests.selected}</output><output aria-label="Backlog-Filterabfragen">{requests.controls}</output>
@@ -256,6 +261,11 @@ export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetrySt
  play:async({canvasElement})=>{
   const canvas=within(canvasElement),reference=scopedBacklogChecks.get("selected")!;
   expect(reference.counts).toEqual({all:1008,proposals:336,ready:336,unscheduled:672});expect(reference.matches).toEqual(["scoped-candidate-1008"]);
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+  await expect(canvas.queryByRole("link",{name:"Nur über Beschreibung gefunden"})).not.toBeInTheDocument();
+  await expect(within(canvas.getByRole("group",{name:"Backlog-Scope"})).queryByRole("button",{name:/^Alle\s*0$/})).not.toBeInTheDocument();
+  reference.connectSession();
   await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1"));
   await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
   await waitFor(()=>expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1"));await waitFor(()=>expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("1"));
