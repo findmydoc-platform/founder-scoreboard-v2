@@ -13,7 +13,7 @@ it("preserves version 68 records and Table contracts while adding service-only c
     const records=async()=>({projects:(await client.query("select * from public.projects order by id")).rows,profiles:(await client.query("select * from public.profiles order by id")).rows,tasks:(await client.query("select * from public.tasks order by id")).rows,sprints:(await client.query("select * from public.sprints order by id")).rows,commitments:(await client.query("select * from public.sprint_commitments order by id")).rows});
     const table=async()=>(await client.query(`select public.planning_deliverable_query_basis('controls-founder','{"view":"table","filters":{}}'::jsonb) value`)).rows[0].value;
     const before=await records(),old=await table();expect(old.status).toBe("ready");
-    await applyMigration(resolve("supabase/migrations/20261117032638_planning_structure_controls.sql"));
+    await applyMigration(client, resolve("supabase/migrations/20261117032638_planning_structure_controls.sql"));
     expect(await records()).toEqual(before);const current=await table();
     for(const key of Object.keys(old).filter(key=>key!=="evaluated_at"))expect(current[key]).toEqual(old[key]);
     const read=async(actor='controls-founder')=>(await client.query("select public.planning_structure_controls($1) value",[actor])).rows[0].value;
