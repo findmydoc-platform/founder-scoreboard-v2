@@ -1804,6 +1804,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         publish(); return true;
       }).catch(error => {
         if (!bindingCurrent()) return false;
+        if (query.continuation && typeof error === "object" && error !== null && "status" in error && error.status === 409 && "code" in error && error.code === "stale_continuation") {
+          setReceipt(undefined); setStatus("stale"); publish(); return false;
+        }
         const status = readErrorStatus(error);
         if (!previousPage || status === "forbidden") {
           setReceipt(undefined);

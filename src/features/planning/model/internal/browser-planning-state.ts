@@ -503,15 +503,15 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           readAuthority: body.readAuthority, readActor: body.readActor, backlogControls: body.model.controls, backlogSprintBasis: body.model.sprintBasis };
       },
       async readStructure(query, options) {
-        const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-query").PlanningStructureModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
-        if (!response.ok || !body?.model?.structure) throw Object.assign(new Error(body?.error || "Struktur konnte nicht geladen werden."), { status: response.status });
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-query").PlanningStructureModel; code?: string; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
+        if (!response.ok || !body?.model?.structure) throw Object.assign(new Error(body?.error || "Struktur konnte nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         if (!body.readAuthority || !body.readActor) throw new Error("Die Leseberechtigung fehlt.");
         return { model: body.model, readAuthority: body.readAuthority, readActor: body.readActor };
       },
       async readBacklogSelection(query, options) {
         const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
-        if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
+        if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { data: backlogModelToPlanningShellState(body.model), readAuthority: body.readAuthority, readActor: body.readActor,
           backlogSelection: body.model.selection, scopeRevision: body.model.selection.scopeRevision,
@@ -556,7 +556,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         }
         if (workspace === "backlog") {
           const { response, body } = await requestBacklogModel(ownedApiClient);
-          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
+          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status, code: body?.code });
           return { data: backlogModelToPlanningShellState(body.model), coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
         }
         if (isSupportingWorkspace(workspace)) {

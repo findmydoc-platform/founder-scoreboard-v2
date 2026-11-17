@@ -5,7 +5,7 @@ export function requestBacklogModel(apiClient: BrowserApiClient) {
   return apiClient.requestJson<{ error?: string; model?: BacklogModel }>("/api/backlog-data");
 }
 
-type ScopedBacklogResponse = { error?: string; model?: BacklogModel;
+type ScopedBacklogResponse = { error?: string; code?: string; model?: BacklogModel;
   readAuthority?: import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority;
   readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] };
 };

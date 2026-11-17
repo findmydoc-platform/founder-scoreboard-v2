@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
   const result = await apiContext.planning.loadBacklog(query, { signal: request.signal });
   if (result.status === "forbidden") return apiError("Backlog darf nicht geladen werden.", 403);
-  if (result.status === "staleContinuation") return apiError("Die Backlog-Grundlage hat sich geändert.", 409);
+  if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Backlog-Grundlage hat sich geändert.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Backlog konnte nicht geladen werden.", 503);
   if (!query) return NextResponse.json({ model: result.model });
   const readAuthority = "readAuthority" in result ? result.readAuthority : undefined;
