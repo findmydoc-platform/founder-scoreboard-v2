@@ -610,7 +610,7 @@
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "kind": "rpc",
       "target": "planning_deliverable_selection",
-      "fingerprint": "592ce6dd499ebf7eff4d5311e4cd5b102a9e81752714a8694950a789923331b0",
+      "fingerprint": "7209e427dfc783049de8881ce21c1ab085de08d83e0dd8c5a23a493ce4d192e0",
       "contract": "BOARD",
       "references": 1
     },
