@@ -25,7 +25,8 @@ async function loadStructureChildren(supabase: SupabaseClient, context: Planning
   });
   if (result.status !== "ready") return result;
   const table = result.model.table;
-  if (!table || !sourceRevision || table.validUntil !== null && !Number.isFinite(Date.parse(table.validUntil))) return { status: "unavailable" };
+  if (!table || !sourceRevision || typeof table.observedAt !== "string" || !Number.isFinite(Date.parse(table.observedAt))
+    || table.validUntil !== null && (typeof table.validUntil !== "string" || !Number.isFinite(Date.parse(table.validUntil)))) return { status: "unavailable" };
   const deadline = Math.min(context.authorityDeadline, result.authorityDeadline ?? Infinity, table.validUntil === null ? Infinity : Date.parse(table.validUntil));
   if (deadline <= Date.now()) return { status: "forbidden" };
   const selectedIds = new Set(table.rowIds);
