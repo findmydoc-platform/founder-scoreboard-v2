@@ -19,14 +19,15 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
   const client=createClient(f.local.API_URL,f.local.SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
   const reference=await loadPlanningWorkspaceModel(client,{authorized:true,actorProfileId:f.actors.founder.profileId,query:{view:"complete"}});
   expect(reference.status).toBe("ready");if(reference.status!=="ready")throw new Error("Complete Epic section reference was unavailable");
-  const filters={...DEFAULT_BACKLOG_FILTERS,level:"epic" as const,query,status:"Offen",priority:"P2"};
+  const filters={...DEFAULT_BACKLOG_FILTERS,level:"epic" as const,query,status:"Offen"};
   const model={revision:reference.model.revision,items:reference.model.items,people:reference.model.people,sprints:reference.model.sprints,commitments:[],coverage:{items:"complete" as const,people:"complete" as const,sprints:"complete" as const,commitments:"complete" as const}};
   const expected=Array.from({length:1008},(_,i)=>`${f.prefix}-selected-epic-${String(i+1).padStart(4,"0")}`);
   expect(buildBacklogOverviewViewModel(model,filters,false).visibleLevelTasks.map(row=>row.id)).toEqual(expected);
+  expect(buildBacklogOverviewViewModel(model,{...filters,priority:"P2"},false).visibleLevelTasks).toEqual([]);
   const orphans=Object.fromEntries(["initiative","deliverable"].map(kind=>[kind,reference.model.items.filter((row:Task)=>row.taskType===kind&&!row.parentTaskId).map((row:Task)=>row.id)]));
   for(const kind of ["initiative","deliverable"])expect(orphans[kind]).toEqual([`${f.prefix}-orphan-${kind}-open`,`${f.prefix}-orphan-${kind}-done`]);
   const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
-  const read=(section?:string,continuation?:string,actor:"founder"|"unmapped"="founder")=>GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters,section,limit:100,continuation}))}`));
+  const read=(section?:string,continuation?:string,actor:"founder"|"unmapped"="founder",inputFilters=filters)=>GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters:inputFilters,section,limit:100,continuation}))}`));
   let continuation:string|undefined,deadline=Infinity;const ids:string[]=[];
   do {
     const response=await read(undefined,continuation);expect(response.status).toBe(200);const body=await response.json(),selection=body.model.selection;
@@ -41,6 +42,7 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
     expect(selection.query.section).toBe(section);expect(selection.query.filters).toEqual({...DEFAULT_BACKLOG_FILTERS,level:"epic"});
     expect(body.model.items.find((row:{id:string})=>row.id===`${f.prefix}-orphan-${kind}-done`).status).toBe("Erledigt");
     expect(body.readActor.profileId).toBe(f.actors.founder.profileId);expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+    const filtered=await read(section,undefined,"founder",{...filters,priority:"P2"});expect(filtered.status).toBe(200);expect((await filtered.json()).model.selection.itemIds).toEqual(orphans[kind]);
     expect((await read(section,undefined,"unmapped")).status).toBe(403);
   }
 }),120_000);
