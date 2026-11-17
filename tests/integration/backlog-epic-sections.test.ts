@@ -1,3 +1,4 @@
+import type { Task } from "@/lib/types";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
@@ -22,7 +23,7 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
   const model={revision:reference.model.revision,items:reference.model.items,people:reference.model.people,sprints:reference.model.sprints,commitments:[],coverage:{items:"complete" as const,people:"complete" as const,sprints:"complete" as const,commitments:"complete" as const}};
   const expected=Array.from({length:1008},(_,i)=>`${f.prefix}-selected-epic-${String(i+1).padStart(4,"0")}`);
   expect(buildBacklogOverviewViewModel(model,filters,false).visibleLevelTasks.map(row=>row.id)).toEqual(expected);
-  const orphans=Object.fromEntries(["initiative","deliverable"].map(kind=>[kind,reference.model.items.filter(row=>row.taskType===kind&&!row.parentTaskId).map(row=>row.id)]));
+  const orphans=Object.fromEntries(["initiative","deliverable"].map(kind=>[kind,reference.model.items.filter((row:Task)=>row.taskType===kind&&!row.parentTaskId).map((row:Task)=>row.id)]));
   for(const kind of ["initiative","deliverable"])expect(orphans[kind]).toEqual([`${f.prefix}-orphan-${kind}-open`,`${f.prefix}-orphan-${kind}-done`]);
   const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
   const read=(section?:string,continuation?:string,actor:"founder"|"unmapped"="founder")=>GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters,section,limit:100,continuation}))}`));
