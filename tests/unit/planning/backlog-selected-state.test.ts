@@ -194,8 +194,8 @@ test("selected Parent progress cannot certify unrelated context or inconsistent 
   const invalid:Record<string,BacklogParentProgress>[]=[{unrelated:{total:1,completed:0,unfinished:1,percentage:0}},{[parent.id]:{total:1,completed:2,unfinished:0,percentage:100}}];
   for(const progress of invalid){
     const read=response();read.backlogSelection={...read.backlogSelection,parentProgressById:progress};
-    const owner=selectedOwner(async()=>read);
-    try{expect(await owner.planning.loadBacklogSelection(query)).toBe(false);expect(owner.planning.backlog().model.selection).toBeUndefined();expect(owner.planning.taskDetail(selected.id).task).toBeNull();}
+    const owner=selectedOwner(async()=>read),previous=owner.planning.taskDetail(selected.id).task;
+    try{expect(await owner.planning.loadBacklogSelection(query)).toBe(false);expect(owner.planning.backlog().model.selection).toBeUndefined();expect(owner.planning.taskDetail(selected.id).task).toEqual(previous);expect(owner.planning.taskDetail(parent.id).task).toBeNull();}
     finally{owner.internal.dispose();}
   }
 });
