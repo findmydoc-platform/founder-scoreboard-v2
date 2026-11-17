@@ -191,12 +191,12 @@ export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingIt
 };
 
 const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void; connectSession(): void }>();
-function SelectedBacklogScopeStory({ parentRollups = false }: { parentRollups?: boolean } = {}) {
+function SelectedBacklogScopeStory({ parentRollups = false, smallComplete = false }: { parentRollups?: boolean; smallComplete?: boolean } = {}) {
  const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0,children:0});
  const [bundle]=useState(()=>{
   const profile={id:"scoped-backlog-ceo",name:"Synthetic CEO",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
   const parent=taskDetailStoryTask({id:"scoped-backlog-parent",title:"Vollständiger ausgewählter Kontext",taskType:"initiative",parentTaskId:"",updatedAt:"2026-11-01T12:00:00Z"});
-  const rows=Array.from({length:1008},(_,index)=>{const n=index+1;return taskDetailStoryTask({id:`scoped-candidate-${n}`,title:n===1008?"Nur über Beschreibung gefunden":`Backlog-Zeile ${n}`,
+  const rows=Array.from({length:smallComplete?2:1008},(_,index)=>{const n=index+1;return taskDetailStoryTask({id:`scoped-candidate-${n}`,title:n===1008?"Nur über Beschreibung gefunden":`Backlog-Zeile ${n}`,
     description:n===1008?"Verdeckter Suchtext":"Ordinary description",parentTaskId:parent.id,order:n*10,approvalStatus:n%3===1?"proposed":"approved",sprintId:n%3===2?sprint.id:"",
     assigneeId:profile.id,ownerId:profile.id,assignee:profile.name,owner:profile.name,hours:1,updatedAt:"2026-11-01T12:00:00Z"});});
   const done=taskDetailStoryTask({id:"scoped-completed",title:"Erledigter Kontext",parentTaskId:parent.id,status:"Erledigt"});
@@ -234,7 +234,7 @@ function SelectedBacklogScopeStory({ parentRollups = false }: { parentRollups?: 
         const selected=buildBacklogTableViewModel(fullModel,query.filters).visibleItems,chosen=selected.slice(0,query.limit);
         return response({...empty,items:[...(chosen.length?[parent]:[]),...chosen.map(item=>item.task)].map(compact),people:[profile],sprints:[sprint],taskOmittedFields:omitted,
           selection:{...receipt("selected"),query,itemIds:chosen.map(item=>item.task.id),contextIds:chosen.length?[parent.id]:[],rankById:Object.fromEntries(chosen.map(item=>[item.task.id,item.rank])),
-            ...(parentRollups?{parentProgressById:chosen.length?{[parent.id]:{total:1009,completed:1,unfinished:1008,percentage:0}}:{}}:{}),
+            ...(parentRollups?{parentProgressById:chosen.length?{[parent.id]:{total:rows.length+1,completed:1,unfinished:rows.length,percentage:Math.round(100/(rows.length+1))}}:{}}:{}),
             total:selected.length,coverage:chosen.length===selected.length?"complete":"partial",continuation:chosen.length===selected.length?null:"selected-next"}}) as BrowserApiJsonResult<T>;
       }
     }
@@ -371,6 +371,23 @@ export const FilteredParentProgressDoesNotEnumerateUnusedChildren:Story={
   await expect(canvas.getByLabelText("Vollständige Parent-Kinderabfragen")).toHaveTextContent("0");
   await expect(group.getByRole("progressbar",{name:"1 von 1009 Deliverables erledigt"})).toBeVisible();
   await expect(group.queryByRole("link",{name:"Erledigter Kontext"})).not.toBeInTheDocument();
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+ },
+};
+
+export const CompleteSmallParentMembershipDoesNotReloadChildren:Story={
+ name:"Complete small Parent membership avoids a redundant Children read",render:()=> <SelectedBacklogScopeStory parentRollups smallComplete/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{}}}},
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);scopedBacklogChecks.get("selected")!.connectSession();
+  const group=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  await expect(await group.findByRole("link",{name:"Backlog-Zeile 1"})).toBeVisible();
+  await expect(group.getByRole("link",{name:"Backlog-Zeile 2"})).toBeVisible();
+  await expect(group.queryByRole("link",{name:"Erledigter Kontext"})).not.toBeInTheDocument();
+  await expect(group.getByRole("progressbar",{name:"1 von 3 Deliverables erledigt"})).toBeVisible();
+  await expect(canvas.getByLabelText("Vollständige Parent-Kinderabfragen")).toHaveTextContent("0");
   await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1");
   await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
  },
