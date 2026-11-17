@@ -109,6 +109,12 @@ Run `planning-read-coordination.test.ts` for exact 250 ms search, immediate Ente
 
 These cases complement the matched browser measurements. Passing them does not certify shorter entry/return or the later selection, scheduling and migration gates.
 
+## Panel-link prefetch verification
+
+Verify canonical prefetch behavior in a production browser because Next.js does not perform this prefetch in development. Before any Task activation, observe visible Backlog panel links without opening their targets. Then verify that ordinary activation opens the same Task panel while retaining the Backlog route and canonical href. A modified activation must still open the canonical page with the same Task heading and no modal dialog. Keep the real navigation proxy/authentication path enabled. Selected Structure cards and their nested links share the explicit optout; unrelated link consumers retain their default.
+
+Distinguish suppressed prefetch requests from authentication checks on actual navigation. An observed successful Auth response header does not establish internal response-body verification or backend termination. Record any cold canonical-navigation cost separately; this functional check does not establish entry/return latency or explain an earlier matched difference.
+
 ## Matched comparison conditions
 
 Before each run, fix data variant, role, authentication mode, authorized scope, evaluation-time treatment, query and viewport. Keep these dimensions separate:
