@@ -66,7 +66,7 @@ test("expanded Structure selects the complete approved parent class with legacy 
   const expected=Array.from({length:1008},(_,i)=>`${f.prefix}-structure-child-${String(i+1).padStart(4,"0")}`);
   expect(selected.visibleTasks.filter(row=>row.parentTaskId===f.initiativeId&&row.taskType==="deliverable"&&isTaskPlanningActive(row)).map(row=>row.id)).toEqual(expected);
   const {GET}=await importTestModule("src/app/api/planning-board-data/route.ts",{"server-only":{}});
-  const read=(input=filters,continuation?:string)=>GET(f.request("founder",`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({view:"structure",area:"children",parentId:f.initiativeId,filters:input,limit:100,continuation}))}`));
+  const read=(input=filters,continuation?:string,actor:"ceo"|"deputy"|"founder"|"viewer"|"administrator"|"unmapped"="founder")=>GET(f.request(actor,`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({view:"structure",area:"children",parentId:f.initiativeId,filters:input,limit:100,continuation}))}`));
   const ids:string[]=[];let continuation:string|undefined,deadline=Infinity;
   do{
     const response=await read(filters,continuation);expect(response.status).toBe(200);const body=await response.json(),page=body.model.structure;
@@ -78,4 +78,6 @@ test("expanded Structure selects the complete approved parent class with legacy 
   expect(ids).toEqual(expected);
   const definition=await read({...filters,query:"Unique final definition"});expect(definition.status).toBe(200);expect((await definition.json()).model.structure.itemIds).toEqual([expected[1007]]);
   const conflict=await read({...filters,initiativeId:other});expect(conflict.status).toBe(200);const empty=(await conflict.json()).model.structure;expect(empty.total).toBe(0);expect(empty.itemIds).toEqual([]);
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const){const response=await read(filters,undefined,actor);expect(response.status).toBe(200);const body=await response.json();expect(body.model.structure.itemIds).toEqual(expected.slice(0,20));expect(body.readActor.profileId).toBe(f.actors[actor].profileId);}
+  expect((await read(filters,undefined,"unmapped")).status).toBe(403);
 }),120_000);

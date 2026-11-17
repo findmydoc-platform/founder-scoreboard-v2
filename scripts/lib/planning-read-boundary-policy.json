@@ -181,6 +181,13 @@
       "reason": "The credential-bound service-only root scope preserves all nontrashed Initiatives including proposed and completed rows, in the existing source order/ID sequence before paging. Only returned root and ancestor IDs enter the shared bounded hydrator. This root projection reads description and complete strategy fields for those known IDs because they are visible header context; omitted notes, evidence and other canonical fields remain unknown. Fresh Actor/source publication, signed continuations and each original authority deadline remain required. This root receipt does not certify Deliverable membership, child progress, relationships or a complete hierarchy.",
       "evidence": "tests/integration/planning-structure-selection.test.ts; tests/migrations/20261117022303_planning_structure_roots.test.mjs",
       "expiresWhen": "Revalidate when Structure root membership, source ordering, bounded context field coverage, continuation or authorization changes; the visible Structure and opened-child callers need separate evidence."
+    },
+    "STRUCTURE-CHILDREN": {
+      "consumer": "Opened Structure Initiative approved Deliverable membership",
+      "owner": "Planning and Planning Item feature owners",
+      "reason": "The fixed Structure adapter delegates to the established database Planning selection basis with an additional validated Initiative parent conjunction before ordering and limits. Existing approval, completed-row, full-text/owner/risk/quick and date predicates remain in that basis. Structure keeps its existing priority/order/source-ID order independently of table-sort controls. The Structure parent and normalized filters bind the independent continuation key; the delegated user-bound publication fence supplies the raw source revision without a cache. This selection does not certify full child or relationship coverage.",
+      "evidence": "tests/integration/planning-structure-selection.test.ts; tests/migrations/20261117024037_planning_structure_child_selection.test.mjs",
+      "expiresWhen": "Revalidate when Structure child eligibility, parent conjunction, reused Planning predicates/order, continuation, source or authorization changes."
     }
   },
   "allowedEdges": [
@@ -318,6 +325,11 @@
       "from": "src/features/planning-items/server/planning-structure-read-source.ts",
       "to": "src/features/planning-items/server/planning-card-summary.ts",
       "contract": "STRUCTURE-ROOTS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-structure-read-source.ts",
+      "to": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "contract": "STRUCTURE-CHILDREN"
     }
   ],
   "readSites": [

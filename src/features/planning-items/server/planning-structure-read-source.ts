@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PlanningStructureModel, PlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
 import type { PlanningWorkspaceLoadContext } from "../model/planning-workspace-model";
 import { hydrateBacklogItems } from "./planning-backlog-read-source";
+import { loadPlanningDeliverableBoard } from "./planning-deliverable-read-source";
 import { planningCardOmittedFields } from "./planning-card-summary";
 
 type Result = { status: "ready"; model: PlanningStructureModel; authorityDeadline: number } | { status: "forbidden" | "unavailable" | "staleContinuation" };
@@ -13,8 +14,34 @@ function signature(context: PlanningWorkspaceLoadContext, query: PlanningStructu
   return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["structure-roots-v1", context.actorProfileId, query.area, query.limit, cursor])).digest("hex");
 }
 
+async function loadStructureChildren(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, query: Extract<PlanningStructureQuery, { area: "children" }>): Promise<Result> {
+  if (!context.authorityKey || !context.authorityDeadline || !context.publicationSource) return { status: "unavailable" };
+  let sourceRevision: string | undefined;
+  const publicationSource = context.publicationSource;
+  const result = await loadPlanningDeliverableBoard(supabase, { ...context, structureParentId: query.parentId,
+    query: { view: "table", filters: query.filters, limit: query.limit, continuation: query.continuation },
+    authorityKey: createHmac("sha256", context.authorityKey).update(JSON.stringify(["structure-children-v1", query.parentId, query.filters, query.limit])).digest("hex"),
+    publicationSource: { async read(signal) { const source = await publicationSource.read(signal); if (source.status === "ready") sourceRevision = source.revision; return source; } },
+  });
+  if (result.status !== "ready") return result;
+  const table = result.model.table;
+  if (!table || !sourceRevision || !table.validUntil || !Number.isFinite(Date.parse(table.validUntil))
+    || Date.parse(table.validUntil) <= Date.now()) return { status: "unavailable" };
+  const deadline = Math.min(context.authorityDeadline, result.authorityDeadline ?? Infinity);
+  if (deadline <= Date.now()) return { status: "forbidden" };
+  const selectedIds = new Set(table.rowIds);
+  return { status: "ready", authorityDeadline: deadline, model: {
+    revision: sourceRevision, items: result.model.items, people: result.model.people, taskOmittedFields: result.model.taskOmittedFields || planningCardOmittedFields,
+    structure: { query, itemIds: table.rowIds, contextIds: result.model.items.filter(item => !selectedIds.has(item.id)).map(item => item.id),
+      total: table.page.total, coverage: table.page.completeness, continuation: table.page.continuation,
+      sourceRevision, scopeRevision: createHash("sha256").update(JSON.stringify([query.parentId, query.filters, sourceRevision])).digest("hex"),
+      observedAt: table.observedAt, validUntil: table.validUntil },
+  } };
+}
+
 export async function loadPlanningStructureSelection(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, query: PlanningStructureQuery): Promise<Result> {
   if (!context.authorized || !context.actorProfileId) return { status: "forbidden" };
+  if (query.area === "children") return loadStructureChildren(supabase, context, query);
   if (!context.authorityKey || !context.authorityDeadline || !context.publicationSource) return { status: "unavailable" };
   let cursor: Omit<Cursor, "binding"> | undefined;
   if (query.continuation) {

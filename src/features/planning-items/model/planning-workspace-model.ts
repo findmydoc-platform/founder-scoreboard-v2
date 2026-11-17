@@ -23,6 +23,7 @@ export type PlanningWorkspaceModel = Readonly<{
 export type PlanningWorkspaceLoadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
+  structureParentId?: string;
   authorityKey?: string;
   authorityDeadline?: number;
   signal?: AbortSignal;
