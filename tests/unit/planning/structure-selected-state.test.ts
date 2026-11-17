@@ -79,3 +79,30 @@ test("a typed Structure continuation restarts its mounted class once without the
     expect(state.planning.structure(roots)).toMatchObject({ readStatus: "current", selection: { continuation: "new-page", sourceRevision: "new-source" } });
   } finally { release(); state.internal.dispose(); }
 });
+
+for (const firstArea of ["roots", "children"] as const) test(`Structure accepts same-source ${firstArea} membership after its newer peer context without losing current root headers`, async () => {
+  const firstQuery = firstArea === "roots" ? roots : children, secondQuery = firstArea === "roots" ? children : roots;
+  const held = deferred<StructureRead>(), ordinals: string[] = [];
+  const fullRoot = { ...parent, description: "Current authoritative root description", strategy: { goal: "Current authoritative root goal", successCriteria: "Current criteria", scopeConstraints: "Current constraints" }, detailAvailability: "summary" as const };
+  const value = (query: PlanningStructureQuery): StructureRead => {
+    const frame = response(query);
+    const compactContext = { ...parent, detailAvailability: "summary" as const };
+    Reflect.deleteProperty(compactContext,"description"); Reflect.deleteProperty(compactContext,"strategy");
+    frame.model = { ...frame.model, items: query.area === "roots" ? [fullRoot] : [child, compactContext], taskOmittedFields: query.area === "roots" ? ["note", "evidenceLinks"] : ["description", "strategy", "note", "evidenceLinks"] };
+    frame.model = { ...frame.model, items: frame.model.items.map(task => { const copy={...task}; for(const field of frame.model.taskOmittedFields) Reflect.deleteProperty(copy,field); return copy; }) };
+    return frame;
+  };
+  const firstResponse=value(firstQuery),secondResponse=value(secondQuery),deadline=Math.min(firstResponse.readAuthority.deadline,secondResponse.readAuthority.deadline);
+  for(const frame of [firstResponse,secondResponse]){frame.readAuthority.deadline=deadline;frame.model={...frame.model,structure:{...frame.model.structure,observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()}};}
+  const state = owner(async query => { ordinals.push(query.area === firstArea ? "1:start-first" : "2:start-second"); if(query.area === firstArea)return held.promise;ordinals.push("3:answer-second");return secondResponse; });
+  try {
+    const first=state.planning.loadStructure(firstQuery);
+    expect(await state.planning.loadStructure(secondQuery)).toBe(true);
+    if(firstArea==="roots")expect(state.planning.taskDetail(parent.id).task?.description).toBeUndefined();
+    ordinals.push("4:answer-first");held.resolve(firstResponse);expect(await first).toBe(true);
+    expect(ordinals).toEqual(["1:start-first","2:start-second","3:answer-second","4:answer-first"]);
+    expect(state.planning.structure(roots)).toMatchObject({readStatus:"current",selection:{itemIds:[parent.id],coverage:"complete"}});
+    expect(state.planning.structure(children)).toMatchObject({readStatus:"current",selection:{itemIds:[child.id],coverage:"complete"}});
+    expect(state.planning.taskDetail(parent.id).task).toMatchObject({description:fullRoot.description,strategy:fullRoot.strategy});
+  } finally { state.internal.dispose(); }
+});
