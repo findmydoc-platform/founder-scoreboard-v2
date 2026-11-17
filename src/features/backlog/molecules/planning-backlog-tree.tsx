@@ -62,6 +62,8 @@ function approvalBadge(task: Task) {
 }
 
 function TreeRow({
+  owner,
+  collectionCoverage,
   childByParent,
   depth,
   draggedTaskId,
@@ -74,6 +76,8 @@ function TreeRow({
   sprintAssignment,
   task,
 }: {
+  owner?: PlanningState;
+  collectionCoverage?: "complete" | "partial";
   childByParent: ReadonlyMap<string, Task[]>;
   depth: number;
   draggedTaskId?: string;
@@ -86,18 +90,35 @@ function TreeRow({
   sprintAssignment?: SprintAssignment;
   task: Task;
 }) {
-  const directChildren = childByParent.get(task.id) || [];
-  const visibleChildren = task.taskType === "epic"
+  const isExpanded = expanded.has(task.id);
+  const detail = owner?.taskDetail(task.id);
+  const independent = Boolean(owner && collectionCoverage !== "complete" && (task.taskType === "epic" || task.taskType === "initiative"));
+  const completeChildren = detail?.childrenReadStatus === "current" && ["complete", "complete-empty"].includes(detail.childrenCoverage);
+  const directChildren = independent && detail?.childrenReadStatus === "forbidden" ? [] : independent && completeChildren ? detail.children : childByParent.get(task.id) || [];
+  const visibleChildren = (task.taskType === "epic"
     ? directChildren.filter((child) => child.taskType === "initiative")
     : task.taskType === "initiative"
       ? directChildren.filter((child) => child.taskType === "deliverable")
-      : [];
-  const hasChildren = visibleChildren.length > 0;
-  const isExpanded = expanded.has(task.id);
+      : []).toSorted((left, right) => left.order - right.order || left.title.localeCompare(right.title, "de"));
+  const hasChildren = visibleChildren.length > 0 || independent && (!completeChildren || isExpanded);
+  const knownEmpty = Boolean(independent && completeChildren && detail.children.length === 0);
   const rollupChildren = task.taskType === "deliverable"
     ? directChildren.filter((child) => child.taskType === "sub_issue")
     : visibleChildren;
-  const rollup = taskChildProgress(rollupChildren);
+  const rollup = owner && collectionCoverage !== "complete" ? detail?.childProgress || null : taskChildProgress(rollupChildren);
+  const lease = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!owner || !independent || !isExpanded) return;
+    const controller = new AbortController(); lease.current = controller;
+    void owner.loadTaskDetail(task.id, { area: "children", signal: controller.signal });
+    return () => { controller.abort(); if (lease.current === controller) lease.current = null; };
+  }, [owner, independent, isExpanded, task.id]);
+  useEffect(() => {
+    if (!owner || !independent || !isExpanded || detail?.childrenReadStatus !== "stale") return;
+    const timer = setTimeout(() => { if (lease.current) void owner.loadTaskDetail(task.id, { area: "children", refresh: true, signal: lease.current.signal }); }, 500);
+    return () => clearTimeout(timer);
+  }, [owner, independent, isExpanded, task.id, detail?.childrenReadStatus]);
+  const retry = () => { if (owner && lease.current) void owner.loadTaskDetail(task.id, { area: "children", refresh: true, signal: lease.current.signal }); };
   const rank = task.taskType === "deliverable" ? rankByTaskId.get(task.id) : undefined;
   const isDraggable = task.taskType === "deliverable" && task.detailAvailability !== "summary" && Boolean(onDragTaskStart);
   const isDragging = isDraggable && draggedTaskId === task.id;
@@ -130,7 +151,10 @@ function TreeRow({
             type="button"
             aria-label={`${task.title}: direkte Kinder ${isExpanded ? "einklappen" : "aufklappen"}`}
             aria-expanded={isExpanded}
-            onClick={() => onToggle(task.id)}
+            onClick={event => {
+              onToggle(task.id);
+              if (knownEmpty && isExpanded) event.currentTarget.parentElement?.querySelector<HTMLAnchorElement>("a[href]")?.focus();
+            }}
             className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             {isExpanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
@@ -154,7 +178,7 @@ function TreeRow({
               {task.title}
             </TaskReferenceLink>
           </div>
-          {rollup.total ? (
+          {rollup?.total ? (
             <TaskChildProgress
               className="mt-2 max-w-md"
               completed={rollup.completed}
@@ -164,9 +188,9 @@ function TreeRow({
               total={rollup.total}
             />
           ) : null}
-          {!rollup.total || task.targetDate || task.fixedDate ? (
-            <div className={classNames("flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500", rollup.total ? "mt-2" : "mt-1")}>
-              {!rollup.total ? (task.assignee ? <span>{task.assignee}</span> : task.detailAvailability === "summary" ? <span>Zuständigkeit nicht geladen</span> : <span className="text-amber-700">Owner fehlt</span>) : null}
+          {!rollup?.total || task.targetDate || task.fixedDate ? (
+            <div className={classNames("flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500", rollup?.total ? "mt-2" : "mt-1")}>
+              {!rollup?.total ? (task.assignee ? <span>{task.assignee}</span> : task.detailAvailability === "summary" ? <span>Zuständigkeit nicht geladen</span> : <span className="text-amber-700">Owner fehlt</span>) : null}
               {task.targetDate ? <span>Zieltermin: {task.targetDate}</span> : task.fixedDate ? <span>Fixtermin: {task.fixedDate}</span> : null}
             </div>
           ) : null}
@@ -183,11 +207,17 @@ function TreeRow({
           </div>
         ) : null}
       </div>
-      {hasChildren && isExpanded ? (
+      {hasChildren && isExpanded ? <div className="border-t border-slate-100 bg-slate-50/40">
+        {independent && detail?.childrenReadStatus === "forbidden" ? <p role="status" className="px-4 py-3 text-sm">Unteraufgaben dürfen nicht angezeigt werden.</p>
+          : independent && detail?.childrenReadStatus === "unavailable" ? <div className="grid justify-items-start gap-2 px-4 py-3"><p role="status">Unteraufgaben konnten nicht geladen werden.</p><UiButton onClick={retry}>Erneut laden</UiButton></div>
+            : independent && !completeChildren ? <p role="status" className="px-4 py-3 text-sm">Unteraufgaben werden geladen.</p>
+              : knownEmpty ? <p className="px-4 py-3 text-sm">Keine direkten Kinder vorhanden.</p> : null}
         <ul className="border-t border-slate-100 bg-slate-50/40">
           {visibleChildren.map((child) => (
             <TreeRow
               key={child.id}
+              owner={owner}
+              collectionCoverage={collectionCoverage}
               childByParent={childByParent}
               depth={depth + 1}
               draggedTaskId={draggedTaskId}
@@ -202,7 +232,7 @@ function TreeRow({
             />
           ))}
         </ul>
-      ) : null}
+      </div> : null}
     </li>
   );
 }
@@ -367,6 +397,8 @@ export function PlanningBacklogTree({
   const row = (task: Task, depth = 0) => (
     <TreeRow
       key={task.id}
+      owner={childOwner}
+      collectionCoverage={collectionCoverage}
       childByParent={childByParent}
       depth={depth}
       draggedTaskId={draggedTaskId}
