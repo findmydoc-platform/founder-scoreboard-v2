@@ -5,7 +5,7 @@ import type { BacklogLoadResult } from "@/features/backlog/model/backlog-read-mo
 import { validBacklogParentProgress, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import type { PlanningWorkspaceLoadContext } from "../model/planning-workspace-model";
 import type { DbProfile, DbSprint, DbTask, DbPlanningItemStrategy } from "@/lib/planning-row-types";
-import { taskRowSelect } from "@/lib/planning-row-types";
+import { taskRowColumns, taskRowSelect } from "@/lib/planning-row-types";
 import { mapTaskRow } from "@/lib/planning-task-mappers";
 import { mapProfile } from "@/lib/planning-profile-mappers";
 import { mapSprint } from "@/lib/planning-sprint-mappers";
@@ -15,6 +15,11 @@ type Cursor = { offset: number; source: string; observedAt: string; validUntil: 
 const profileSelect = "id,name,platform_role,org_role,github_login,deputy_for,deputy_active_from,deputy_active_until,focus,weekly_capacity,profile_color";
 const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked,updated_at";
 const ids = (value: unknown): value is string[] => Array.isArray(value) && value.every(id => typeof id === "string" && id.length > 0) && new Set(value).size === value.length;
+function boundedHydrationRows(value: unknown, columns: readonly string[], allowed: ReadonlySet<string>) {
+  return Array.isArray(value) && value.every(row => row && typeof row === "object" && typeof row.id === "string" && allowed.has(row.id)
+    && columns.every(column => Object.prototype.hasOwnProperty.call(row,column)))
+    && new Set(value.map(row=>row.id)).size === value.length;
+}
 function signature(context: PlanningWorkspaceLoadContext, query: BacklogSelectionQuery, cursor: Omit<Cursor, "binding">) {
   return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["backlog-selection-v1", context.actorProfileId, query.filters, query.limit, cursor, ...(query.section ? [query.section] : [])])).digest("hex");
 }
@@ -52,9 +57,20 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       || typeof selected.source_revision !== "string" || !selected.source_revision || !Number.isFinite(Date.parse(selected.observed_at)) || !Number.isFinite(Date.parse(selected.valid_until))) return { status: "unavailable" };
     if (cursor && (selected.source_revision !== cursor.source || selected.observed_at !== cursor.observedAt || selected.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
     const selectedIds: string[] = [...selected.item_ids, ...selected.context_ids];
-    const hydrated = await hydrateBacklogItems(supabase, context, selectedIds);
+    if (!boundedHydrationRows(selected.hydrated_items, [...taskRowColumns,"task_dependencies","task_notes"], new Set(selectedIds))
+      || selected.hydrated_items.length !== selectedIds.length) return { status: "unavailable" };
+    const taskRows: DbTask[] = selected.hydrated_items;
+    if (taskRows.some(row => !Array.isArray(row.task_dependencies) || row.task_dependencies.some(value=>typeof value.note !== "string")
+      || row.task_notes !== null && (!row.task_notes || typeof row.task_notes.note !== "string"))) return { status: "unavailable" };
+    const peopleIds = new Set(taskRows.flatMap(row=>[row.assignee,row.owner,row.created_by]).filter((id):id is string=>Boolean(id)));
+    const sprintIds = new Set(taskRows.map(row=>row.sprint_id).filter((id):id is string=>Boolean(id)));
+    if (!boundedHydrationRows(selected.hydrated_people, profileSelect.split(","), peopleIds)
+      || !boundedHydrationRows(selected.hydrated_sprints, sprintSelect.split(","), sprintIds)) return { status: "unavailable" };
+    const peopleRows: DbProfile[] = selected.hydrated_people, sprintRows: DbSprint[] = selected.hydrated_sprints;
+    const people = peopleRows.map(mapProfile), rowById = new Map(taskRows.map(row=>[row.id,row]));
+    const hydrated = { items:selectedIds.map(id=>compactPlanningCard(mapTaskRow(rowById.get(id)!,people))),people,sprints:sprintRows.map(mapSprint) };
     const selectedType = query.section === "orphanInitiatives" ? "initiative" : query.section === "orphanDeliverables" ? "deliverable" : query.filters.level;
-    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== selectedType
+    if (selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== selectedType
       || query.section && hydrated.items.find(item => item.id === id)?.parentTaskId)) return { status: "unavailable" };
     const publication = await context.publicationSource.read(context.signal);
     if (publication.status !== "ready") return { status: publication.status };
