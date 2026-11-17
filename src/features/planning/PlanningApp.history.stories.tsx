@@ -184,11 +184,12 @@ export const AlternativeViewsRetainBoardPages: Story = {
         await expect(canvas.getByLabelText("History controls reads")).toHaveTextContent("1");
         await expect(canvas.getByLabelText("History children reads")).toHaveTextContent("2");
       }
+      if (label === "Gantt") {
+        await expect(await canvas.findByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
+      }
+      if (label === "Tabelle") await canvas.findByRole("table");
       const lastLink = await canvas.findByRole("link", { name: "Completed work 25" });
       await expect(lastLink).toBeVisible();await expect(lastLink).toHaveAttribute("href", "/tasks/history-24");
-      if (label === "Gantt") {
-        await expect(canvas.getByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
-      }
       await userEvent.click(canvas.getByRole("button", { name: "Board" }));
       await expect(await canvas.findByText("25 von 25 geladen")).toBeVisible();
       await expect(canvas.getByRole("link", { name: "Completed work 25" })).toBeVisible();
