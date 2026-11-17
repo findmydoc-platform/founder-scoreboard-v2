@@ -176,7 +176,7 @@ function TreeRow({
           </div>
           <div className="mt-1 flex min-w-0 items-start gap-2">
             {rank ? <span className="mt-px w-8 shrink-0 text-right font-mono text-xs font-semibold tabular-nums text-slate-500">#{rank}</span> : null}
-            <TaskReferenceLink task={task} onOpenTask={onOpenTask} prefetch={onOpenTask ? false : undefined} draggable={false} className="block w-fit min-w-0 max-w-full text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
+            <TaskReferenceLink task={task} onOpenTask={onOpenTask} prefetch={false} draggable={false} className="block w-fit min-w-0 max-w-full text-left text-sm font-semibold text-slate-950 hover:text-blue-700">
               {task.title}
             </TaskReferenceLink>
           </div>

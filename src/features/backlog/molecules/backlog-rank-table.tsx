@@ -298,7 +298,7 @@ export function BacklogRankTable({
                       <UiBadge tone={priorityBadgeTone(item.task.priority)} shape="rectangular">{item.task.priority}</UiBadge>
                       <BacklogReadiness item={item} />
                     </div>
-                    <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={onOpenTask ? false : undefined} className="line-clamp-2 text-left font-semibold text-slate-950">
+                    <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={false} className="line-clamp-2 text-left font-semibold text-slate-950">
                       {item.task.title}
                     </TaskReferenceLink>
                     </div>
@@ -383,7 +383,7 @@ export function BacklogRankTable({
                   </div>
                 </DataCell>
                 <DataCell className={classNames("font-semibold text-slate-600", dropClass)}>#{item.rank}</DataCell>
-                <DataCell className={classNames("max-w-sm", dropClass)}><TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={onOpenTask ? false : undefined} className="text-left font-semibold text-slate-950">{item.task.title}</TaskReferenceLink></DataCell>
+                <DataCell className={classNames("max-w-sm", dropClass)}><TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={false} className="text-left font-semibold text-slate-950">{item.task.title}</TaskReferenceLink></DataCell>
                 <DataCell className={dropClass}><UiBadge tone={approvalTone(item.task)} shape="rectangular">{approvalLabel(item.task)}</UiBadge></DataCell>
                 <DataCell className={classNames("max-w-40 text-xs text-slate-600", dropClass)}>{item.initiative?.title || "Nicht gesetzt"}</DataCell>
                 <DataCell className={classNames("text-xs text-slate-600", dropClass)}>{taskAssigneeLabel(item.task)}</DataCell>
