@@ -86,4 +86,13 @@ test("selected Initiative Backlog searches beyond 1000 rows and includes complet
     if(!continuation)expect(body.model.items.find((item:{id:string})=>item.id===expected[1007]).status).toBe("Erledigt");
   } while(continuation);
   expect(ids).toEqual(expected);expect(new Set(ids).size).toBe(1008);
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const){
+    const response=await GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters,limit:20}))}`));expect(response.status).toBe(200);
+    const body=await response.json();expect(body.model.selection.itemIds).toEqual(expected.slice(0,20));expect(body.readActor.profileId).toBe(f.actors[actor].profileId);
+  }
+  expect((await GET(f.request("unmapped",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters,limit:20}))}`))).status).toBe(403);
+  for(const actor of ["founder","unmapped","anonymous"] as const){
+    const response=await f.rpc("planning_backlog_selection",{p_actor_profile_id:f.actors.founder.profileId,p_filters:filters,p_limit:20,p_offset:0,p_source_revision:null,p_evaluated_at:null,p_valid_until:null},actor);
+    expect(response.status).toBe(actor==="anonymous"?401:403);
+  }
 }),120_000);

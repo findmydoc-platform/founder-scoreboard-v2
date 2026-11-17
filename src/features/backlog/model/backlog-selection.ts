@@ -2,7 +2,7 @@ import { DEFAULT_BACKLOG_FILTERS, type BacklogTableFilters } from "./backlog-vie
 
 export type BacklogSelectionQuery = Readonly<{
   view: "backlog";
-  filters: BacklogTableFilters & { level: "deliverable" };
+  filters: BacklogTableFilters & { level: "deliverable" | "initiative" };
   limit: number;
   continuation?: string;
 }>;
@@ -26,7 +26,7 @@ export function normalizeBacklogSelection(input: unknown): BacklogSelectionQuery
   const value = input as Record<string, unknown>;
   if (value.view !== "backlog" || !value.filters || typeof value.filters !== "object" || Array.isArray(value.filters)) return null;
   const filters = { ...DEFAULT_BACKLOG_FILTERS, ...value.filters } as Record<keyof BacklogTableFilters, unknown>;
-  if (filters.level !== "deliverable" || !["all", "proposals", "ready", "unscheduled"].includes(String(filters.scope))
+  if (!["deliverable", "initiative"].includes(String(filters.level)) || !["all", "proposals", "ready", "unscheduled"].includes(String(filters.scope))
     || !["all", "ready", "incomplete"].includes(String(filters.readiness))
     || !["rank", "priority", "title", "approval", "initiative", "assignee", "readiness", "status"].includes(String(filters.sort))
     || !["asc", "desc"].includes(String(filters.direction))
@@ -34,7 +34,7 @@ export function normalizeBacklogSelection(input: unknown): BacklogSelectionQuery
     || value.limit !== undefined && (!Number.isSafeInteger(value.limit) || (value.limit as number) < 1 || (value.limit as number) > 100)
     || value.continuation !== undefined && (typeof value.continuation !== "string" || !value.continuation || value.continuation.length > 4096)) return null;
   return { view: "backlog", filters: {
-    level: "deliverable", query: String(filters.query).trim().toLowerCase(), scope: filters.scope as BacklogTableFilters["scope"],
+    level: filters.level as "deliverable" | "initiative", query: String(filters.query).trim().toLowerCase(), scope: filters.scope as BacklogTableFilters["scope"],
     status: String(filters.status), readiness: filters.readiness as BacklogTableFilters["readiness"], priority: String(filters.priority),
     epic: String(filters.epic), initiative: String(filters.initiative), assignee: String(filters.assignee),
     sort: filters.sort as BacklogTableFilters["sort"], direction: filters.direction as BacklogTableFilters["direction"],

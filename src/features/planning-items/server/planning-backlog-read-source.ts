@@ -52,7 +52,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
     if (cursor && (selected.source_revision !== cursor.source || selected.observed_at !== cursor.observedAt || selected.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
     const selectedIds: string[] = [...selected.item_ids, ...selected.context_ids];
     const hydrated = await hydrateBacklogItems(supabase, context, selectedIds);
-    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== "deliverable")) return { status: "unavailable" };
+    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== query.filters.level)) return { status: "unavailable" };
     const publication = await context.publicationSource.read(context.signal);
     if (publication.status !== "ready") return { status: publication.status };
     if (context.signal?.aborted) return { status: "unavailable" };
