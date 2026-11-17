@@ -158,3 +158,34 @@ test("selected Backlog keeps append and standalone publication intents separate 
     expect(owner.planning.backlog().model.selection?.itemIds).toEqual([other.id]);
   } finally { appended.resolve(second);standalone.resolve(second);owner.internal.dispose(); }
 });
+
+test("a typed stale Backlog continuation discards its cursor and refreshes exactly the selected first-page query", async () => {
+  const queries: BacklogSelectionQuery[] = [];
+  const first = response(); first.backlogSelection = { ...first.backlogSelection, total: 2, coverage: "partial", continuation: "obsolete-page" };
+  const state = selectedOwner(async input => {
+    queries.push(input);
+    if (input.continuation) throw Object.assign(new Error("Changed source"), { status: 409, code: "stale_continuation" });
+    return { ...first, backlogSelection: { ...first.backlogSelection, query: input } };
+  });
+  try {
+    expect(await state.planning.loadBacklogSelection(query)).toBe(true);
+    expect(await state.planning.loadBacklogSelection({ ...query, continuation: "obsolete-page" }, { append: true })).toBe(false);
+    expect(state.planning.backlog().readStatus).toBe("stale");
+    expect(state.planning.backlog().model.selection).toBeUndefined();
+    expect(await state.planning.refreshWorkspace("backlog")).toBe(true);
+    expect(queries).toEqual([query, { ...query, continuation: "obsolete-page" }, query]);
+  } finally { state.internal.dispose(); }
+});
+
+test("an opaque Backlog page conflict does not invalidate its current receipt or replay the request", async () => {
+  let count = 0;
+  const first = response(); first.backlogSelection = { ...first.backlogSelection, total: 2, coverage: "partial", continuation: "retained-page" };
+  const state = selectedOwner(async () => { if (++count > 1) throw Object.assign(new Error("Opaque conflict"), { status: 409 }); return first; });
+  try {
+    expect(await state.planning.loadBacklogSelection(query)).toBe(true);
+    expect(await state.planning.loadBacklogSelection({ ...query, continuation: "retained-page" }, { append: true })).toBe(false);
+    expect(state.planning.backlog().readStatus).toBe("current");
+    expect(state.planning.backlog().model.selection?.continuation).toBe("retained-page");
+    expect(count).toBe(2);
+  } finally { state.internal.dispose(); }
+});
