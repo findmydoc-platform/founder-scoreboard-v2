@@ -1245,6 +1245,20 @@
       "target": "planning_backlog_rank_target",
       "fingerprint": "1ada98cb7c18c35c039cd27642366a7a19449d1d036e42339bdd1bfcaa049fb6",
       "contract": "BACKLOG-RANK"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-structure-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_structure_selection",
+      "fingerprint": "9213fc551eeb8c88dbcaac7674aa34eb2b628deb3f6455b324f0b9ada4cfc55c",
+      "contract": "STRUCTURE-ROOTS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-backlog-read-source.ts",
+      "kind": "from",
+      "target": "planning_item_strategy",
+      "fingerprint": "790ede2d1c947bf177faa06be95f311993539237065667fcae4a5977cc2b2ba2",
+      "contract": "STRUCTURE-ROOTS"
     }
   ]
 }
