@@ -191,8 +191,8 @@ export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingIt
 };
 
 const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void; connectSession(): void }>();
-function SelectedBacklogScopeStory() {
- const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0});
+function SelectedBacklogScopeStory({ parentRollups = false }: { parentRollups?: boolean } = {}) {
+ const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0,children:0});
  const [bundle]=useState(()=>{
   const profile={id:"scoped-backlog-ceo",name:"Synthetic CEO",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
   const parent=taskDetailStoryTask({id:"scoped-backlog-parent",title:"Vollständiger ausgewählter Kontext",taskType:"initiative",parentTaskId:"",updatedAt:"2026-11-01T12:00:00Z"});
@@ -234,10 +234,11 @@ function SelectedBacklogScopeStory() {
         const selected=buildBacklogTableViewModel(fullModel,query.filters).visibleItems,chosen=selected.slice(0,query.limit);
         return response({...empty,items:[...(chosen.length?[parent]:[]),...chosen.map(item=>item.task)].map(compact),people:[profile],sprints:[sprint],taskOmittedFields:omitted,
           selection:{...receipt("selected"),query,itemIds:chosen.map(item=>item.task.id),contextIds:chosen.length?[parent.id]:[],rankById:Object.fromEntries(chosen.map(item=>[item.task.id,item.rank])),
+            ...(parentRollups?{parentProgressById:chosen.length?{[parent.id]:{total:1009,completed:1,unfinished:1008,percentage:0}}:{}}:{}),
             total:selected.length,coverage:chosen.length===selected.length?"complete":"partial",continuation:chosen.length===selected.length?null:"selected-next"}}) as BrowserApiJsonResult<T>;
       }
     }
-    if(url.pathname===`/api/tasks/${parent.id}/detail-data`)return{response:new Response(null,{status:503}),body:{error:"Synthetic independent child basis unavailable"} as T};
+    if(url.pathname===`/api/tasks/${parent.id}/detail-data`){setRequests(value=>({...value,children:value.children+1}));return{response:new Response(null,{status:503}),body:{error:"Synthetic independent child basis unavailable"} as T};}
     throw new Error("Unexpected selected Backlog request");
   },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
   const session={userId,revision:"scoped-backlog-session",expiresAt:deadline/1000,user:{id:userId}};
@@ -252,7 +253,7 @@ function SelectedBacklogScopeStory() {
  useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
  scopedBacklogChecks.set("selected",bundle);
  return <main><output aria-label="Ausgewählte Backlog-Abfragen">{requests.selected}</output><output aria-label="Backlog-Filterabfragen">{requests.controls}</output>
-  <output aria-label="Sprintbasis-Abfragen">{requests.sprints}</output><output aria-label="Unbegrenzte Backlog-Abfragen">{requests.legacy}</output>
+  <output aria-label="Vollständige Parent-Kinderabfragen">{requests.children}</output><output aria-label="Sprintbasis-Abfragen">{requests.sprints}</output><output aria-label="Unbegrenzte Backlog-Abfragen">{requests.legacy}</output>
   <BacklogOverview {...{readMode:"selected" as const}} planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></main>;
 }
 export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetryStaysIndependent:Story={
@@ -356,5 +357,21 @@ export const TypedStalePageRestartsOnlyTheSelectedQueryAndPreservesSearchFocus: 
   await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
   await expect(await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"})).toHaveAttribute("href","/tasks/strategic-initiative-21");
   await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("4");
+ },
+};
+
+export const FilteredParentProgressDoesNotEnumerateUnusedChildren:Story={
+ name:"Filtered Parent progress avoids unused complete Children reads",render:()=> <SelectedBacklogScopeStory parentRollups/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.query":"Verdeckter Suchtext"}}}},
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);url.searchParams.set("backlog.query","Verdeckter Suchtext");window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);scopedBacklogChecks.get("selected")!.connectSession();
+  const group=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  await expect(await group.findByRole("link",{name:"Nur über Beschreibung gefunden"})).toBeVisible();
+  await expect(canvas.getByLabelText("Vollständige Parent-Kinderabfragen")).toHaveTextContent("0");
+  await expect(group.getByRole("progressbar",{name:"1 von 1009 Deliverables erledigt"})).toBeVisible();
+  await expect(group.queryByRole("link",{name:"Erledigter Kontext"})).not.toBeInTheDocument();
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
  },
 };
