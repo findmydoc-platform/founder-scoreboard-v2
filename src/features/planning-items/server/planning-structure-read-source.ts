@@ -25,9 +25,8 @@ async function loadStructureChildren(supabase: SupabaseClient, context: Planning
   });
   if (result.status !== "ready") return result;
   const table = result.model.table;
-  if (!table || !sourceRevision || !table.validUntil || !Number.isFinite(Date.parse(table.validUntil))
-    || Date.parse(table.validUntil) <= Date.now()) return { status: "unavailable" };
-  const deadline = Math.min(context.authorityDeadline, result.authorityDeadline ?? Infinity);
+  if (!table || !sourceRevision || table.validUntil !== null && !Number.isFinite(Date.parse(table.validUntil))) return { status: "unavailable" };
+  const deadline = Math.min(context.authorityDeadline, result.authorityDeadline ?? Infinity, table.validUntil === null ? Infinity : Date.parse(table.validUntil));
   if (deadline <= Date.now()) return { status: "forbidden" };
   const selectedIds = new Set(table.rowIds);
   return { status: "ready", authorityDeadline: deadline, model: {
@@ -35,7 +34,7 @@ async function loadStructureChildren(supabase: SupabaseClient, context: Planning
     structure: { query, itemIds: table.rowIds, contextIds: result.model.items.filter(item => !selectedIds.has(item.id)).map(item => item.id),
       total: table.page.total, coverage: table.page.completeness, continuation: table.page.continuation,
       sourceRevision, scopeRevision: createHash("sha256").update(JSON.stringify([query.parentId, query.filters, sourceRevision])).digest("hex"),
-      observedAt: table.observedAt, validUntil: table.validUntil },
+      observedAt: table.observedAt, validUntil: new Date(deadline).toISOString() },
   } };
 }
 
