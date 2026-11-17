@@ -96,3 +96,27 @@ test("selected Initiative Backlog searches beyond 1000 rows and includes complet
     expect(response.status).toBe(actor==="anonymous"?401:403);
   }
 }),120_000);
+
+test("filtered Backlog returns exact bounded Parent progress without hydrating its off-page Children", () => withPlanningCredentialDatabase(async f => {
+  const query = `${f.prefix} parent progress literal`;
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,sort_order,approval_status,owner,assignee)
+    select $1||'-progress-'||lpad(n::text,4,'0'),'findmydoc-founder-execution','Progress Item '||n,$2,'deliverable',$3,'Offen','P2',n,
+      case when n=1008 then 'proposed' else 'approved' end,$4,$4 from generate_series(1,1008) n`, [f.prefix,query,f.initiativeId,f.actors.founder.profileId]);
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,approval_status,owner)
+    values($1,'findmydoc-founder-execution','Completed progress context','Unmatched description','deliverable',$2,'Erledigt','P2','approved',$3)`, [`${f.prefix}-progress-completed`,f.initiativeId,f.actors.founder.profileId]);
+  const {GET:detail}=await importTestModule("src/app/api/tasks/[id]/detail-data/route.ts",{"server-only":{}});
+  const previous=await detail(f.request("founder",`/api/tasks/${f.initiativeId}/detail-data?area=children`),{params:Promise.resolve({id:f.initiativeId})});
+  expect(previous.status).toBe(200);const prior=await previous.json();
+  expect(prior.taskDetail.childProgress).toEqual({total:1009,completed:1,unfinished:1008,percentage:0});
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const scope={view:"backlog",filters:{...DEFAULT_BACKLOG_FILTERS,query},limit:20};
+  const response=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+  expect(response.status).toBe(200);const body=await response.json();
+  const expected=Array.from({length:20},(_,index)=>`${f.prefix}-progress-${String(index+1).padStart(4,"0")}`);
+  expect(body.model.selection.itemIds).toEqual(expected);expect(body.model.selection.total).toBe(1008);
+  expect(body.model.selection.parentProgressById).toEqual({[f.initiativeId]:prior.taskDetail.childProgress});
+  expect(body.model.items.filter((row:{taskType:string})=>row.taskType==="deliverable").map((row:{id:string})=>row.id)).toEqual(expected);
+  expect(body.model.items).toHaveLength(22);expect(body.model.selection.contextIds).toContain(f.initiativeId);
+  expect(body.readActor).toEqual({profileId:f.actors.founder.profileId,platformRole:"founder"});
+  expect(body.model.selection.sourceRevision).toBeTruthy();expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+}),120_000);
