@@ -284,7 +284,7 @@ export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetrySt
 };
 
 
-function SelectedInitiativeBacklogStory() {
+function SelectedInitiativeBacklogStory({ stalePage = false }: { stalePage?: boolean }) {
  const [counts,setCounts]=useState({selected:0,legacy:0});
  const [bundle]=useState(()=>{
   const userId="strategic-backlog-user",deadline=Date.now()+300_000;
@@ -295,7 +295,8 @@ function SelectedInitiativeBacklogStory() {
   const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason"];
   const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
   const empty:BacklogModel={revision:"strategic-source",items:[],people:[],sprints:[],commitments:[],coverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial",strategies:"partial",raci:"partial",links:"partial"}};
-  const receipt=(scopeRevision:string)=>({scopeRevision,sourceRevision:"strategic-source",observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()});
+  let invalidated = false;
+  const receipt=(scopeRevision:string)=>({scopeRevision,sourceRevision:invalidated ? "strategic-source-current" : "strategic-source",observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()});
   const response=(model:BacklogModel)=>({response:new Response(null),body:{model,readAuthority:{userId,deadline},readActor:{profileId:profile.id,platformRole:profile.platformRole}}});
   const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
    const url=new URL(String(input),"http://localhost:3000"),raw=url.searchParams.get("scope");
@@ -305,8 +306,9 @@ function SelectedInitiativeBacklogStory() {
    if(query.view==="backlog-support"&&query.area==="controls")return response({...empty,controls:{...receipt("controls"),coverage:"complete",levelTotals:{epic:1,initiative:21,deliverable:0},statuses:{epic:["Offen"],initiative:["Offen","Erledigt"],deliverable:[]},assignees:[{value:profile.id,label:profile.name}],epics:[{value:parent.id,label:parent.title}],initiatives:rows.map(row=>({value:row.id,label:row.title})),scopeCounts:{all:0,proposals:0,ready:0,unscheduled:0}}}) as BrowserApiJsonResult<T>;
    if(query.view!=="backlog"||query.filters.level!=="initiative")throw new Error("Unexpected selected strategic class");
    setCounts(value=>({...value,selected:value.selected+1}));
+   if(stalePage && query.continuation && !invalidated){invalidated=true;return {response:new Response(null,{status:409}),body:{error:"Changed selection source",code:"stale_continuation"} as T};}
    const offset=query.continuation?20:0,chosen=rows.slice(offset,offset+query.limit);
-   return response({...empty,items:[parent,...chosen].map(compact),people:[profile],taskOmittedFields:omitted,selection:{...receipt("initiatives"),query,itemIds:chosen.map(row=>row.id),contextIds:[parent.id],rankById:Object.fromEntries(chosen.map(row=>[row.id,row.order])),total:21,coverage:offset+chosen.length===21?"complete":"partial",continuation:offset+chosen.length===21?null:"strategic-next"}}) as BrowserApiJsonResult<T>;
+   return response({...empty,items:[parent,...chosen].map(compact),people:[profile],taskOmittedFields:omitted,selection:{...receipt("initiatives"),query,itemIds:chosen.map(row=>row.id),contextIds:[parent.id],rankById:Object.fromEntries(chosen.map(row=>[row.id,row.order])),total:21,coverage:offset+chosen.length===21?"complete":"partial",continuation:offset+chosen.length===21?null:invalidated?"strategic-next-current":"strategic-next"}}) as BrowserApiJsonResult<T>;
   },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
   const session={userId,revision:"strategic-session",expiresAt:deadline/1000,user:{id:userId}};
   const lifetime=createBrowserPlanningLifetime({current:async()=>session,subscribe:()=>()=>{}});
@@ -334,5 +336,25 @@ export const SelectedInitiativeBacklogTraversesCompactPagesWithoutLosingComplete
   const completed=await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"});await expect(completed).toHaveAttribute("href","/tasks/strategic-initiative-21");
   await expect(first).toBeVisible();await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("2");
   await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");await expect(canvas.getByRole("searchbox",{name:"Backlog durchsuchen"})).toHaveValue("Strategischer Suchtext");
+ },
+};
+
+export const TypedStalePageRestartsOnlyTheSelectedQueryAndPreservesSearchFocus: Story = {
+ render:()=> <SelectedInitiativeBacklogStory stalePage/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.level":"initiative","backlog.query":"Strategischer Suchtext"}}}},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("1"));
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  await userEvent.click(search);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("3"));
+  await expect(search).toHaveValue("Strategischer Suchtext");await expect(search).toHaveFocus();
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");
+  const group=within(await canvas.findByRole("region",{name:"Ausgewähltes Epic"}));
+  await expect(await group.findByRole("link",{name:"Ausgewählte Initiative 01"})).toHaveAttribute("href","/tasks/strategic-initiative-1");
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  await expect(await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"})).toHaveAttribute("href","/tasks/strategic-initiative-21");
+  await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("4");
  },
 };
