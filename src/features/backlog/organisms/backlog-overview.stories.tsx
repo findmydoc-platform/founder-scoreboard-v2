@@ -264,6 +264,7 @@ export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetrySt
   await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("0");
   await expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
   await expect(canvas.queryByRole("link",{name:"Nur über Beschreibung gefunden"})).not.toBeInTheDocument();
+  await userEvent.click(canvas.getByRole("button",{name:"Filter"}));
   await expect(within(canvas.getByRole("group",{name:"Backlog-Scope"})).queryByRole("button",{name:/^Alle\s*0$/})).not.toBeInTheDocument();
   reference.connectSession();
   await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1"));
