@@ -75,6 +75,11 @@ export function createPlanningStructureReads(ports: {
         value.status = "current"; ports.publish(); return true;
       }).catch(error => {
         if (!current()) return false;
+        const visible = mounted.get(key(query));
+        if (query.continuation && error?.status === 409 && error?.code === "stale_continuation" && visible && !visible.controller.signal.aborted) {
+          value.selection = undefined; value.status = "stale";
+          return load({ ...query, continuation: undefined }, { refresh: true, signal: visible.controller.signal });
+        }
         value.status = error?.status === 401 || error?.status === 403 ? "forbidden" : "unavailable";
         if (value.status === "forbidden") value.selection = undefined;
         ports.publish(); return false;
