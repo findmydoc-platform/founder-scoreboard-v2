@@ -74,6 +74,8 @@ Root, opened-parent and control receipts retain their Actor, session generation,
 
 The no-scope Backlog handler remains an explicit capped compatibility operation. Visible Backlog and Structure never select it after a failed or missing scoped receipt. The hidden `projects` workspace retains its strategic complete compatibility reader; its public route redirects to the Epic Backlog. Explicit Gantt and the remaining inventory consumers keep their separate declared contracts. Backlog server bootstrap retains only the admitted self-profile context and header result while domain arrays are unloaded; client startup must not turn that partial state into a broad Backlog fallback.
 
+Visible Backlog and Planning Structure use the existing external-change scheduler. It checks every 60 seconds while visible and on visibility or connectivity restoration. Backlog checks its current membership, controls, and required Sprint or orphan receipts; Structure checks its mounted roots, opened parents, and mounted controls. A Board receipt cannot establish their freshness. Missing or expired required receipts load only the affected visible classes directly. Unchanged valid source evidence causes no content read. Changed evidence retains the existing 500 ms refresh coalescing, and failed observations do not renew original deadlines. Hidden views stop independent polling; refresh never selects a hidden Complete or Board fallback.
+
 ### Scope, selection and coverage
 
 Completeness follows the task's authorized scope. Collection membership, contextual records and Item existence are separate. A partial collection can be useful; exact totals, direct-child progress, blocker signals and dependent actions need their own complete bases. Missing, not loaded, loading, partial, stale, unverified, unavailable and forbidden are distinct from proven empty. Never turn unknown into zero, finished or unblocked.
@@ -269,8 +271,8 @@ budget and mapped read Actor, with a final user-bound publication check. The
 service-only `planning_backlog_support` RPC has no user-credential execution
 grant. Empty Item or directory arrays in its transport envelope are explicitly
 partial; they do not prove absence or complete supporting context. Legacy and
-selected Item readers retain their separate contracts. The browser Backlog
-consumer is not migrated merely by the existence of these server capabilities.
+selected Item readers retain their separate contracts. The visible browser
+Backlog consumes these independent receipts in selected mode.
 
 The shared monotonic Planning source now also covers team-readable Sprint
 commitments. An explicit commitment trigger branch advances it in the same

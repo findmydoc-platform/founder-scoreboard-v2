@@ -45,6 +45,8 @@ The Backlog overview and Epic-section stories verify actual visible controls, co
 
 `planning-notification-startup.test.ts` retains Backlog's admitted self-profile/header result and unloaded domain model without seven broad bootstrap reads. The selected Backlog cold-start story also runs the real browser lifetime binding and checks that client startup does not reintroduce an unscoped request. Legacy fixtures must explicitly select their compatibility mode and prove their own complete test population before asserting exact local totals.
 
+`PlanningApp.scoped-refresh.stories.tsx` mounts the actual Backlog or Structure consumer with controlled browser time. It waits for accepted public receipts before advancing time, checks unchanged source without content reloads, changed source with the existing 500 ms coalescing, and visibility/connectivity restoration. Structure expiry is tested independently of an older valid Board receipt. Source-response consumption and the normal React event cycle separate sequential browser events; a fetch dispatch alone does not prove publication or completion. Failed observations preserve original receipt deadlines. The existing remote-change hook stories retain the separate default Planning/Board lifecycle checks.
+
 Final checks bind the actual source tree and database schema, then run the repository gates on isolated infrastructure. Responsive interactions and controlled comparisons must use the real Backlog levels, Epic sections, opened Structure parents and filter metadata work shapes. Record useful-task completion separately from payload, database and browser work. A correctness fixture or a passing local owner test is not a native screen, performance or deployment result.
 
 ## Boundary distributions
