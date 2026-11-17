@@ -177,6 +177,11 @@ select case
       jsonb_build_object('total',(select count(*) from matches matched where matched.normalized=column_status.status))
       || case when p_plan_only then jsonb_build_object('ids',coalesce((select jsonb_agg(id order by position) from cards where normalized=column_status.status),'[]'::jsonb)) else '{}'::jsonb end
     ) from statuses column_status),
+    -- Match the complete Table's Set(normalizeStatus(allTasks)): unfiltered
+    -- active Item scope and first occurrence in the source sort_order/ID order.
+    'status_options',case when basis.table_view then coalesce((select jsonb_agg(normalized order by sort_order,id) from (
+      select distinct on(normalized) normalized,sort_order,id from active order by normalized,sort_order,id
+    ) first_status),'[]'::jsonb) else '[]'::jsonb end,
     'workstreams',coalesce((select jsonb_agg(workstream order by workstream collate "de-x-icu") from (select distinct workstream from active where coalesce(workstream,'')<>'') choices),'[]'::jsonb),
     'initiative_options',coalesce((select jsonb_agg(jsonb_build_object('id',id,'title',title) order by sort_order,id) from active where task_type='initiative'),'[]'::jsonb),
     'epic_options',case when p_query->>'level'='initiative' and p_query->>'view'='board'

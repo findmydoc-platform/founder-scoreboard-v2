@@ -16,7 +16,7 @@ it("preserves version 67 records and existing table selection while constraining
   const before=await records(),old=await selection();
   await applyMigration(client,resolve("supabase/migrations/20261117024037_planning_structure_child_selection.sql"));
   expect(await records()).toEqual(before);const current=await selection();
-  for(const field of ["status","source_revision","valid_until","columns","metrics","card_ids","rows"])expect(current[field]).toEqual(old[field]);
+  for(const field of Object.keys(old).filter(field=>field!=="evaluated_at"))expect(current[field]).toEqual(old[field]);
   const scoped=await selection({...query,structureParentId:"structure-parent"});expect(scoped.status).toBe("ready");expect(scoped.card_ids).toEqual(["structure-open","structure-done"]);expect(scoped.metrics.total).toBe(2);
   const conflict=await selection({...query,structureParentId:"structure-parent",filters:{...query.filters,initiativeId:"structure-other"}});expect(conflict.card_ids).toEqual([]);expect(conflict.metrics.total).toBe(0);
   expect((await selection({...query,structureParentId:"not-known"})).status).toBe("forbidden");
