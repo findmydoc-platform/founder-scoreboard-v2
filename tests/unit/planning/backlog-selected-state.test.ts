@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { createPlanningState, type PlanningWorkspaceRead } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
-import { normalizeBacklogSelection, type BacklogSelection, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
+import { normalizeBacklogSelection, type BacklogSelection, type BacklogParentProgress, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import { DEFAULT_BACKLOG_FILTERS } from "@/features/backlog/model/backlog-view-model";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { Task } from "@/lib/types";
@@ -191,7 +191,8 @@ test("an opaque Backlog page conflict does not invalidate its current receipt or
 });
 
 test("selected Parent progress cannot certify unrelated context or inconsistent counts", async()=>{
-  for(const progress of [{unrelated:{total:1,completed:0,unfinished:1,percentage:0}},{[parent.id]:{total:1,completed:2,unfinished:0,percentage:100}}]){
+  const invalid:Record<string,BacklogParentProgress>[]=[{unrelated:{total:1,completed:0,unfinished:1,percentage:0}},{[parent.id]:{total:1,completed:2,unfinished:0,percentage:100}}];
+  for(const progress of invalid){
     const read=response();read.backlogSelection={...read.backlogSelection,parentProgressById:progress};
     const owner=selectedOwner(async()=>read);
     try{expect(await owner.planning.loadBacklogSelection(query)).toBe(false);expect(owner.planning.backlog().model.selection).toBeUndefined();expect(owner.planning.taskDetail(selected.id).task).toBeNull();}
