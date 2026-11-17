@@ -11,6 +11,7 @@ const selected = taskDetailStoryTask({ id: "selected-backlog-child", title: "Sel
 const parent = taskDetailStoryTask({ id: "selected-backlog-parent", title: "Required context", taskType: "initiative", parentTaskId: "", updatedAt: "2026-11-01T12:00:00Z" });
 const query = normalizeBacklogSelection({ view: "backlog", filters: { ...DEFAULT_BACKLOG_FILTERS, query: "selected" }, limit: 20 })!;
 type SelectedRead = PlanningWorkspaceRead & { backlogSelection: BacklogSelection; readActor: { profileId: string; platformRole: typeof actor.platformRole } };
+type PagedPort = { loadBacklogSelection(query: BacklogSelectionQuery, options?: { append?: boolean }): Promise<boolean> };
 type SelectedPort = { loadBacklogSelection?(query: BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal }): Promise<boolean> };
 function deferred<T>() { let resolve!: (value:T)=>void; const promise=new Promise<T>(done=>{resolve=done;});return{promise,resolve}; }
 function response():SelectedRead {
@@ -121,7 +122,7 @@ test("selected Backlog appends only the next page of the same receipt while reta
   const owner=selectedOwner(async scope=>scope.continuation?second:first);
   try {
     expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
-    expect(await owner.planning.loadBacklogSelection(nextQuery)).toBe(true);
+    expect(await (owner.planning as typeof owner.planning & PagedPort).loadBacklogSelection(nextQuery,{append:true})).toBe(true);
     expect(owner.planning.backlog().model.selection).toMatchObject({itemIds:[selected.id,other.id],contextIds:[parent.id],rankById:{[selected.id]:1008,[other.id]:1009},total:2,coverage:"complete",continuation:null,validUntil:first.backlogSelection.validUntil});
   } finally { owner.internal.dispose(); }
 });
@@ -133,8 +134,27 @@ test("selected Backlog rejects a continuation from a replaced source before publ
   const owner=selectedOwner(async scope=>scope.continuation?second:first);
   try {
     expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
-    expect(await owner.planning.loadBacklogSelection(nextQuery)).toBe(false);
+    expect(await (owner.planning as typeof owner.planning & PagedPort).loadBacklogSelection(nextQuery,{append:true})).toBe(false);
     expect(owner.planning.taskDetail(other.id).task).toBeNull();
     expect(owner.planning.taskDetail(selected.id).task?.note).toBe(selected.note);
   } finally { owner.internal.dispose(); }
+});
+
+
+test("selected Backlog keeps append and standalone publication intents separate for the same cursor", async () => {
+  const first=response();first.backlogSelection={...first.backlogSelection,total:2,coverage:"partial",continuation:"selected-next"};
+  const nextQuery={...query,continuation:"selected-next"},other={...selected,id:"standalone-next-child"};
+  const second:SelectedRead={...first,data:{...first.data,tasks:[other,parent]},backlogSelection:{...first.backlogSelection,query:nextQuery,itemIds:[other.id],rankById:{[other.id]:1009},coverage:"complete",continuation:null}};
+  const appended=deferred<SelectedRead>(),standalone=deferred<SelectedRead>();let calls=0;
+  const signals:Array<AbortSignal|undefined>=[];
+  const owner=selectedOwner(async(_scope,options)=>{signals.push(options?.signal);return ++calls===1?first:calls===2?appended.promise:standalone.promise;});
+  try {
+    expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
+    const append=(owner.planning as typeof owner.planning & PagedPort).loadBacklogSelection(nextQuery,{append:true});
+    const replace=owner.planning.loadBacklogSelection(nextQuery);
+    expect(calls).toBe(3);expect(signals[1]?.aborted).toBe(true);
+    standalone.resolve(second);expect(await replace).toBe(true);
+    appended.resolve(second);expect(await append).toBe(false);
+    expect(owner.planning.backlog().model.selection?.itemIds).toEqual([other.id]);
+  } finally { appended.resolve(second);standalone.resolve(second);owner.internal.dispose(); }
 });
