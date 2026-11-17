@@ -106,3 +106,16 @@ for (const firstArea of ["roots", "children"] as const) test(`Structure accepts 
     expect(state.planning.taskDetail(parent.id).task).toMatchObject({description:fullRoot.description,strategy:fullRoot.strategy});
   } finally { state.internal.dispose(); }
 });
+
+for (const boundary of ["different entity version", "expired newer peer"] as const) test(`Structure does not admit older peer membership with ${boundary}`, async () => {
+  let now=Date.now(); const held=deferred<StructureRead>(),older=response(roots),newer=response(children);
+  if(boundary==="different entity version")newer.model={...newer.model,items:newer.model.items.map(task=>task.id===parent.id?{...task,updatedAt:"2026-11-01T12:00:01Z"}:task)};
+  else {newer.readAuthority.deadline=now+1000;newer.model={...newer.model,structure:{...newer.model.structure,validUntil:new Date(now+1000).toISOString()}};}
+  const state=owner(async query=>query.area==="roots"?held.promise:newer,()=>now);
+  try{
+    const pending=state.planning.loadStructure(roots);expect(await state.planning.loadStructure(children)).toBe(true);
+    if(boundary==="expired newer peer")now+=1001;
+    held.resolve(older);expect(await pending).toBe(false);expect(state.planning.structure(roots).selection).toBeUndefined();
+    if(boundary==="different entity version")expect(state.planning.taskDetail(parent.id).task?.updatedAt).toBe("2026-11-01T12:00:01Z");
+  }finally{state.internal.dispose();}
+});

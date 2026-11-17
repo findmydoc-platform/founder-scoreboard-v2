@@ -157,14 +157,45 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
 
+  const structureTaskReceipts = new Map<string, {
+    started: number; source: string; version: string; area: "roots" | "children"; context: boolean; omitted: readonly (keyof Task)[];
+    deadline: number; generation: number; session: string | undefined; epoch: number; actorId: string; role: string;
+  }>();
   const structureReads = createPlanningStructureReads({ read: adapter.readStructure, readControls: adapter.readStructureControls, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }),
     begin: () => ++sequence,
     accept: (read, started) => {
+      const selection = read.model.structure, now = adapter.now?.() ?? Date.now();
+      const deadline = Math.min(read.readAuthority.deadline, Date.parse(selection.validUntil));
+      const contextIds = new Set(selection.contextIds);
+      const peers = new Map<string, NonNullable<ReturnType<typeof structureTaskReceipts.get>>>();
+      // Validate the whole publication before changing any row or field coverage.
+      for (const task of read.model.items) {
+        if (lifecycle.isRemoved(task) || (taskDeniedAt.get(task.id) || 0) > started || (taskConfirmedAt.get(task.id) || 0) > started) return false;
+        if ((taskReadAt.get(task.id) || 0) <= started) continue;
+        const newer = structureTaskReceipts.get(task.id), current = confirmed.tasks.find(row => row.id === task.id);
+        const compatible = newer && newer.started === taskReadAt.get(task.id) && newer.started > started
+          && newer.source === selection.sourceRevision && Boolean(task.updatedAt) && task.updatedAt === newer.version && current?.updatedAt === newer.version
+          && newer.deadline > now && deadline > now && newer.generation === sessionGeneration && newer.session === sessionRevision && newer.epoch === planningSourceEpoch
+          && actorIdentity !== null && newer.actorId === read.readActor.profileId && newer.role === read.readActor.platformRole && newer.actorId === actorIdentity.id && newer.role === actorIdentity.platformRole
+          && (selection.query.area === "roots" && newer.area === "children" && newer.context
+            || selection.query.area === "children" && contextIds.has(task.id) && newer.area === "roots");
+        if (!compatible || !newer) return false;
+        peers.set(task.id, newer);
+      }
       const replacements = new Map<string, Task>();
       for (const task of read.model.items) {
-        if (lifecycle.isRemoved(task) || (taskDeniedAt.get(task.id) || 0) > started || (taskConfirmedAt.get(task.id) || 0) > started || (taskReadAt.get(task.id) || 0) > started) return false;
-        const previous = confirmed.tasks.find(row => row.id === task.id);
+        const previous = confirmed.tasks.find(row => row.id === task.id), peer = peers.get(task.id);
+        if (peer && previous) {
+          const available = peer.omitted.filter(field => field !== "id" && field !== "updatedAt" && field !== "detailAvailability"
+            && !read.model.taskOmittedFields.includes(field) && Object.prototype.hasOwnProperty.call(task, field));
+          const patch: Partial<Task> & { id: string } = { id: task.id, updatedAt: task.updatedAt };
+          for (const field of available) Object.assign(patch, { [field]: task[field] });
+          replacements.set(task.id, { ...previous, ...patch });
+          acceptTaskFieldCoverage(patch);
+          structureTaskReceipts.set(task.id, { ...peer, omitted: peer.omitted.filter(field => !available.includes(field)), deadline: Math.min(peer.deadline, deadline) });
+          continue;
+        }
         const next = { ...previous, ...task };
         for (const field of read.model.taskOmittedFields) if (previous) Object.assign(next, { [field]: previous[field] });
         acceptTaskFieldCoverage(task, read.model.taskOmittedFields);
@@ -172,12 +203,16 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           next.detailAvailability = "stale"; detailStatuses.set(task.id, "stale");
         }
         replacements.set(task.id, next); taskReadAt.set(task.id, started);
+        structureTaskReceipts.set(task.id, { started, source: selection.sourceRevision, version: task.updatedAt || "", area: selection.query.area, context: contextIds.has(task.id),
+          omitted: [...read.model.taskOmittedFields], deadline, generation: sessionGeneration, session: sessionRevision, epoch: planningSourceEpoch,
+          actorId: read.readActor.profileId, role: read.readActor.platformRole });
       }
       const known = new Set(confirmed.tasks.map(task => task.id));
       confirmed = { ...confirmed, tasks: [...confirmed.tasks.map(task => replacements.get(task.id) || task), ...[...replacements.values()].filter(task => !known.has(task.id))] };
       acceptProfileScope("planning", read.model.people, false);
       return true;
     } });
+
 
   let planningInteraction: import("../planning-state").PlanningInteraction = { selectedTaskId: null };
   const boardInteractions = new Set<symbol>();
@@ -2411,7 +2446,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function suspendProtected() {
     backlogSelectionQuery = undefined;
     for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
-    candidateReads.clear(); structureReads.clear();
+    candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearOrphanBacklog(true); displayedBacklogMembers.clear(); clearBacklogSupport();
     failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
@@ -2644,6 +2679,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear(); administration.clear(); unsubscribeSession?.(); },
   } };
 }
