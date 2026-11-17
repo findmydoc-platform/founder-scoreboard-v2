@@ -103,6 +103,7 @@ const rootQuery: PlanningStructureQuery = { view: "structure", area: "roots", li
 function SelectedTaskStructureView(props: SelectedStructureProps) {
   const state = props.planningState;
   const roots = state.structure(rootQuery);
+  useEffect(() => { const release = state.activateStructureControls(), controller = new AbortController(); void state.loadStructureControls({ signal: controller.signal }); return () => { controller.abort(); release(); }; }, [state]);
   useEffect(() => { const release = state.activateStructure(rootQuery), controller = new AbortController(); void state.loadStructure(rootQuery, { signal: controller.signal }); return () => { controller.abort(); release(); }; }, [state]);
   return <div className="grid gap-4">
     <div className="flex justify-end gap-2"><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(true)}>Alle einklappen</UiButton><UiButton type="button" size="sm" onClick={() => props.onSetAllInitiativeCollapse(false)}>Alle ausklappen</UiButton></div>

@@ -103,6 +103,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   readBoardSummaries?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: PlanningBoardSummaryFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
   readBacklogRankTarget?: (query: BacklogRankQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readBacklogSupport?: (query: BacklogSupportQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
+  readStructureControls?: (options: { signal: AbortSignal }) => Promise<import("./planning-structure-reads").StructureControlsRead>;
   readStructure?: (query: import("../planning-structure-query").PlanningStructureQuery, options: { signal: AbortSignal }) => Promise<StructureRead>;
   readBacklogSelection?: (query: BacklogSelectionQuery, options?: { signal?: AbortSignal }) => Promise<PlanningWorkspaceRead | null>;
   readWorkspace(workspace: AppWorkspace, query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal; onBoardStream?: (event: PlanningWorkspaceProgress) => void }): Promise<PlanningWorkspaceRead | null>;
@@ -156,7 +157,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
 
-  const structureReads = createPlanningStructureReads({ read: adapter.readStructure, publish, now: () => adapter.now?.() ?? Date.now(),
+  const structureReads = createPlanningStructureReads({ read: adapter.readStructure, readControls: adapter.readStructureControls, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }),
     begin: () => ++sequence,
     accept: (read, started) => {
@@ -904,6 +905,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const hierarchy = createHierarchyCommands({planning:()=>planning,currentTask:id=>confirmed.tasks.find(task=>task.id===id),active:isActive,generation:()=>sessionGeneration,changed:publish});
   const decisionLog = createDecisionLogState({initial:active ? initialDecisionLogResult : undefined,active:isActive,generation:()=>sessionGeneration,changed:publish,read:adapter.readDecisionLog});
   const planning: PlanningState = {
+    activateStructureControls: structureReads.mountControls,
+    structureControls: structureReads.controls,
+    loadStructureControls: structureReads.loadControls,
     activateStructure: structureReads.mount,
     loadStructure: structureReads.load,
     structure: structureReads.view,

@@ -25,6 +25,12 @@ function StructureControllerFlow() {
         if (query.view === "complete") setCounts(value => ({ ...value, complete: value.complete + 1 }));
         return Response.json({ error: "Unselected planning class" }, { status: 503 });
       }
+      if (query.area === "controls") {
+        const deadline = Date.now() + 60_000;
+        return Response.json({ readAuthority: { userId: itemPageUser.id, deadline }, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, model: { revision: "controller-structure-source", controls: {
+          people: [{ id: itemPageProfile.id, name: itemPageProfile.name }], sprints: [], initiatives: [{ id: parent.id, title: parent.title }], workstreams: [], coverage: "complete", sourceRevision: "controller-structure-source", scopeRevision: "controls", observedAt: "2026-11-01T12:00:00Z", validUntil: new Date(deadline).toISOString(),
+        } } });
+      }
       const roots = query.area === "roots";
       setCounts(value => ({ ...value, [roots ? "roots" : "children"]: value[roots ? "roots" : "children"] + 1 }));
       const deadline = Date.now() + 60_000, row = roots ? parent : child;
