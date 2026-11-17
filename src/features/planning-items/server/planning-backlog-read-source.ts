@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BacklogLoadResult } from "@/features/backlog/model/backlog-read-model";
-import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
+import { validBacklogParentProgress, type BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
 import type { PlanningWorkspaceLoadContext } from "../model/planning-workspace-model";
 import type { DbProfile, DbSprint, DbTask, DbPlanningItemStrategy } from "@/lib/planning-row-types";
 import { taskRowSelect } from "@/lib/planning-row-types";
@@ -47,6 +47,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       || selected.item_ids.length > query.limit || selected.context_ids.length > query.limit * 3
       || selected.context_ids.some((id: string) => selected.item_ids.includes(id))
       || !Number.isSafeInteger(selected.total) || selected.total < 0 || selected.item_ids.length !== Math.min(query.limit, Math.max(0, selected.total - (cursor?.offset ?? 0)))
+      || !validBacklogParentProgress(selected.parent_progress_by_id, selected.context_ids)
       || !selected.rank_by_id || selected.item_ids.some((id: string) => !Number.isSafeInteger(selected.rank_by_id[id]) || selected.rank_by_id[id] < 1)
       || typeof selected.source_revision !== "string" || !selected.source_revision || !Number.isFinite(Date.parse(selected.observed_at)) || !Number.isFinite(Date.parse(selected.valid_until))) return { status: "unavailable" };
     if (cursor && (selected.source_revision !== cursor.source || selected.observed_at !== cursor.observedAt || selected.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
@@ -66,7 +67,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       revision: selected.source_revision, taskOmittedFields: planningCardOmittedFields,
       coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial", strategies: "partial", raci: "partial", links: "partial" },
       ...hydrated, commitments: [],
-      selection: { query, itemIds: selected.item_ids, contextIds: selected.context_ids, rankById: selected.rank_by_id, total: selected.total,
+      selection: { query, parentProgressById: selected.parent_progress_by_id, itemIds: selected.item_ids, contextIds: selected.context_ids, rankById: selected.rank_by_id, total: selected.total,
         coverage: offset >= selected.total ? "complete" : "partial", continuation: offset >= selected.total ? null : Buffer.from(JSON.stringify({ ...next, binding: signature(context, query, next) })).toString("base64url"),
         sourceRevision: selected.source_revision, observedAt: selected.observed_at, validUntil: selected.valid_until,
         scopeRevision: createHash("sha256").update(JSON.stringify([query.filters, selected.source_revision, ...(query.section ? [query.section] : [])])).digest("hex"),

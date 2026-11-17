@@ -20,7 +20,7 @@ function response():SelectedRead {
   return {data:{...emptyPlanningShellState,tasks:[row,parent]},readAuthority:{userId:"selected-backlog-user",deadline},readActor:{profileId:actor.id,platformRole:actor.platformRole},
     coverage:{tasks:"partial",profiles:"partial",sprints:"partial",sprintCommitments:"partial"},taskCoverage:"partial",taskOmittedFields:omitted,
     backlogCoverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial",strategies:"partial",raci:"partial",links:"partial"},
-    backlogSelection:{query,itemIds:[selected.id],contextIds:[parent.id],rankById:{[selected.id]:1008},total:1,coverage:"complete",continuation:null,
+    backlogSelection:{parentProgressById:{[parent.id]:{total:1009,completed:1,unfinished:1008,percentage:0}},query,itemIds:[selected.id],contextIds:[parent.id],rankById:{[selected.id]:1008},total:1,coverage:"complete",continuation:null,
       sourceRevision:"selected-backlog-source",scopeRevision:"selected-backlog-scope",observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString()}};
 }
 
@@ -123,7 +123,7 @@ test("selected Backlog appends only the next page of the same receipt while reta
   try {
     expect(await owner.planning.loadBacklogSelection(query)).toBe(true);
     expect(await (owner.planning as typeof owner.planning & PagedPort).loadBacklogSelection(nextQuery,{append:true})).toBe(true);
-    expect(owner.planning.backlog().model.selection).toMatchObject({itemIds:[selected.id,other.id],contextIds:[parent.id],rankById:{[selected.id]:1008,[other.id]:1009},total:2,coverage:"complete",continuation:null,validUntil:first.backlogSelection.validUntil});
+    expect(owner.planning.backlog().model.selection).toMatchObject({itemIds:[selected.id,other.id],contextIds:[parent.id],parentProgressById:first.backlogSelection.parentProgressById,rankById:{[selected.id]:1008,[other.id]:1009},total:2,coverage:"complete",continuation:null,validUntil:first.backlogSelection.validUntil});
   } finally { owner.internal.dispose(); }
 });
 
@@ -188,4 +188,13 @@ test("an opaque Backlog page conflict does not invalidate its current receipt or
     expect(state.planning.backlog().model.selection?.continuation).toBe("retained-page");
     expect(count).toBe(2);
   } finally { state.internal.dispose(); }
+});
+
+test("selected Parent progress cannot certify unrelated context or inconsistent counts", async()=>{
+  for(const progress of [{unrelated:{total:1,completed:0,unfinished:1,percentage:0}},{[parent.id]:{total:1,completed:2,unfinished:0,percentage:100}}]){
+    const read=response();read.backlogSelection={...read.backlogSelection,parentProgressById:progress};
+    const owner=selectedOwner(async()=>read);
+    try{expect(await owner.planning.loadBacklogSelection(query)).toBe(false);expect(owner.planning.backlog().model.selection).toBeUndefined();expect(owner.planning.taskDetail(selected.id).task).toBeNull();}
+    finally{owner.internal.dispose();}
+  }
 });

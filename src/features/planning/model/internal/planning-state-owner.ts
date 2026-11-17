@@ -2,7 +2,7 @@ import { backlogUsesGlobalRank } from "@/features/backlog/model/backlog-view-mod
 import { normalizeBacklogRank, type BacklogRankQuery, type BacklogRankTarget } from "@/features/backlog/model/backlog-rank-target";
 import type { BacklogMoveAction, BacklogOrderResult } from "@/features/backlog/model/backlog-ordering";
 import { normalizeBacklogSupport, validBacklogControls, validBacklogBuckets, type BacklogControls, type BacklogSprintBasis, type BacklogSupportQuery } from "@/features/backlog/model/backlog-support";
-import { normalizeBacklogSelection, type BacklogSelection, type BacklogSelectionQuery, type BacklogOrphanSection } from "@/features/backlog/model/backlog-selection";
+import { normalizeBacklogSelection, validBacklogParentProgress, type BacklogSelection, type BacklogSelectionQuery, type BacklogOrphanSection } from "@/features/backlog/model/backlog-selection";
 import { taskChildProgress } from "@/features/tasks/model/task-card-presentation";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardQuery, type PlanningBoardQueryInput, type PlanningBoardResult } from "../planning-board-query";
 import { allowedPlanningItemStatuses } from "@/features/tasks/model/planning-item-capabilities";
@@ -1898,6 +1898,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
           || !["complete", "partial"].includes(selection.coverage)
           || new Set([...selection.itemIds, ...selection.contextIds]).size !== selection.itemIds.length + selection.contextIds.length
           || [...selection.itemIds, ...selection.contextIds].some(id => !ids.has(id))
+          || selection.parentProgressById !== undefined && !validBacklogParentProgress(selection.parentProgressById, selection.contextIds)
           || selection.itemIds.some(id => !Number.isSafeInteger(selection.rankById[id]) || selection.rankById[id] < 1)) {
           setStatus("unavailable"); publish(); return false;
         }
@@ -1915,7 +1916,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
             setStatus("stale"); publish(); return false;
           }
           acceptedSelection = { ...selection, itemIds, contextIds: [...new Set([...previous.contextIds, ...selection.contextIds])].filter(id => !itemIds.includes(id)),
-            rankById: { ...previous.rankById, ...selection.rankById } };
+            rankById: { ...previous.rankById, ...selection.rankById },
+            ...(previous.parentProgressById || selection.parentProgressById ? { parentProgressById: { ...previous.parentProgressById, ...selection.parentProgressById } } : {}) };
         }
         if (!acceptBacklogSource(selection.sourceRevision, token)) {
           setStatus("stale"); publish(); return false;

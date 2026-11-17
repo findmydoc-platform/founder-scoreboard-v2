@@ -29,6 +29,7 @@ type OrphanGroupView = {
 type PlanningBacklogTreeProps = {
   orphanGroups?: Record<import("../model/backlog-selection").BacklogOrphanSection, OrphanGroupView>;
   childOwner?: PlanningState;
+  parentProgressById?: import("../model/backlog-selection").BacklogSelection["parentProgressById"];
   collectionCoverage?: "complete" | "partial";
   independentMembership?: boolean;
   canAssignSprints: boolean;
@@ -307,14 +308,15 @@ function Group({
   );
 }
 
-function ParentGroup({ owner, parent, collectionCoverage, independentMembership, tasks, rollupTasks, itemType, title, groupId, collapsed, onToggle, renderRow }: {
+function ParentGroup({ owner, parent, parentProgress, collectionCoverage, independentMembership, tasks, rollupTasks, itemType, title, groupId, collapsed, onToggle, renderRow }: {
+  parentProgress?: import("../model/backlog-selection").BacklogParentProgress;
   owner?: PlanningState; parent?: Task; collectionCoverage?: "complete" | "partial"; independentMembership: boolean;
   tasks: Task[]; rollupTasks: Task[]; itemType: GroupItemType; title: string; groupId: string; collapsed: boolean; onToggle: () => void;
   renderRow: (task: Task) => ReactNode;
 }) {
   const lease = useRef<AbortController | null>(null);
   const parentId = parent?.id;
-  const independent = Boolean(owner && parentId && collectionCoverage === "partial");
+  const independent = Boolean(owner && parentId && collectionCoverage === "partial" && (independentMembership || !parentProgress));
   useEffect(() => {
     if (!owner || !parentId || !independent || collapsed) return;
     const controller = new AbortController(); lease.current = controller;
@@ -327,7 +329,7 @@ function ParentGroup({ owner, parent, collectionCoverage, independentMembership,
   const displayed = forbidden ? [] : independent && currentChildren && independentMembership
     ? detail.children.filter(child => child.taskType === itemType && (itemType !== "deliverable"
       || ((taskStatuses as readonly string[]).includes(child.status) || child.status === "Pausiert") && normalizeStatus(child.status) !== "Erledigt")) : tasks;
-  const progress = owner && collectionCoverage !== "complete" ? detail?.childProgress || null : undefined;
+  const progress = owner && collectionCoverage !== "complete" ? parentProgress || detail?.childProgress || null : undefined;
   const failed = detail?.childrenReadStatus === "unavailable" || detail?.childrenReadStatus === "stale";
   const retry = () => { if (owner && parentId && lease.current) void owner.loadTaskDetail(parentId, { area: "children", signal: lease.current.signal }); };
   const notice = !independent ? null : forbidden ? <p role="status">Unteraufgaben dürfen nicht angezeigt werden.</p>
@@ -341,6 +343,7 @@ function ParentGroup({ owner, parent, collectionCoverage, independentMembership,
 
 export function PlanningBacklogTree({
   childOwner,
+  parentProgressById,
   orphanGroups,
   collectionCoverage,
   independentMembership = false,
@@ -422,7 +425,7 @@ export function PlanningBacklogTree({
   const visibleOrphanInitiatives = orphanInitiatives.filter(visibleAtCurrentLevel);
   const visibleOrphanDeliverables = orphanDeliverables.filter(visibleAtCurrentLevel);
   const group = (groupId: string, itemType: GroupItemType, title: string, tasks: Task[], rollupTasks = tasks, parent?: Task) => (
-    <ParentGroup owner={childOwner} parent={parent} collectionCoverage={collectionCoverage} independentMembership={independentMembership} tasks={tasks} renderRow={task => row(task)}
+    <ParentGroup owner={childOwner} parent={parent} parentProgress={parent ? parentProgressById?.[parent.id] : undefined} collectionCoverage={collectionCoverage} independentMembership={independentMembership} tasks={tasks} renderRow={task => row(task)}
       key={groupId}
       collapsed={collapsedGroups.has(groupId)}
       groupId={groupId}

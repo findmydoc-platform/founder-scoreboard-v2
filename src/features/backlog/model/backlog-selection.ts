@@ -11,7 +11,19 @@ export type BacklogSelectionQuery = Readonly<{
   continuation?: string;
 }>;
 
+export type BacklogParentProgress = Readonly<{ total: number; completed: number; unfinished: number; percentage: number }>;
+
+export function validBacklogParentProgress(value: unknown, contextIds: readonly string[]): value is Record<string, BacklogParentProgress> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).every(([id, progress]) => contextIds.includes(id) && progress && typeof progress === "object"
+    && [progress.total, progress.completed, progress.unfinished, progress.percentage].every(Number.isSafeInteger)
+    && progress.total >= 0 && progress.completed >= 0 && progress.unfinished >= 0
+    && progress.completed + progress.unfinished === progress.total
+    && progress.percentage === (progress.total ? Math.round(progress.completed / progress.total * 100) : 0));
+}
+
 export type BacklogSelection = Readonly<{
+  parentProgressById?: Readonly<Record<string, BacklogParentProgress>>;
   query: BacklogSelectionQuery;
   itemIds: readonly string[];
   contextIds: readonly string[];
