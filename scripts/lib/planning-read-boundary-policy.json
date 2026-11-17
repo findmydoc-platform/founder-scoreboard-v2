@@ -32,9 +32,9 @@
     "BACKLOG": {
       "consumer": "BACKLOG",
       "owner": "Backlog feature owner",
-      "reason": "Retain existing capped Backlog basis until its separate migration.",
+      "reason": "Preserve the explicitly selected capped unscoped compatibility API and legacy fixture callers. Visible Backlog levels and Structure use their scoped contracts; a failed or missing receipt never selects this path.",
       "evidence": "tests/unit/planning/backlog-planning-state.test.mjs; tests/integration/sprint-commitment-concurrency.test.ts",
-      "expiresWhen": "Remove on accepted BACKLOG migration #652."
+      "expiresWhen": "Remove only after the explicit unscoped compatibility operation and its retained callers are retired."
     },
     "DETAIL": {
       "consumer": "DETAIL / DISCUSSION / TIMELINE identity reads, complete action evidence and retained CANDIDATES / structure compatibility",
