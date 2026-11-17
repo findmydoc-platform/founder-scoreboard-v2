@@ -11,8 +11,8 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
     from generate_series(1,1008) n`,[f.prefix,query,f.actors.founder.profileId]);
   for(const kind of ["initiative","deliverable"]){
     await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,status,priority,sort_order,approval_status,owner)
-      values($1,'findmydoc-founder-execution','Open orphan','Unmatched orphan description',$3,'Offen','P3',1,'approved',$4),
-      ($2,'findmydoc-founder-execution','Completed orphan','Unmatched orphan description',$3,'Erledigt','P3',2,'approved',$4)`,[`${f.prefix}-orphan-${kind}-open`,`${f.prefix}-orphan-${kind}-done`,kind,f.actors.founder.profileId]);
+      values($1,'findmydoc-founder-execution','Open orphan','Unmatched orphan description',$3,'Offen','P3',1,$5,$4),
+      ($2,'findmydoc-founder-execution','Completed orphan','Unmatched orphan description',$3,'Erledigt','P3',2,$5,$4)`,[`${f.prefix}-orphan-${kind}-open`,`${f.prefix}-orphan-${kind}-done`,kind,f.actors.founder.profileId,kind==="deliverable"?"proposed":"approved"]);
   }
   const {loadPlanningWorkspaceModel}=await importTestModule("src/features/planning-items/server/planning-workspace-read-source.ts",{"server-only":{}});
   const client=createClient(f.local.API_URL,f.local.SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
