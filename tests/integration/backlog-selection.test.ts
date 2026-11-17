@@ -148,6 +148,6 @@ test("selected Backlog hydrates only authorized page references without separate
   const next=await GET(f.request("founder",`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({...scope,continuation:body.model.selection.continuation}))}`));expect(next.status).toBe(200);const second=await next.json();
   expect(second.model.selection.itemIds).toEqual(expected.slice(20));expect(second.model.selection.sourceRevision).toBe(body.model.selection.sourceRevision);
   expect(second.readAuthority.deadline).toBeLessThanOrEqual(body.readAuthority.deadline);
-  expect(dispatches.some(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.permit)).toBe(true);
+  expect(dispatches.some(row=>row.path==="/rest/v1/rpc/current_authenticated_profile"&&row.actor==="founder")).toBe(true);
   expect(dispatches.filter(row=>["/rest/v1/active_tasks","/rest/v1/profiles","/rest/v1/sprints"].includes(row.path)).map(row=>row.path)).toEqual([]);
 }),120_000);
