@@ -1736,7 +1736,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       }).catch(error => {
         if (!bindingCurrent()) return false;
         const status = readErrorStatus(error);
-        if (!previousPage || status === "forbidden" || status === "stale") {
+        if (!previousPage || status === "forbidden") {
           selectedBacklog = undefined;
           workspaceStatuses.set("backlog", status);
         }
