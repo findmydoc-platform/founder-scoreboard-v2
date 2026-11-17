@@ -16,7 +16,7 @@ const profileSelect = "id,name,platform_role,org_role,github_login,deputy_for,de
 const sprintSelect = "id,name,status,start_date,end_date,review_due_at,score_locked,updated_at";
 const ids = (value: unknown): value is string[] => Array.isArray(value) && value.every(id => typeof id === "string" && id.length > 0) && new Set(value).size === value.length;
 function signature(context: PlanningWorkspaceLoadContext, query: BacklogSelectionQuery, cursor: Omit<Cursor, "binding">) {
-  return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["backlog-selection-v1", context.actorProfileId, query.filters, query.limit, cursor])).digest("hex");
+  return createHmac("sha256", context.authorityKey!).update(JSON.stringify(["backlog-selection-v1", context.actorProfileId, query.filters, query.limit, cursor, ...(query.section ? [query.section] : [])])).digest("hex");
 }
 
 export async function loadPlanningBacklogSelection(supabase: SupabaseClient, context: PlanningWorkspaceLoadContext, query: BacklogSelectionQuery): Promise<BacklogLoadResult> {
@@ -37,7 +37,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
   const deadline = Math.min(context.authorityDeadline, cursor?.deadline ?? Infinity);
   if (deadline <= Date.now()) return { status: "forbidden" };
   try {
-    const request = supabase.rpc("planning_backlog_selection", { p_actor_profile_id: context.actorProfileId, p_filters: query.filters, p_limit: query.limit,
+    const request = supabase.rpc("planning_backlog_selection", { p_actor_profile_id: context.actorProfileId, p_filters: { ...query.filters, ...(query.section ? { section: query.section } : {}) }, p_limit: query.limit,
       p_offset: cursor?.offset ?? 0, p_source_revision: cursor?.source ?? null, p_evaluated_at: cursor?.observedAt ?? null, p_valid_until: cursor?.validUntil ?? null });
     const result = await (context.signal ? request.abortSignal(context.signal) : request);
     if (result.error) return { status: result.status === 401 || result.status === 403 ? "forbidden" : "unavailable" };
@@ -52,7 +52,9 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
     if (cursor && (selected.source_revision !== cursor.source || selected.observed_at !== cursor.observedAt || selected.valid_until !== cursor.validUntil)) return { status: "staleContinuation" };
     const selectedIds: string[] = [...selected.item_ids, ...selected.context_ids];
     const hydrated = await hydrateBacklogItems(supabase, context, selectedIds);
-    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== query.filters.level)) return { status: "unavailable" };
+    const selectedType = query.section === "orphanInitiatives" ? "initiative" : query.section === "orphanDeliverables" ? "deliverable" : query.filters.level;
+    if (!hydrated || selected.item_ids.some((id: string) => hydrated.items.find(item => item.id === id)?.taskType !== selectedType
+      || query.section && hydrated.items.find(item => item.id === id)?.parentTaskId)) return { status: "unavailable" };
     const publication = await context.publicationSource.read(context.signal);
     if (publication.status !== "ready") return { status: publication.status };
     if (context.signal?.aborted) return { status: "unavailable" };
@@ -67,7 +69,7 @@ export async function loadPlanningBacklogSelection(supabase: SupabaseClient, con
       selection: { query, itemIds: selected.item_ids, contextIds: selected.context_ids, rankById: selected.rank_by_id, total: selected.total,
         coverage: offset >= selected.total ? "complete" : "partial", continuation: offset >= selected.total ? null : Buffer.from(JSON.stringify({ ...next, binding: signature(context, query, next) })).toString("base64url"),
         sourceRevision: selected.source_revision, observedAt: selected.observed_at, validUntil: selected.valid_until,
-        scopeRevision: createHash("sha256").update(JSON.stringify([query.filters, selected.source_revision])).digest("hex"),
+        scopeRevision: createHash("sha256").update(JSON.stringify([query.filters, selected.source_revision, ...(query.section ? [query.section] : [])])).digest("hex"),
       },
     } };
   } catch { return { status: "unavailable" }; }

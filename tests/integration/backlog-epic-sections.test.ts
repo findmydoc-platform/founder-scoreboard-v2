@@ -27,7 +27,7 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
   const orphans=Object.fromEntries(["initiative","deliverable"].map(kind=>[kind,reference.model.items.filter((row:Task)=>row.taskType===kind&&!row.parentTaskId).map((row:Task)=>row.id)]));
   for(const kind of ["initiative","deliverable"])expect(orphans[kind]).toEqual([`${f.prefix}-orphan-${kind}-open`,`${f.prefix}-orphan-${kind}-done`]);
   const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
-  const read=(section?:string,continuation?:string,actor:"founder"|"unmapped"="founder",inputFilters=filters)=>GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters:inputFilters,section,limit:100,continuation}))}`));
+  const read=(section?:string,continuation?:string,actor:"founder"|"unmapped"="founder",inputFilters=filters,limit=100)=>GET(f.request(actor,`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify({view:"backlog",filters:inputFilters,section,limit,continuation}))}`));
   let continuation:string|undefined,deadline=Infinity;const ids:string[]=[];
   do {
     const response=await read(undefined,continuation);expect(response.status).toBe(200);const body=await response.json(),selection=body.model.selection;
@@ -45,4 +45,11 @@ test("Epic Backlog pages its filtered primary class independently from unfiltere
     const filtered=await read(section,undefined,"founder",{...filters,priority:"P2"});expect(filtered.status).toBe(200);expect((await filtered.json()).model.selection.itemIds).toEqual(orphans[kind]);
     expect((await read(section,undefined,"unmapped")).status).toBe(403);
   }
+  const orphanPageResponse=await read("orphanInitiatives",undefined,"founder",filters,1);expect(orphanPageResponse.status).toBe(200);
+  const orphanPage=(await orphanPageResponse.json()).model.selection;expect(orphanPage.itemIds).toEqual([`${f.prefix}-orphan-initiative-open`]);expect(orphanPage.continuation).toBeTruthy();
+  expect((await read("orphanDeliverables",orphanPage.continuation,"founder",filters,1)).status).toBe(409);
+  await f.db.query("update public.tasks set parent_task_id=$1 where id=$2",[`${f.prefix}-epic`,`${f.prefix}-orphan-initiative-open`]);
+  expect((await read("orphanInitiatives",orphanPage.continuation,"founder",filters,1)).status).toBe(409);
+  const refreshed=await read("orphanInitiatives");expect(refreshed.status).toBe(200);const refreshedSelection=(await refreshed.json()).model.selection;
+  expect(refreshedSelection.itemIds).toEqual([`${f.prefix}-orphan-initiative-done`]);expect(refreshedSelection.total).toBe(1);
 }),120_000);
