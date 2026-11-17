@@ -8,6 +8,7 @@ export type BacklogModel = Readonly<{
   controls?: import("./backlog-support").BacklogControls;
   sprintBasis?: import("./backlog-support").BacklogSprintBasis;
   selection?: import("./backlog-selection").BacklogSelection;
+  orphanSelections?: Partial<Record<import("./backlog-selection").BacklogOrphanSection, import("./backlog-selection").BacklogSelection>>;
   taskOmittedFields?: readonly (keyof Task)[];
   coverage?: BacklogReadCoverage;
   items: readonly Task[];

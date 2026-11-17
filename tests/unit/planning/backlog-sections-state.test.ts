@@ -15,7 +15,7 @@ type SectionView={readStatus:PlanningReadStatus;orphanReadStatus?:Partial<Record
 function deferred<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(done=>{resolve=done;});return{promise,resolve};}
 function response(query:BacklogSelectionQuery,deadline:number):PlanningWorkspaceRead {
  const section=query.section||"level",type=section==="orphanInitiatives"?"initiative":section==="orphanDeliverables"?"deliverable":query.filters.level;
- const row=taskDetailStoryTask({id:`selected-${section}`,title:`Selected ${section}`,taskType:type,parentTaskId:"",status:query.section?"Erledigt":"Offen",updatedAt:"2026-11-01T12:00:00Z",detailAvailability:"summary"});
+ const row=taskDetailStoryTask({id:section==="level"&&query.filters.level!=="epic"?"selected-deliverable":`selected-${section}`,title:`Selected ${section}`,taskType:type,parentTaskId:"",status:query.section?"Erledigt":"Offen",updatedAt:"2026-11-01T12:00:00Z",detailAvailability:"summary"});
  const omitted:(keyof Task)[]=["description","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests"];omitted.forEach(field=>{delete row[field];});
  return {data:{...emptyPlanningShellState,tasks:[row]},readAuthority:{userId:"section-user",deadline},readActor:{profileId:actor.id,platformRole:actor.platformRole},taskOmittedFields:omitted,taskCoverage:"partial",coverage:{tasks:"partial",profiles:"partial"},
   backlogCoverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial"},backlogSelection:{query,itemIds:[row.id],contextIds:[],rankById:{[row.id]:1},total:1,coverage:"complete",continuation:null,sourceRevision:"section-source",scopeRevision:`scope-${section}-${query.filters.query}`,observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()}};
