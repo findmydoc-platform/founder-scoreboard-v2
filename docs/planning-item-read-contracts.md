@@ -244,7 +244,9 @@ Every stage gate remains in specification #641. Stage 0 requires complete accoun
 `controls` or `sprints` and a validated local calendar day. These are independent
 read classes, not selected Item membership or a complete workspace. Controls
 contain complete scalar level totals, per-level status choices, assignee labels,
-and Epic/Initiative options. They contain no profile roles or canonical Tasks.
+and Epic/Initiative options. The four scope counters (`all`, `proposals`, `ready`,
+`unscheduled`) use the complete unfinished Deliverable class before selected
+filters and paging. They overlap and are independent of planned hours. They contain no profile roles or canonical Tasks.
 Sprint support contains at most five open buckets starting at the current Sprint
 (date containment, then active, then planning/review, then first in date order).
 Its planned hours include every approved unfinished Deliverable in each bucket,

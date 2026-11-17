@@ -23,7 +23,7 @@ function receipt(deadline: number) {
   return { coverage: "complete" as const, sourceRevision: "support-source", scopeRevision: "support-scope", observedAt: new Date().toISOString(), validUntil: new Date(deadline).toISOString() };
 }
 function controls(deadline: number): SupportRead {
-  return { ...frame(deadline), backlogControls: { ...receipt(deadline), levelTotals: { epic: 1, initiative: 1, deliverable: 1008 },
+  return { ...frame(deadline), backlogControls: { ...receipt(deadline), levelTotals: { epic: 1, initiative: 1, deliverable: 1008 }, scopeCounts: { all: 1, proposals: 0, ready: 0, unscheduled: 1 },
     statuses: { epic: ["Offen"], initiative: ["Offen"], deliverable: ["Offen", "Erledigt"] }, assignees: [{ value: actor.id, label: actor.name }],
     epics: [{ value: "support-epic", label: "Unloaded Epic" }], initiatives: [{ value: "support-initiative", label: "Unloaded Initiative" }] } };
 }

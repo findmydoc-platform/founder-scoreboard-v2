@@ -6,6 +6,7 @@ type Receipt = Readonly<{ coverage: "complete"; sourceRevision: string; scopeRev
 type Option = Readonly<{ value: string; label: string }>;
 export type BacklogControls = Receipt & Readonly<{
   levelTotals: Record<PlanningLevel, number>;
+  scopeCounts: Record<import("./backlog-view-model").BacklogScope, number>;
   statuses: Record<PlanningLevel, readonly string[]>;
   assignees: readonly Option[];
   epics: readonly Option[];
@@ -31,7 +32,10 @@ export function validBacklogControls(value: BacklogControls | undefined) {
     const key = level as keyof BacklogControls["levelTotals"];
     return Number.isSafeInteger(value.levelTotals?.[key]) && value.levelTotals[key] >= 0
       && Array.isArray(value.statuses?.[key]) && value.statuses[key].every(status => typeof status === "string");
-  }) && [value.assignees, value.epics, value.initiatives].every(options);
+  }) && ["all", "proposals", "ready", "unscheduled"].every(scope => {
+    const count = value.scopeCounts?.[scope as keyof BacklogControls["scopeCounts"]];
+    return Number.isSafeInteger(count) && count >= 0 && count <= value.scopeCounts.all;
+  }) && value.scopeCounts.all <= value.levelTotals.deliverable && [value.assignees, value.epics, value.initiatives].every(options);
 }
 export function validBacklogBuckets(value: unknown): value is BacklogSprintBasis["buckets"] {
   return Array.isArray(value) && value.length <= 5 && new Set(value.map(bucket => bucket?.sprint?.id)).size === value.length
