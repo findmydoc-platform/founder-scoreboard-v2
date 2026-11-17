@@ -54,6 +54,9 @@ export const SelectedRootsAndOpenedChildrenLoadIndependentlyWithoutACompleteFall
   await userEvent.click(canvas.getByRole("button",{name:"Aufgaben erneut laden"}));await waitFor(()=>expect(canvas.getByLabelText("Strukturabfragen children")).toHaveTextContent("2"));
   await userEvent.click(parent);await expect(childReadAborted()).toBe(true);completeObsoleteRead();await userEvent.click(parent);
   await expect(await canvas.findByRole("link",{name:"Current Structure child 01"})).toHaveAttribute("href","/tasks/structure-delivery-1");
+  const firstCard = canvas.getByRole("link", { name: "Current Structure child 01" }).closest("article")!;
+  await expect(within(firstCard).getByText("Kindfortschritt unbekannt")).toBeVisible();
+  await expect(within(firstCard).getByRole("button", { name: "Sub-Issues anzeigen: Fortschritt unbekannt" })).toBeVisible();
   await expect(canvas.queryByRole("link",{name:"Obsolete Structure child"})).not.toBeInTheDocument();await expect(canvas.getByLabelText("Strukturabfragen children")).toHaveTextContent("3");
   await userEvent.click(canvas.getByRole("button",{name:"Weitere Deliverables laden"}));await expect(await canvas.findByRole("link",{name:"Completed offpage Structure child"})).toHaveAttribute("href","/tasks/structure-delivery-21");
   await expect(canvas.getByLabelText("Strukturabfragen roots")).toHaveTextContent("1");
