@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
@@ -116,4 +116,27 @@ test("Workspace Backlog controls retain user-bound authority while using grouped
   expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_dispatch_prepare")).toHaveLength(userBound.length);
   expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_issue_permit")).toHaveLength(0);
   expect(founderDispatches.filter(row=>row.path==="/rest/v1/rpc/workspace_access_context")).toHaveLength(1);
+},"linking"),120_000);
+
+test("Workspace Backlog grouped reads reject changed source and revoked or unmapped sessions",()=>withPlanningCredentialDatabase(async f=>{
+  const {GET}=await importTestModule("src/app/api/backlog-data/route.ts",{"server-only":{}});
+  const scope={view:"backlog-support",area:"controls",day:"2026-11-17"} as const,path=`/api/backlog-data?scope=${encodeURIComponent(JSON.stringify(scope))}`;
+  const boundFetch=globalThis.fetch;let changed=false;
+  vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const request=new Request(input,init),response=await boundFetch(request);
+    if(new URL(request.url).pathname==="/rest/v1/rpc/planning_backlog_support"&&!changed){changed=true;await f.db.query("update public.tasks set title=title||' changed source' where id=$1",[f.initiativeId]);}
+    return response;
+  });
+  const stale=await GET(f.request("founder",path));expect(changed).toBe(true);expect(stale.status).toBe(409);
+  const staleBody=await stale.json();expect(staleBody.code).toBe("stale_continuation");expect(staleBody).not.toHaveProperty("model");
+  vi.stubGlobal("fetch",boundFetch);
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const permission=await authorizeCredentialAction({credential:{kind:"session-request",request:f.request("founder",path)},action:"planning.backlog.read"});
+  expect(permission.ok).toBe(true);if(!permission.ok)throw Error("Expected mapped Workspace reader before revocation");
+  const originalDeadline=permission.readAuthority?.deadline;expect(originalDeadline).toBeGreaterThan(Date.now());
+  await f.db.query("delete from auth.sessions where id=$1",[f.actors.founder.sessionId]);
+  const before=f.observed.length;expect(await permission.planning.loadBacklog(scope)).toEqual({status:"forbidden"});
+  expect(permission.readAuthority?.deadline).toBe(originalDeadline);
+  expect(f.observed.slice(before).filter(row=>row.path==="/rest/v1/rpc/planning_backlog_support")).toHaveLength(0);
+  const unmapped=await GET(f.request("unmapped",path));expect(unmapped.status).toBe(403);expect(await unmapped.json()).not.toHaveProperty("model");
 },"linking"),120_000);
