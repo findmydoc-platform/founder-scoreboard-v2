@@ -282,3 +282,56 @@ export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetrySt
   await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
  },
 };
+
+
+function SelectedInitiativeBacklogStory() {
+ const [counts,setCounts]=useState({selected:0,legacy:0});
+ const [bundle]=useState(()=>{
+  const userId="strategic-backlog-user",deadline=Date.now()+300_000;
+  const profile={id:"strategic-backlog-founder",name:"Synthetic founder",platformRole:"founder" as const,orgRole:"Founder",githubLogin:"",weeklyCapacity:40};
+  const parent=taskDetailStoryTask({id:"strategic-parent",title:"Ausgewähltes Epic",taskType:"epic",updatedAt:"2026-11-01T12:00:00Z"});
+  const rows=Array.from({length:21},(_,index)=>taskDetailStoryTask({id:`strategic-initiative-${index+1}`,title:index===20?"Erledigte Initiative jenseits der Seite":`Ausgewählte Initiative ${String(index+1).padStart(2,"0")}`,
+   taskType:"initiative",parentTaskId:parent.id,status:index===20?"Erledigt":"Offen",description:"Strategischer Suchtext",ownerId:profile.id,assigneeId:profile.id,owner:profile.name,assignee:profile.name,order:index+1,updatedAt:"2026-11-01T12:00:00Z"}));
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason"];
+  const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
+  const empty:BacklogModel={revision:"strategic-source",items:[],people:[],sprints:[],commitments:[],coverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial",strategies:"partial",raci:"partial",links:"partial"}};
+  const receipt=(scopeRevision:string)=>({scopeRevision,sourceRevision:"strategic-source",observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()});
+  const response=(model:BacklogModel)=>({response:new Response(null),body:{model,readAuthority:{userId,deadline},readActor:{profileId:profile.id,platformRole:profile.platformRole}}});
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+   const url=new URL(String(input),"http://localhost:3000"),raw=url.searchParams.get("scope");
+   if(url.pathname!=="/api/backlog-data")throw new Error("Unexpected strategic Backlog request");
+   if(!raw){setCounts(value=>({...value,legacy:value.legacy+1}));return{response:new Response(null,{status:503}),body:{error:"Legacy discovery is not a strategic selected scope"} as T};}
+   const query=JSON.parse(raw);
+   if(query.view==="backlog-support"&&query.area==="controls")return response({...empty,controls:{...receipt("controls"),coverage:"complete",levelTotals:{epic:1,initiative:21,deliverable:0},statuses:{epic:["Offen"],initiative:["Offen","Erledigt"],deliverable:[]},assignees:[{value:profile.id,label:profile.name}],epics:[{value:parent.id,label:parent.title}],initiatives:rows.map(row=>({value:row.id,label:row.title})),scopeCounts:{all:0,proposals:0,ready:0,unscheduled:0}}}) as BrowserApiJsonResult<T>;
+   if(query.view!=="backlog"||query.filters.level!=="initiative")throw new Error("Unexpected selected strategic class");
+   setCounts(value=>({...value,selected:value.selected+1}));
+   const offset=query.continuation?20:0,chosen=rows.slice(offset,offset+query.limit);
+   return response({...empty,items:[parent,...chosen].map(compact),people:[profile],taskOmittedFields:omitted,selection:{...receipt("initiatives"),query,itemIds:chosen.map(row=>row.id),contextIds:[parent.id],rankById:Object.fromEntries(chosen.map(row=>[row.id,row.order])),total:21,coverage:offset+chosen.length===21?"complete":"partial",continuation:offset+chosen.length===21?null:"strategic-next"}}) as BrowserApiJsonResult<T>;
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const session={userId,revision:"strategic-session",expiresAt:deadline/1000,user:{id:userId}};
+  const lifetime=createBrowserPlanningLifetime({current:async()=>session,subscribe:()=>()=>{}});
+  const browser=lifetime.page({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile})!;
+  browser.runtime.apiClient=client;return{browser,lifetime};
+ });
+ useEffect(()=>{const disconnect=bundle.lifetime.connect();return()=>{disconnect();bundle.browser.owner.internal.dispose();};},[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ return <main><output aria-label="Ausgewählte Initiative-Abfragen">{counts.selected}</output><output aria-label="Unbegrenzte Initiative-Abfragen">{counts.legacy}</output>
+  <BacklogOverview readMode="selected" planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></main>;
+}
+
+export const SelectedInitiativeBacklogTraversesCompactPagesWithoutLosingCompletedMembership:Story={
+ name:"Selected Initiative Backlog traverses compact pages including completed membership",render:()=> <SelectedInitiativeBacklogStory/>,
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);url.searchParams.set("backlog.level","initiative");url.searchParams.set("backlog.query","Strategischer Suchtext");window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("1"));
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");
+  const group=within(await canvas.findByRole("region",{name:"Ausgewähltes Epic"}));
+  const first=await group.findByRole("link",{name:"Ausgewählte Initiative 01"});await expect(first).toHaveAttribute("href","/tasks/strategic-initiative-1");
+  await expect(group.queryByRole("link",{name:"Erledigte Initiative jenseits der Seite"})).not.toBeInTheDocument();
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  const completed=await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"});await expect(completed).toHaveAttribute("href","/tasks/strategic-initiative-21");
+  await expect(first).toBeVisible();await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("2");
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");await expect(canvas.getByRole("searchbox",{name:"Backlog durchsuchen"})).toHaveValue("Strategischer Suchtext");
+ },
+};
