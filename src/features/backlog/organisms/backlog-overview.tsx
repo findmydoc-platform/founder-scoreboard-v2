@@ -206,6 +206,7 @@ export function BacklogOverview({
         <div className="grid min-w-0 gap-4">
           {!scoped || selectionCurrent || model.items.length ? <PlanningBacklogTree
             childOwner={planningState}
+            orphanGroups={backlog.orphanGroups}
             collectionCoverage={selectionCurrent ? model.coverage?.items : undefined}
             independentMembership={selectionCurrent && !filters.query.trim() && filters.status === "Alle" && filters.priority === "Alle" && filters.assignee === "Alle" && filters.scope === "all" && filters.readiness === "all"}
             canAssignSprints={backlogLevel === "deliverable" && canAssign}
@@ -277,7 +278,7 @@ export function BacklogOverview({
       {scoped && selectionCurrent && model.selection?.continuation ? <div className="grid justify-items-start gap-2">
         {backlog.pageStatus === "unavailable" ? <UiNotice role="status" tone="warning">Weitere Einträge konnten nicht geladen werden.</UiNotice> : null}
         <UiButton disabled={backlog.pageStatus === "loading"} onClick={backlog.loadMore}>
-          {backlogLevel === "initiative" ? "Weitere Initiativen laden" : "Weitere Deliverables laden"}
+          {backlogLevel === "epic" ? "Weitere Epics laden" : backlogLevel === "initiative" ? "Weitere Initiativen laden" : "Weitere Deliverables laden"}
         </UiButton>
       </div> : null}
     </div>

@@ -17,7 +17,17 @@ import { classNames, UiBadge, UiButton, UiEmptyState } from "@/shared/atoms/ui-p
 
 export type BacklogPlanningLevel = PlanningLevel;
 
+type OrphanGroupView = {
+  readStatus: import("@/features/planning/model/planning-state").PlanningReadStatus;
+  selection?: import("../model/backlog-selection").BacklogSelection;
+  progress?: { total: number; completed: number; unfinished: number };
+  pageStatus: "idle" | "loading" | "unavailable";
+  reload(): void;
+  loadMore(): void;
+};
+
 type PlanningBacklogTreeProps = {
+  orphanGroups?: Record<import("../model/backlog-selection").BacklogOrphanSection, OrphanGroupView>;
   childOwner?: PlanningState;
   collectionCoverage?: "complete" | "partial";
   independentMembership?: boolean;
@@ -301,6 +311,7 @@ function ParentGroup({ owner, parent, collectionCoverage, independentMembership,
 
 export function PlanningBacklogTree({
   childOwner,
+  orphanGroups,
   collectionCoverage,
   independentMembership = false,
   canAssignSprints,
@@ -390,11 +401,30 @@ export function PlanningBacklogTree({
     />
   );
 
+  const orphanGroup = (section: "orphanInitiatives" | "orphanDeliverables", itemType: "initiative" | "deliverable", title: string, tasks: Task[]) => {
+    const state = orphanGroups?.[section];
+    if (!state) return tasks.length ? group(`epic:${section}`, itemType, title, tasks) : null;
+    const selectedIds = state.selection ? new Set(state.selection.itemIds) : undefined;
+    const displayed = state.readStatus === "forbidden" ? [] : selectedIds ? tasks.filter(task => selectedIds.has(task.id)) : tasks;
+    const label = itemType === "initiative" ? "Initiativen ohne Epic" : "Deliverables ohne Initiative";
+    const progress = state.progress ? { ...state.progress, percentage: state.progress.total ? Math.round(state.progress.completed / state.progress.total * 100) : 0 } : null;
+    const notice = <div className="grid justify-items-start gap-2">
+      {state.readStatus === "forbidden" ? <p role="status">{label} dürfen nicht angezeigt werden.</p>
+        : state.readStatus === "unavailable" ? <><p role="status">{label} konnten nicht geladen werden.</p><UiButton onClick={state.reload}>{label} erneut laden</UiButton></>
+          : state.readStatus !== "current" ? <p role="status">{label} werden geladen.</p>
+            : state.selection?.total === 0 ? <p>Keine {label} vorhanden.</p> : null}
+      {state.pageStatus === "unavailable" && state.readStatus === "current" ? <p role="status">Weitere Einträge konnten nicht geladen werden.</p> : null}
+      {state.selection?.continuation ? <UiButton disabled={state.pageStatus === "loading"} onClick={state.loadMore}>{itemType === "initiative" ? "Weitere Initiativen laden" : "Weitere Deliverables laden"}</UiButton> : null}
+    </div>;
+    return <Group key={section} groupId={`epic:${section}`} itemType={itemType} title={title} collapsed={collapsedGroups.has(section)} onToggle={() => toggleGroup(section)}
+      rollupTasks={tasks} progress={progress} visibleCount={displayed.length} notice={notice}>{displayed.map(task => row(task))}</Group>;
+  };
+
   const groups = level === "epic"
     ? [
         visibleEpics.length ? group("epic:all", "epic", "Epics", visibleEpics, epics) : null,
-        visibleOrphanInitiatives.length ? group("epic:orphan-initiatives", "initiative", "Ohne Epic", visibleOrphanInitiatives, orphanInitiatives) : null,
-        visibleOrphanDeliverables.length ? group("epic:orphan-deliverables", "deliverable", "Ohne Initiative", visibleOrphanDeliverables, orphanDeliverables) : null,
+        orphanGroup("orphanInitiatives", "initiative", "Ohne Epic", visibleOrphanInitiatives),
+        orphanGroup("orphanDeliverables", "deliverable", "Ohne Initiative", visibleOrphanDeliverables),
       ]
     : level === "initiative"
       ? [
