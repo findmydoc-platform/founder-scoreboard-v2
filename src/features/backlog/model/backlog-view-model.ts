@@ -335,3 +335,39 @@ export function buildBacklogViewModel(model: BacklogModel, scope: BacklogScope) 
     },
   };
 }
+
+export function buildSelectedBacklogOverviewViewModel(model: BacklogModel, filters: BacklogTableFilters, canManageBacklog: boolean) {
+  const previous = buildBacklogOverviewViewModel(model, filters, canManageBacklog);
+  const selection = model.selection;
+  const selectionCurrent = Boolean(selection && (Object.keys(DEFAULT_BACKLOG_FILTERS) as Array<keyof BacklogTableFilters>).every(key =>
+    selection.query.filters[key] === (key === "query" ? filters.query.trim().toLowerCase() : filters[key])));
+  const byId = new Map(model.items.map(task => [task.id, task]));
+  const ids = selection?.itemIds || model.items.filter(task => task.taskType === "deliverable").map(task => task.id);
+  const parents = new Map(model.items.filter(task => task.taskType === "initiative").map(task => [task.id, task]));
+  const records = ids.flatMap(id => { const task = byId.get(id); return task && !taskIsDone(task) ? [buildBacklogItem(task, parents, selection?.rankById[id] || 0)] : []; });
+  const controls = model.controls;
+  const options = (label: string, values: readonly { value: string; label: string }[] | undefined, selected: string) => {
+    const result = [{ value: "Alle", label }, ...(values || [])];
+    if (selected !== "Alle" && !result.some(option => option.value === selected)) result.push({ value: selected, label: controls ? "Nicht verfügbar" : "Kontext wird geladen" });
+    return result;
+  };
+  const references = {
+    epic: { label: "Epic", value: filters.epic, options: controls?.epics },
+    initiative: { label: "Initiative", value: filters.initiative, options: controls?.initiatives },
+    assignee: { label: "Zuständig", value: filters.assignee, options: controls?.assignees },
+  };
+  return { ...previous, selectionCurrent, allItems: records, visibleItems: records,
+    orderedTasks: records.map(item => item.task).sort(byBacklogOrder), visibleLevelTasks: records.map(item => item.task), visibleTaskIds: new Set(ids),
+    rankEditingEnabled: previous.rankEditingEnabled && selectionCurrent,
+    scopeCounts: controls?.scopeCounts, sprintBuckets: [...(model.sprintBasis?.buckets || [])],
+    activeFilters: previous.activeFilters.map(filter => {
+      const reference = references[filter.id as keyof typeof references];
+      return reference ? { ...filter, label: `${reference.label}: ${reference.options?.find(option => option.value === reference.value)?.label || (controls ? "Nicht verfügbar" : "Kontext wird geladen")}` } : filter;
+    }),
+    filterOptions: { ...previous.filterOptions,
+      assignees: options("Alle Zuständigen", controls?.assignees, filters.assignee), epics: options("Alle Epics", controls?.epics, filters.epic),
+      initiatives: options("Alle Initiativen", controls?.initiatives, filters.initiative),
+      statuses: [{ value: "Alle", label: "Alle Status" }, ...(controls?.statuses.deliverable || []).map(status => ({ value: status, label: status }))],
+    },
+  };
+}

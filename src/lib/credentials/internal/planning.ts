@@ -23,7 +23,7 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 
-import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
+import { createSupabaseBacklogReadModel, loadSupabaseBacklogBootstrap } from "@/features/backlog/server/backlog-read-model-supabase";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
@@ -322,6 +322,12 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         || !targetId || !("itemId" in call.command.action) || call.command.action.itemId !== targetId || await current()) return rejected();
       const result = await createPlanningReviewPlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
       if (result.ok && result.status === "committed") reviewCommitted = true;
+      return result;
+    },
+    async loadBacklogBootstrap() {
+      if (action !== "planning.backlog.read" || !profile || !("user" in permission) || !permission.user.id || await current()) return { status: "forbidden" as const };
+      const result = await loadSupabaseBacklogBootstrap(service, { userId: permission.user.id, profileId: profile.id, platformRole: profile.platformRole });
+      if (await current()) return { status: "forbidden" as const };
       return result;
     },
     async loadBacklog(query?: BacklogSelectionQuery | import("@/features/backlog/model/backlog-support").BacklogSupportQuery | import("@/features/backlog/model/backlog-rank-target").BacklogRankQuery, options?: { signal?: AbortSignal }) {

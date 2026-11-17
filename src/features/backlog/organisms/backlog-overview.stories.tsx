@@ -37,7 +37,7 @@ function Fixture({ scenario = "success" }: { scenario?: string }) {
  const [owner] = useState(() => { const value = createBrowserPlanningState({ initialData: { ...emptyPlanningShellState, tasks, sprints: [sprint] }, initialWorkspace: "backlog", initialUserId: "backlog-user", initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: { id: "founder", platformRole: "ceo", name: "CEO" } as AuthenticatedProfile }); value.runtime.session = {userId:value.runtime.userId,revision:"story-session",expiresAt:4102444800,user:{id:value.runtime.userId}}; value.runtime.apiClient = network.client; return value.owner; });
  useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
  const [showBacklog, setShowBacklog] = useState(true);
- return <main><button onClick={() => setShowBacklog(value => !value)}>Ansicht wechseln</button><h1>Backlog assignment</h1><button onClick={() => void owner.planning.refreshWorkspace("backlog")}>Start background read</button><p>Detail Alpha version: {owner.planning.taskDetail("a").task?.updatedAt}</p><p>Detail Alpha order: {owner.planning.taskDetail("a").task?.order}</p><p>Detail Beta order: {owner.planning.taskDetail("b").task?.order}</p><p>Detail Alpha: {owner.planning.taskDetail("a").task?.sprintId || "unscheduled"}</p>{showBacklog ? <BacklogOverview planningState={owner.planning} canManageBacklog onOpenTask={() => {}} onCreatePlanningItem={() => {}} onProposeDeliverable={() => {}} /> : <p>Andere Planning-Ansicht</p>}</main>;
+ return <main><button onClick={() => setShowBacklog(value => !value)}>Ansicht wechseln</button><h1>Backlog assignment</h1><button onClick={() => void owner.planning.refreshWorkspace("backlog")}>Start background read</button><p>Detail Alpha version: {owner.planning.taskDetail("a").task?.updatedAt}</p><p>Detail Alpha order: {owner.planning.taskDetail("a").task?.order}</p><p>Detail Beta order: {owner.planning.taskDetail("b").task?.order}</p><p>Detail Alpha: {owner.planning.taskDetail("a").task?.sprintId || "unscheduled"}</p>{showBacklog ? <BacklogOverview readMode="legacy" planningState={owner.planning} canManageBacklog onOpenTask={() => {}} onCreatePlanningItem={() => {}} onProposeDeliverable={() => {}} /> : <p>Andere Planning-Ansicht</p>}</main>;
 }
 const meta = { title: "Planning/Backlog/CoordinatedAssignment", component: Fixture } satisfies Meta<typeof Fixture>; export default meta; type Story = StoryObj<typeof meta>;
 export const OpenChooserKeepsDisplayedTaskBasis: Story = { args: { scenario: "chooser" }, play: async ({ canvasElement }) => {
@@ -164,7 +164,7 @@ function IndependentBacklogChildrenStory() {
  useEffect(()=>()=>bundle.browser.owner.internal.dispose(),[bundle]);
  useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
  childAreaControls.set("independent",bundle);
- return <><output aria-label="Backlog child requests">{requests}</output><BacklogOverview planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></>;
+ return <><output aria-label="Backlog child requests">{requests}</output><BacklogOverview readMode="legacy" planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></>;
 }
 export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingItsParent:Story={
  render:()=> <IndependentBacklogChildrenStory/>,

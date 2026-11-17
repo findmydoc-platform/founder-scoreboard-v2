@@ -137,11 +137,15 @@ test.each(["projects", "events", "tools", "team", "notifications"] as const)("%s
 });
 
 test("Backlog SSR admits the shell without enumerating capped domain rows or certifying empty membership", async () => {
-  planningProtocol();
-  const original = globalThis.fetch, broadReads: string[] = [];
+  const { protocol } = planningProtocol();
+  const original = globalThis.fetch, broadReads: string[] = [], selfBindings: string[] = [];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.includes("/rpc/") && url.searchParams.get("limit") === "1000") broadReads.push(url.pathname);
+    if (url.pathname === "/rest/v1/profiles" && url.searchParams.has("auth_user_id")) {
+      selfBindings.push(url.searchParams.get("auth_user_id")!);
+      return Response.json({ id: "synthetic-profile", auth_user_id: "synthetic-user", name: "Synthetic Founder", platform_role: protocol.state.role, org_role: "Founder", github_login: "", weekly_capacity: 6 });
+    }
     return original(request);
   });
   const page = await renderWorkspacePage("backlog");
@@ -149,6 +153,8 @@ test("Backlog SSR admits the shell without enumerating capped domain rows or cer
   expect(broadReads).toEqual([]);
   expect(page.props.initialCurrentProfile.platformRole).toBe("founder");
   expect(page.props.initialData.tasks).toEqual([]);
+  expect(selfBindings).toEqual(["eq.synthetic-user"]);
+  expect(page.props.initialData.profiles).toEqual([{ id: "synthetic-profile", name: "Synthetic Founder", platformRole: "founder", orgRole: "Founder", githubLogin: "", weeklyCapacity: 6 }]);
   expect(page.props.initialBacklogModel).toMatchObject({ items: [], coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial" } });
   expect(page.props.initialBacklogModel.selection).toBeUndefined();
   expect(page.props.initialHeaderData.notifications.state).toBe("idle");

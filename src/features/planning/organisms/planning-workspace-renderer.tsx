@@ -117,6 +117,7 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "backlog" && (
         initialBacklogModel ? <BacklogOverview
+          readMode="selected"
           planningState={planningState}
           canManageBacklog={canManageTaskMeta}
           onOpenTask={openTaskPanel}

@@ -1556,7 +1556,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         entry.writing = true;
         const outcome = await backlogOrdering.begin([shown, structuredClone(targetTask)], { complete: false, refreshAfterReceipt: false }).move(shown.id, targetTask.id, target.placement);
         if (outcome.phase === "saved" || outcome.phase === "unconfirmed") {
-          invalidatePlanningSource(false);
+          invalidatePlanningSource();
           void planning.refreshWorkspace("backlog");
         }
         return outcome;

@@ -23,7 +23,7 @@ import { planningWorkspaceHydration } from "@/features/planning/model/planning-w
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  const [backlog, header] = await Promise.all([permission.planning.loadBacklog(), permission.planning.loadHeader()]);
+  const [backlog, header] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader()]);
   return backlog.status === "ready" && header.ok
     ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
     : { status: "unavailable" as const };
