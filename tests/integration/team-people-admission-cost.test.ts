@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
@@ -44,3 +44,91 @@ test("Team people preserve the complete directory and CEO CAS basis with one fre
   // Initial session admission remains separate from the fresh guard at the privileged data page.
   expect(dispatches.slice(0, page).filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "ceo")).toHaveLength(2);
 }), 120_000);
+
+for (const boundary of ["aborted", "exception", "role", "unmapped", "revoked", "deadline", "environment", "page-denial"] as const) {
+  test(`Team people preserve fresh admission and original authority after ${boundary}`, () => withPlanningCredentialDatabase(async f => {
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", "/api/team-data?area=people") }, action: "team.read" });
+    expect(permission.ok).toBe(true);
+    if (!permission.ok) throw new Error("Expected original Team admission");
+    const claims = JSON.parse(Buffer.from(f.actors.founder.token.split(".")[1], "base64url").toString());
+    const originalDeadline = claims.exp * 1000;
+    const transport = globalThis.fetch;
+    const options: { signal?: AbortSignal } = {};
+    let pageAttempted = false;
+    let restoreClock: (() => void) | undefined;
+    try {
+      if (boundary === "aborted") options.signal = AbortSignal.abort();
+      if (boundary === "exception") Object.defineProperty(options, "signal", { get() { throw new Error("Synthetic local options failure"); } });
+      if (boundary === "role") await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
+      if (boundary === "unmapped") await f.db.query("update public.profiles set auth_user_id=null where id=$1", [f.actors.founder.profileId]);
+      if (boundary === "revoked") await f.db.query("delete from auth.sessions where id=$1", [f.actors.founder.sessionId]);
+      if (boundary === "deadline") {
+        const clock = vi.spyOn(Date, "now").mockReturnValue(originalDeadline + 1);
+        restoreClock = () => clock.mockRestore();
+      }
+      if (boundary === "environment") vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "replaced-synthetic-service-key");
+      if (boundary === "page-denial") vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        if (new URL(request.url).pathname === "/rest/v1/profiles") {
+          pageAttempted = true;
+          return Response.json({ code: "42501", message: "Synthetic directory denial" }, { status: 403 });
+        }
+        return transport(request);
+      });
+      const before = f.observed.length;
+      const result = await permission.resource.loadTeamPeople(options);
+      const forbidden = ["role", "unmapped", "revoked", "deadline", "page-denial"].includes(boundary);
+      expect(result).toEqual({ status: forbidden ? "forbidden" : "unavailable" });
+      expect(result).not.toHaveProperty("model");
+      const dispatches = f.observed.slice(before);
+      expect(dispatches.filter(row => row.path === "/rest/v1/profiles")).toEqual([]);
+      if (boundary === "aborted" || boundary === "exception") expect(dispatches.filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "founder")).toHaveLength(1);
+      expect(pageAttempted).toBe(boundary === "page-denial");
+    } finally {
+      restoreClock?.();
+      vi.stubGlobal("fetch", transport);
+      if (boundary === "environment") vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", f.local.SERVICE_ROLE_KEY);
+    }
+    if (boundary === "environment" || boundary === "aborted" || boundary === "exception") {
+      const recovered = await permission.resource.loadTeamPeople();
+      expect(recovered.status).toBe("ready");
+      if (recovered.status !== "ready") throw new Error("Expected recovery under original Team authority");
+      expect(recovered.readAuthority.deadline).toBeLessThanOrEqual(originalDeadline);
+    }
+  }), 120_000);
+}
+
+for (const boundary of ["source", "actor"] as const) {
+  test(`Team people reject ${boundary} changes between directory pages`, () => withPlanningCredentialDatabase(async f => {
+    const prefix = `${f.prefix}-directory-page-`;
+    const transport = globalThis.fetch;
+    let changed = false;
+    try {
+      await f.db.query("insert into public.profiles(id,name,platform_role) select $1||n::text,'Paged directory member '||n,'founder' from generate_series(1,1001) n", [prefix]);
+      vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const response = await transport(request);
+        if (!changed && new URL(request.url).pathname === "/rest/v1/profiles" && response.ok) {
+          changed = true;
+          if (boundary === "source") await f.db.query("update public.profiles set org_role='Changed between pages' where id=$1", [f.actors.other.profileId]);
+          else await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.ceo.profileId]);
+        }
+        return response;
+      });
+      const { GET } = await importTestModule("src/app/api/team-data/route.ts", { "server-only": {} });
+      const before = f.observed.length;
+      const response = await GET(f.request("ceo", "/api/team-data?area=people"));
+      expect(changed).toBe(true);
+      expect(response.status).toBe(boundary === "actor" ? 403 : 503);
+      expect(await response.json()).not.toHaveProperty("model");
+      const dispatches = f.observed.slice(before);
+      expect(dispatches.filter(row => row.path === "/rest/v1/profiles")).toHaveLength(boundary === "actor" ? 1 : 2);
+      expect(dispatches.filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "ceo")).toHaveLength(3);
+      expect(dispatches.filter(row => row.path === "/rest/v1/rpc/planning_board_publication_context" && row.actor === "ceo")).toHaveLength(boundary === "actor" ? 1 : 2);
+    } finally {
+      vi.stubGlobal("fetch", transport);
+      await f.db.query("delete from public.profiles where id like $1", [prefix + "%"]);
+    }
+  }), 120_000);
+}

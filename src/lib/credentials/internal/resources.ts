@@ -54,15 +54,38 @@ export async function authorizeResource(input: ResourceCredentialInput) {
     if (action !== "team.read" || !profile) return { status: "forbidden" as const };
     const readAuthority = bound.readAuthority;
     if (!readAuthority) return { status: "unavailable" as const };
-    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
-    const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+    let admissionChecked = false;
+    let admissionFailure: "forbidden" | "unavailable" | undefined;
+    const admitPeople = async () => {
+      admissionChecked = true;
+      admissionFailure = "unavailable";
+      try {
+        await bound.current();
+        bound.assertCurrent();
+        admissionFailure = undefined;
+        return null;
+      } catch (error) {
+        const status = error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
+        admissionFailure = status === 403 ? "forbidden" : "unavailable";
+        return { status, message: "Team konnte nicht autorisiert werden." };
+      }
+    };
     try {
-      await bound.current(); bound.assertCurrent();
-      const result = await loadSupabaseTeamPeople(service, { authorized: true, actorProfileId: profile.id,
-        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      // Every directory page keeps fresh admission; local failures must also be admitted.
+      const peopleService = planningService(false, admitPeople, bound.assertCurrent, signal);
+      const result = peopleService ? await loadSupabaseTeamPeople(peopleService, { authorized: true, actorProfileId: profile.id,
+        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
+      if (!admissionChecked) await admitPeople();
+      if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+      if (admissionFailure) return { status: admissionFailure };
       bound.assertCurrent();
       return result.status === "ready" ? { ...result, readAuthority } : result;
     } catch (error) {
+      if (!admissionChecked) await admitPeople();
+      if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+      if (admissionFailure) return { status: admissionFailure };
       return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
     }
   }
