@@ -8,11 +8,15 @@ afterEach(() => vi.unstubAllGlobals());
 test("actual supporting coverage preserves partial Team membership and accepts a proven complete empty scope", async () => {
   const browser = createBrowserPlanningState({ initialUserId: "user", initialWorkspace: "team", initialCurrentProfile: { id: ada.id, name: ada.name, platformRole: ada.platformRole, githubLogin: ada.githubLogin }, initialData: { ...emptyPlanningShellState, profiles: [ada, bea] }, initialHeaderData: emptyPlanningHeaderData });
   browser.runtime.session = { userId: "user", revision: "same", expiresAt: 4102444800, user: { id: "user" } };
+  const readAuthority = { userId: "user", deadline: Date.now() + 60_000 };
+  const currentProfile = { id: ada.id, name: ada.name, platformRole: ada.platformRole, githubLogin: ada.githubLogin };
   let complete = false;
-  browser.runtime.apiClient = { ...browser.runtime.apiClient, requestJson: async <T,>() => ({ response: new Response(null), body: { model: { revision: "read", people: complete ? [] : [{ ...ada, notificationsEnabled: false }], items: [], readCoverage: { people: complete ? "complete" : "partial", items: "partial" } } } as T }) };
-  await browser.owner.planning.refreshWorkspace("team");
-  expect(browser.owner.planning.team()).toMatchObject({ completeness: "partial", profiles: [{ id: ada.id, notificationsEnabled: true }, { id: bea.id }] });
-  complete = true;
-  await browser.owner.planning.refreshWorkspace("team");
-  expect(browser.owner.planning.team()).toMatchObject({ completeness: "complete", profiles: [] });
+  browser.runtime.apiClient = { ...browser.runtime.apiClient, requestJson: async <T,>() => ({ response: new Response(null), body: { readAuthority, currentProfile, model: { revision: "read", scopeRevision: "read", observedAt: new Date().toISOString(), people: complete ? [] : [{ ...ada, notificationsEnabled: false }], items: [], readCoverage: { people: complete ? "complete" : "partial", items: "partial" } } } as T }) };
+  try {
+    await browser.owner.planning.refreshWorkspace("team");
+    expect(browser.owner.planning.team()).toMatchObject({ completeness: "partial", profiles: [{ id: ada.id, notificationsEnabled: true }, { id: bea.id }] });
+    complete = true;
+    await browser.owner.planning.refreshWorkspace("team");
+    expect(browser.owner.planning.team()).toMatchObject({ completeness: "complete", profiles: [] });
+  } finally { browser.owner.internal.dispose(); }
 });
