@@ -52,7 +52,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
   }
   async function loadTeamPeople(options?: { signal?: AbortSignal }) {
     if (action !== "team.read" || !profile) return { status: "forbidden" as const };
-    const readAuthority = context.readAuthority;
+    const readAuthority = bound.readAuthority;
     if (!readAuthority) return { status: "unavailable" as const };
     const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
     const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;

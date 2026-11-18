@@ -204,7 +204,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
       }
       const teamRead = initialWorkspace === "team" && "readSession" in supportingWorkspace && "readAuthority" in supportingWorkspace
-        ? teamWorkspaceHydration(supportingWorkspace.model as import("@/features/team/model/team-read-model").TeamWorkspaceModel, supportingWorkspace.readSession, supportingWorkspace.readAuthority)
+        ? teamWorkspaceHydration(supportingWorkspace.model as import("@/features/team/model/team-read-model").TeamWorkspaceModel, supportingWorkspace.readSession as import("@/lib/credentials/session-types").ServerSessionView | undefined, supportingWorkspace.readAuthority)
         : undefined;
       if (initialWorkspace === "team" && !teamRead) return <WorkspaceDataUnavailablePage workspace="team" authUserEmail={auth.user?.email || ""} />;
       return (
