@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { normalizePlanningBoardQuery, planningBoardQueryKey } from "../model/planning-board-query";
+import { normalizePlanningGanttQuery, planningGanttQueryKey } from "../model/planning-gantt-query";
 import { usePlanningBootstrapState, type PlanningBootstrapStateOptions } from "@/features/planning/hooks/use-planning-bootstrap-state";
 import { usePlanningCommandRegistry } from "@/features/planning/hooks/use-planning-command-registry";
 import { usePlanningDerivedState } from "@/features/planning/hooks/use-planning-derived-state";
@@ -163,14 +164,50 @@ export function usePlanningAppController({
   });
 
   const planningBoard = planningState.board();
-  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : view === "table" ? "table" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
+  const activeGantt = workspace === "planning" && view === "gantt";
+  const ganttQuery = useMemo(() => normalizePlanningGanttQuery({ view: "gantt", filters }), [filters]);
+  const submitGanttRead = useRef<(() => Promise<boolean>) | null>(null);
+  const previousGanttSearch = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!activeGantt) return;
+    const release = planningState.activateGantt();
+    return () => {
+      previousGanttSearch.current = undefined;
+      release();
+    };
+  }, [activeGantt, planningState]);
+  useEffect(() => {
+    if (!activeGantt || !protectedDataLoaded || !ganttQuery) return;
+    const abort = new AbortController();
+    const search = ganttQuery.filters.query;
+    const previousSearch = previousGanttSearch.current;
+    previousGanttSearch.current = search;
+    const load = () => planningState.loadGantt(ganttQuery, { signal: abort.signal });
+    const timer = previousSearch !== undefined && previousSearch !== search ? setTimeout(() => { void load(); }, 250) : undefined;
+    if (timer === undefined) void load();
+    submitGanttRead.current = () => {
+      clearTimeout(timer);
+      return load();
+    };
+    return () => {
+      clearTimeout(timer);
+      abort.abort();
+      submitGanttRead.current = null;
+    };
+  }, [activeGantt, ganttQuery, planningState, protectedDataLoaded]);
+  const selectedGantt = activeGantt ? planningState.gantt() : undefined;
+  const ganttReady = Boolean(selectedGantt?.selection && ganttQuery
+    && selectedGantt.selection.queryKey === planningGanttQueryKey(ganttQuery));
+
+  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "table" ? "table" : view === "structure" ? "complete" : "board", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
   const planningQueryKey = planningBoardQueryKey(planningQuery);
   const usesScopedBoard = Boolean(planningBoard.queryKey) || planningBoard.requiresQueryRead === true;
   useEffect(() => {
-    if (workspace === "planning" && view !== "structure" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.scheduleBoardQuery(planningQuery);
+    if (workspace === "planning" && view !== "structure" && view !== "gantt" && usesScopedBoard && !planningBoard.requiresQueryRead) void planningState.scheduleBoardQuery(planningQuery);
   }, [planningState, planningQuery, workspace, usesScopedBoard, planningBoard.requiresQueryRead, view]);
-  const planningQueryReady = view === "structure" || !usesScopedBoard || (planningBoard.queryKey === planningQueryKey && JSON.stringify(planningBoard.query) === JSON.stringify(planningQuery));
+  const planningQueryReady = view === "structure" || view === "gantt" || !usesScopedBoard || (planningBoard.queryKey === planningQueryKey && JSON.stringify(planningBoard.query) === JSON.stringify(planningQuery));
   const displayedPlanningQuery = !planningQueryReady ? planningBoard.query : undefined;
+  const loadCurrentGantt = () => submitGanttRead.current?.() ?? Promise.resolve(false);
 
   const derivedState = usePlanningDerivedState({
     currentProfile,
@@ -220,8 +257,10 @@ export function usePlanningAppController({
     planningState,
     planningQueryReady,
     displayedPlanningQuery,
-    submitPlanningSearch: () => planningState.scheduleBoardQuery(planningQuery, { immediate: true }),
-    retryPlanningQuery: () => planningState.ensureBoardQuery(planningQuery),
+    submitPlanningSearch: () => activeGantt ? loadCurrentGantt() : planningState.scheduleBoardQuery(planningQuery, { immediate: true }),
+    retryPlanningQuery: () => activeGantt ? loadCurrentGantt() : planningState.ensureBoardQuery(planningQuery),
+    selectedGantt,
+    ganttReady,
     planningBoard,
     beginTaskEdit: planningState.beginTaskEdit,
     authAvailable,

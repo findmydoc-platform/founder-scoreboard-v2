@@ -99,6 +99,9 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
   moveBacklogRelative(source: Task, action: import("@/features/backlog/model/backlog-ordering").BacklogMoveAction, options?: { signal?: AbortSignal }): Promise<import("@/features/backlog/model/backlog-ordering").BacklogOrderResult | null>;
+  activateGantt(): () => void;
+  loadGantt(query: import("./planning-gantt-query").PlanningGanttQuery, options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  gantt(): { readStatus: PlanningReadStatus; selection?: import("./planning-gantt-result").PlanningGanttResult; tasks: readonly Task[]; items: readonly Task[]; sprints: readonly import("@/lib/types").Sprint[]; relationships: readonly import("@/lib/types").TaskRelation[] };
   activateStructureControls(): () => void;
   loadStructureControls(options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
   structureControls(): { readStatus: PlanningReadStatus; controls?: import("./planning-structure-controls").PlanningStructureControls };

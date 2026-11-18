@@ -12,7 +12,7 @@ function parseIsoDate(value: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: Task[]; items: Task[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
+export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: readonly Task[]; items: readonly Task[]; sprints: readonly Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
   const firstTaskStart = tasks
     .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || ""))
     .filter((date): date is Date => Boolean(date))

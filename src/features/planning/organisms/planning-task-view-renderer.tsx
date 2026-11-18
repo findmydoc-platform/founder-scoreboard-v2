@@ -163,16 +163,17 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     return strategicPlanningStatuses.filter((status) => status !== "Erledigt");
   };
 
-  if (!filtersAvailable && view !== "structure") return null;
-  if (view !== "structure" && controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
-  if (view !== "structure" && controller.planningBoard?.requiresQueryRead && deniedChildListIds.length) return <UiNotice role="alert" tone="danger">
+  const usesBoardRead = view !== "structure" && view !== "gantt";
+  if (!filtersAvailable && usesBoardRead) return null;
+  if (usesBoardRead && controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
+  if (usesBoardRead && controller.planningBoard?.requiresQueryRead && deniedChildListIds.length) return <UiNotice role="alert" tone="danger">
     Kinder dürfen nicht geladen werden.
     <UiButton type="button" aria-disabled={deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")} onClick={() => {
       if (deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")) return;
       void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id, { area: "children" }))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
     }}>Kinder erneut laden</UiButton>
   </UiNotice>;
-  if (view !== "structure" && controller.planningQueryReady === false && !controller.planningBoard.query) return <UiNotice role="status" tone="info">
+  if (usesBoardRead && controller.planningQueryReady === false && !controller.planningBoard.query) return <UiNotice role="status" tone="info">
     {controller.planningBoard.readStatus === "unavailable" ? "Diese Ansicht konnte nicht geladen werden." : "Planung wird geladen …"}
     {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}
   </UiNotice>;
@@ -205,18 +206,18 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           className={summariesStale || tableRiskStatus !== "unavailable" ? "invisible min-h-11" : "min-h-11"}
           onClick={() => { void controller.planningState.refreshTableRisks(); }}>Erneut laden</UiButton>
       </div> : null}
-      {controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading" ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
+      {usesBoardRead && (controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading") ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
         <RefreshCw size={14} aria-hidden="true" className={controller.planningBoard.readStatus === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} />
       </span> : null}
       {controller.planningQueryReady === false ? <UiNotice role="status" aria-label="Vorherige Suchergebnisse" tone="info">
         {`Vorherige Suche: ${controller.planningBoard.query?.filters.query || "ohne Suchtext"}. ${controller.planningBoard.readStatus === "unavailable" ? "Neue Ergebnisse konnten nicht geladen werden." : "Neue Ergebnisse werden geladen …"}`}
         {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}
       </UiNotice> : null}
-      {deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
+      {usesBoardRead && deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
         Kinder dürfen nicht geladen werden.
         <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId, { area: "children" }); }}>Kinder erneut laden</UiButton>
       </UiNotice> : null}
-      {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
+      {usesBoardRead && controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
         Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
         <UiButton type="button" onClick={() => void controller.planningState.refreshWorkspace("planning")}>Planung erneut laden</UiButton>
       </UiNotice> : null}
@@ -320,7 +321,16 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           )}
 
           {view === "gantt" && (
-            <GanttView tasks={planningBoardTasks} items={data.tasks} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
+            controller.selectedGantt?.readStatus === "forbidden" ? (
+              <UiNotice role="alert" tone="danger">Gantt darf nicht geladen werden.</UiNotice>
+            ) : controller.selectedGantt && controller.ganttReady ? (
+              <GanttView tasks={controller.selectedGantt.tasks} items={controller.selectedGantt.items} sprints={controller.selectedGantt.sprints} relations={[...controller.selectedGantt.relationships]} onOpenTask={openTaskPanel} />
+            ) : controller.selectedGantt?.readStatus === "unavailable" || controller.selectedGantt?.readStatus === "stale" ? (
+              <UiNotice role="alert" tone="info">
+                Diese Ansicht konnte nicht geladen werden.
+                <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton>
+              </UiNotice>
+            ) : <TaskViewLoading label="Gantt" />
           )}
         </PlanningViewLoadBoundary>
       )}
