@@ -5,7 +5,7 @@ import type { TeamMetricsModel } from "@/features/team/model/team-read-model";
 import type { Profile } from "@/lib/types";
 
 const actor = { id: "ceo", name: "Ada", platformRole: "ceo" as const, githubLogin: "ada" };
-const member: Profile = { ...actor, id: "founder", name: "Bea", platformRole: "founder", weeklyCapacity: 20 };
+const member: Profile = { ...actor, id: "founder", name: "Bea", platformRole: "founder", orgRole: "Founder", weeklyCapacity: 20 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; });
