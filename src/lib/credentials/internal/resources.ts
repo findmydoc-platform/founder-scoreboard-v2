@@ -113,7 +113,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
         const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
         // The RPC checks fresh authority; local rejection still needs admission before disclosure.
-        const metricsService = planningService(false, admitMetrics, bound.assertCurrent);
+        const metricsService = planningService(false, admitMetrics, bound.assertCurrent, signal);
         const result = metricsService ? await loadPlanningTeamMetrics(metricsService, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
           authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
         if (!admissionChecked) await admitMetrics();
