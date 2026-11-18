@@ -1,3 +1,6 @@
+import { Children, isValidElement } from "react";
+import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
+import type { PlanningServerHeaderRead, PlanningServerHeaderResult, PlanningServerHeaderSlot } from "@/features/planning/model/planning-server-header-read";
 import { afterEach, expect, test, vi } from "vitest";
 import { administratorProtocol } from "../../helpers/administrator-protocol.mjs";
 
@@ -21,7 +24,7 @@ afterEach(() => {
 });
 
 for (const boundary of ["current", "source", "actor", "deadline"] as const) {
-  test(`Team SSR publishes complete People and Header through one joint final fence after ${boundary}`, async () => {
+  test(`Team SSR preserves its People publication fence and independent Header delivery after ${boundary}`, async () => {
     const originalNow = Date.now();
     const expiry = Math.floor(originalNow / 1000) + 3600;
     const protocol = administratorProtocol({ role: "ceo", origin: "https://team-ssr-cost.example.test", claims: { exp: expiry } });
@@ -50,11 +53,11 @@ for (const boundary of ["current", "source", "actor", "deadline"] as const) {
       }
       if (url.pathname === "/rest/v1/profiles") {
         enterDirectory();
+        await headerGate;
         return Response.json(people, { headers: { "content-range": "0-1/2" } });
       }
       if (url.pathname === "/rest/v1/fmd_tools") {
         enterHeader();
-        await headerGate;
         return Response.json([{ id: "fixture-link", name: "Fixture handbook", category: "General", url: "https://example.test/handbook", preview_image_url: null }]);
       }
       if (url.pathname === "/rest/v1/founder_events") return Response.json([{ id: 1, title: "Fixture event", category: "meeting", starts_at: "2026-11-19T10:00:00Z", ends_at: "2026-11-19T11:00:00Z", location: "", status: "planned" }]);
@@ -65,7 +68,7 @@ for (const boundary of ["current", "source", "actor", "deadline"] as const) {
     const rendering = renderWorkspacePage("team").then(page => { settled = true; return page; });
     let restoreClock: (() => void) | undefined;
     try {
-      await Promise.race([Promise.all([headerEntered, directoryEntered]), rendering.then(() => { throw new Error("SSR returned before the held Header and directory reads"); })]);
+      await Promise.race([Promise.all([headerEntered, directoryEntered]), rendering.then(() => { throw new Error("SSR returned before the held directory read"); })]);
       expect(settled).toBe(false);
       if (boundary === "source") source = "43";
       if (boundary === "actor") protocol.state.role = "viewer";
@@ -90,9 +93,13 @@ for (const boundary of ["current", "source", "actor", "deadline"] as const) {
       });
       expect(page.props.initialData.tasks).toEqual([]);
       expect(page.props.initialWorkspaceRead).toMatchObject({ workspace: "team", scopeRevision: "42", coverage: { profiles: "complete", tasks: "partial" }, readAuthority: { deadline: expiry * 1000 } });
-      expect(page.props.initialHeaderData.quickLinks).toMatchObject({ state: "ready", data: [expect.objectContaining({ id: "fixture-link", name: "Fixture handbook" })] });
-      expect(page.props.initialHeaderData.calendarEvents).toMatchObject({ state: "ready", data: [expect.objectContaining({ title: "Fixture event" })] });
-      expect(page.props.initialHeaderData.notifications.state).toBe("ready");
+      const delivery = Children.toArray(page.props.children).find(child => isValidElement(child) && child.type === PlanningServerHeaderSlots);
+      if (!isValidElement<{ read: PlanningServerHeaderRead; results: Record<PlanningServerHeaderSlot, Promise<PlanningServerHeaderResult>> }>(delivery)) throw new Error("Reserved Header delivery missing");
+      expect(delivery.props.read).toMatchObject({ userId: page.props.initialWorkspaceRead.session.userId, sessionRevision: page.props.initialWorkspaceRead.session.revision, deadline: expiry * 1000 });
+      const [links, calendar] = await Promise.all([delivery.props.results.quickLinks, delivery.props.results.calendarEvents]);
+      expect(links.headerData.quickLinks).toMatchObject({ state: "ready", data: [expect.objectContaining({ id: "fixture-link", name: "Fixture handbook" })] });
+      expect(calendar.headerData.calendarEvents).toMatchObject({ state: "ready", data: [expect.objectContaining({ title: "Fixture event" })] });
+      expect(page.props.initialHeaderData.notifications.state).toBe("idle");
       // This RPC is used only by the People source/publication fences; Header slots perform separate data reads.
       expect(publications).toEqual([{ source: "42", role: "ceo" }, { source: "42", role: "ceo" }]);
     } finally {
