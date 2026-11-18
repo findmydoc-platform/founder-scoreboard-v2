@@ -12,6 +12,7 @@ import { compactPlanningCard, planningCardOmittedFields } from "./planning-card-
 
 type Selection = {
   status: string; source_revision: string; evaluated_at: string; temporal_key: string; valid_until: string | null;
+  toolbar_counts: { filtered: number; unfiltered: number };
   total: number; card_ids: string[]; context_ids: string[]; rows: DbTask[];
   profiles: DbProfile[]; sprints: DbSprint[]; relationships: DbTaskRelation[];
   fallback_sprint_id: string | null; project: Parameters<typeof mapPlanningProject>[0];
@@ -35,6 +36,8 @@ export async function loadPlanningGantt(supabase: SupabaseClient, context: Plann
       || typeof selected.evaluated_at !== "string" || !Number.isFinite(Date.parse(selected.evaluated_at))
       || typeof selected.temporal_key !== "string" || !selected.temporal_key
       || selected.valid_until !== null && (typeof selected.valid_until !== "string" || !Number.isFinite(Date.parse(selected.valid_until)))
+      || !selected.toolbar_counts || !Number.isSafeInteger(selected.toolbar_counts.filtered) || !Number.isSafeInteger(selected.toolbar_counts.unfiltered)
+      || selected.toolbar_counts.filtered < 0 || selected.toolbar_counts.filtered > selected.toolbar_counts.unfiltered || selected.total > selected.toolbar_counts.filtered
       || !ids(selected.card_ids) || !ids(selected.context_ids) || !Number.isSafeInteger(selected.total) || selected.total !== selected.card_ids.length
       || !Array.isArray(selected.rows) || !Array.isArray(selected.profiles) || !Array.isArray(selected.sprints) || !Array.isArray(selected.relationships)
       || !selected.project || selected.project.id !== "findmydoc-founder-execution") return { status: "unavailable" };
@@ -72,7 +75,7 @@ export async function loadPlanningGantt(supabase: SupabaseClient, context: Plann
       coverage: { items: "partial", people: "partial", sprints: "partial", relationships: "partial", preferences: "partial", strategies: "partial", raci: "partial", links: "partial", blockers: "partial" },
       taskOmittedFields: omittedFields,
       gantt: { query, queryKey: planningGanttQueryKey(query), itemIds: selected.card_ids,
-        contextIds: selected.context_ids.filter(id => !selectedIds.has(id)), total: selected.total,
+        contextIds: selected.context_ids.filter(id => !selectedIds.has(id)), total: selected.total, toolbarCounts: selected.toolbar_counts,
         coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
         sourceRevision: selected.source_revision, observedAt: selected.evaluated_at, temporalKey: selected.temporal_key, validUntil: selected.valid_until },
     } };

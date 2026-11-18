@@ -2393,6 +2393,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
         if (!selection || selection.queryKey !== key || planningGanttQueryKey(selection.query) !== key
           || !selection.sourceRevision || !selection.temporalKey || read.scopeRevision !== selection.sourceRevision || !Number.isFinite(Date.parse(selection.observedAt)) || !(temporal > now)
           || ["items", "hierarchy", "schedule", "relationships"].some(field => selection.coverage[field as keyof typeof selection.coverage] !== "complete")
+          || !selection.toolbarCounts || !Number.isSafeInteger(selection.toolbarCounts.filtered) || !Number.isSafeInteger(selection.toolbarCounts.unfiltered)
+          || selection.toolbarCounts.filtered < 0 || selection.toolbarCounts.filtered > selection.toolbarCounts.unfiltered || selection.total > selection.toolbarCounts.filtered
           || selection.total !== selection.itemIds.length || new Set(ids).size !== ids.length
           || read.readAuthority?.userId !== userId || !Number.isFinite(read.readAuthority.deadline) || read.readAuthority.deadline <= now
           || read.readActor?.profileId !== actor.id || read.readActor.platformRole !== actor.platformRole

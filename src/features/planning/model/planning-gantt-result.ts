@@ -6,6 +6,7 @@ export type PlanningGanttResult = Readonly<{
   itemIds: readonly string[];
   contextIds: readonly string[];
   total: number;
+  toolbarCounts: Readonly<{ filtered: number; unfiltered: number }>;
   coverage: Readonly<Record<"items" | "hierarchy" | "schedule" | "relationships", "complete">>;
   sourceRevision: string;
   observedAt: string;
