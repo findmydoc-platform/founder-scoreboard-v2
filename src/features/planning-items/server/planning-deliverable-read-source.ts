@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn } from "@/features/planning/model/planning-board-query";
-import { loadPlanningWorkspaceModel, mapPlanningItemRows, mapPlanningProject } from "./planning-workspace-read-source";
+import { loadPlanningWorkspaceModel, mapPlanningItemRows, mapPlanningProject, planningProjectId, planningProfileSelect } from "./planning-workspace-read-source";
 import { compactPlanningCard, planningCardOmittedFields } from "./planning-card-summary";
 import { withWorkspaceProfileAvatars } from "./workspace-profile-avatars";
 import { mapProfile, mapProfileUiPreference } from "@/lib/planning-profile-mappers";
@@ -186,6 +186,26 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
     if (preferenceResult.error) return { status: "unavailable" };
     const preference = preferenceResult.data ? mapProfileUiPreference(preferenceResult.data as DbProfileUiPreference) : undefined;
     const filters = preference && { ...preference.planningFilters, ...(preference.defaultWorkspace === "mine" ? { assignee: "Alle", quick: [...preference.planningFilters.quick, "mine"] } : {}) };
+    if (!input.view && preference?.defaultTaskView === "gantt") {
+      if (preference.profileId !== context.actorProfileId) return { status: "unavailable" };
+      // This is only the admitted mount context; selected Gantt data starts in its visible client owner.
+      const projectRead = supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<Parameters<typeof mapPlanningProject>[0]>();
+      const selfRead = supabase.from("profiles").select(planningProfileSelect).eq("id", context.actorProfileId || "").single<DbProfile>();
+      const [project, self] = await Promise.all([
+        context.signal ? projectRead.abortSignal(context.signal) : projectRead,
+        context.signal ? selfRead.abortSignal(context.signal) : selfRead,
+      ]);
+      if (project.error || !project.data || project.data.id !== planningProjectId || typeof project.data.name !== "string"
+        || self.error || !self.data || self.data.id !== context.actorProfileId || typeof self.data.name !== "string") return { status: "unavailable" };
+      const publication = await readSourceRevision(supabase, context);
+      if (publication.error || publication.data !== preferenceRevision || context.signal?.aborted) return { status: "unavailable" };
+      if (context.authorityDeadline !== undefined && context.authorityDeadline <= Date.now()) return { status: "forbidden" };
+      return { status: "ready", authorityDeadline: context.authorityDeadline, model: {
+        revision: preferenceRevision, scopeRevision: preferenceRevision, project: mapPlanningProject(project.data),
+        items: [], people: [mapProfile(self.data)], sprints: [], relationships: [], preferences: [{ ...preference, planningFilters: normalizePlanningBoardQuery({ ...input, filters: input.filters || filters }).filters }],
+        coverage: { items: "partial", people: "partial", sprints: "partial", relationships: "partial", preferences: "partial", strategies: "partial", raci: "partial", links: "partial", blockers: "partial" },
+      } };
+    }
     query = normalizePlanningBoardQuery({ ...input, view: input.view || (preference?.defaultTaskView === "table" ? "table" : preference?.defaultTaskView && preference.defaultTaskView !== "board" ? "complete" : "board"), filters: input.filters || filters });
     if (query.view === "complete") {
       const complete = await loadPlanningWorkspaceModel(supabase, { ...context, query });

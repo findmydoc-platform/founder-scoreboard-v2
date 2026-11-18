@@ -45,6 +45,12 @@ test("saved Gantt entry preserves its own preference without loading the complet
       preferenceReads.push(url.searchParams.get("profile_id") || "");
       return Response.json([preference], { headers: { "content-range": "0-0/1" } });
     }
+    if (url.pathname === "/rest/v1/projects" && url.searchParams.get("id") === "eq.findmydoc-founder-execution") {
+      return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: null, review_objection_window_hours: 48 });
+    }
+    if (url.pathname === "/rest/v1/profiles" && url.searchParams.get("id") === "eq.synthetic-profile") {
+      return Response.json({ id: "synthetic-profile", name: "Synthetic Founder", platform_role: "founder", org_role: "Founder", github_login: "", deputy_for: null, deputy_active_from: null, deputy_active_until: null, focus: "", weekly_capacity: 40, profile_color: null });
+    }
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       completeReads.push("planning_workspace_snapshot");
       return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: null, scope_revision: "42", active_task_count: 0, latest_updated_at: null });
