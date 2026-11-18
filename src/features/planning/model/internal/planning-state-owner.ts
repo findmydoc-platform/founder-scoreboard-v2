@@ -164,7 +164,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let planningSourceEpoch = 0;
   let ganttStatus: PlanningReadStatus = "not-loaded", ganttSequence = 0, ganttMounts = 0;
   let ganttQuery: PlanningGanttQuery | undefined;
-  let ganttReceipt: { selection: PlanningGanttResult; deadline: number; generation: number; session?: string; epoch: number; actorId: string; role: string; sprintIds: string[]; relationIds: string[] } | undefined;
+  let ganttReceipt: { selection: PlanningGanttResult; deadline: number; generation: number; session?: string; epoch: number; actorId: string; role: string; sprintIds: string[]; relationIds: number[] } | undefined;
   let ganttPending: { key: string; controller: AbortController; consumers: Set<symbol>; result: Promise<boolean> } | undefined;
   const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
