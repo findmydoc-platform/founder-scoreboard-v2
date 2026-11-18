@@ -4,7 +4,7 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import type { TeamMetricsModel } from "@/features/team/model/team-read-model";
 import type { Profile } from "@/lib/types";
 
-const actor = { id: "ceo", name: "Ada", platformRole: "ceo" as const, githubLogin: "ada" };
+const actor = { id: "ceo", name: "Ada", platformRole: "ceo" as const, githubLogin: "ada", orgRole: "CEO", weeklyCapacity: 40 };
 const member: Profile = { ...actor, id: "founder", name: "Bea", platformRole: "founder", orgRole: "Founder", weeklyCapacity: 20 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -14,13 +14,17 @@ function deferred<T>() {
 function fixture(now: number, metrics: () => Promise<{ model: TeamMetricsModel; readAuthority: { userId: string; deadline: number }; currentProfile: typeof actor }>, options?: { deadline?: number; saveTeamProfile?: () => Promise<Partial<Profile> & { id: string }>; source?: () => string }) {
   const deadline = options?.deadline ?? now + 120_000;
   const session = { userId: "user", user: { id: "user" }, revision: "revision", expiresAt: (now + 3_600_000) / 1000 };
-  const people = [actor as Profile, member];
+  let people: Profile[] = [actor, member];
   const state = createPlanningState({ userId: session.userId, initialSession: session, initialCurrentProfile: actor, initialWorkspace: "team", initialData: { ...emptyPlanningShellState, profiles: people }, adapter: {
     now: () => Date.now(), saveTask: async task => ({ task }),
     readWorkspace: async () => ({ data: { ...emptyPlanningShellState, profiles: people }, coverage: { profiles: "complete", tasks: "partial" }, scopeRevision: "source-1", currentProfile: actor, readAuthority: { userId: session.userId, deadline } }),
     readTeamMetrics: metrics,
     readPlanningSourceVersion: async () => options?.source?.() || "source-1",
-    saveTeamProfile: options?.saveTeamProfile,
+    saveTeamProfile: options?.saveTeamProfile ? async () => {
+      const saved = await options.saveTeamProfile!();
+      people = people.map(profile => profile.id === saved.id ? { ...profile, ...saved } : profile);
+      return saved;
+    } : undefined,
   } });
   return { ...state, deadline, session };
 }
@@ -36,7 +40,7 @@ test("Team people stay usable when metrics fail and a later retry succeeds", asy
     expect(state.planning.team().profiles.map(profile => profile.id)).toEqual(["ceo", "founder"]);
     expect(await state.planning.loadTeamMetrics()).toBe(false);
     expect(state.planning.teamMetrics()).toMatchObject({ readStatus: "unavailable", metricsByProfileId: {} });
-    expect(state.planning.beginTeamProfileEdit(member).view().current?.id).toBe("founder");
+    expect(state.planning.beginTeamProfileEdit(member).view().phase).toBe("editing");
     expect(await state.planning.loadTeamMetrics()).toBe(true);
     expect(state.planning.teamMetrics()).toMatchObject({ readStatus: "current", metricsByProfileId: { founder: { openTasks: 3, highPriorityTasks: 1, loadHours: 9 } } });
   } finally { state.internal.dispose(); }
@@ -87,5 +91,21 @@ test("a forbidden metrics response immediately hides Team people and metrics", a
     expect(await state.planning.loadTeamMetrics()).toBe(false);
     expect(state.planning.team()).toMatchObject({ readStatus: "forbidden", profiles: [] });
     expect(state.planning.teamMetrics()).toMatchObject({ readStatus: "forbidden", metricsByProfileId: {} });
+  } finally { state.internal.dispose(); }
+});
+
+test("a Team read started during initial session binding publishes only for its bound session", async () => {
+  const now = Date.now(), deadline = now + 60_000;
+  const session = { userId: "user", user: { id: "user" }, revision: "revision", expiresAt: (now + 3_600_000) / 1000 };
+  const held = deferred<{ data: typeof emptyPlanningShellState; coverage: { profiles: "complete"; tasks: "partial" }; scopeRevision: string; currentProfile: typeof actor; readAuthority: { userId: string; deadline: number }; sessionRevision: string }>();
+  const state = createPlanningState({ userId: session.userId, initialCurrentProfile: actor, initialWorkspace: "team", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: () => held.promise,
+  } });
+  try {
+    const read = state.planning.refreshWorkspace("team");
+    state.internal.bindSession(session);
+    held.resolve({ data: { ...emptyPlanningShellState, profiles: [actor as Profile, member] }, coverage: { profiles: "complete", tasks: "partial" }, scopeRevision: "source-1", currentProfile: actor, readAuthority: { userId: session.userId, deadline }, sessionRevision: session.revision });
+    expect(await read).toBe(true);
+    expect(state.planning.team()).toMatchObject({ readStatus: "current", completeness: "complete", profiles: [{ id: "ceo" }, { id: "founder" }] });
   } finally { state.internal.dispose(); }
 });
