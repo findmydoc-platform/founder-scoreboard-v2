@@ -585,10 +585,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           return { data: backlogModelToPlanningShellState(body.model), coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
         }
         if (workspace === "team") {
+          const session = await currentOperationSession();
+          owner.internal.bindSession(session);
           const { response, body } = await ownedApiClient.requestJson<{ model?: import("@/features/team/model/team-read-model").TeamWorkspaceModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; currentProfile?: import("@/lib/types").AuthenticatedProfile | null; error?: string; code?: string }>("/api/team-data?area=people", { signal: options?.signal });
           if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Team konnte nicht geladen werden."), { status: response.status, code: body?.code });
           requireReadAuthority(body.readAuthority);
-          return { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState("team", body.model)), coverage: supportingReadCoverage("team", body.model), scopeRevision: body.model.scopeRevision, readAuthority: body.readAuthority, profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], currentProfile: body.currentProfile };
+          return { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState("team", body.model)), coverage: supportingReadCoverage("team", body.model), scopeRevision: body.model.scopeRevision, readAuthority: body.readAuthority, sessionRevision: session.revision, profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], currentProfile: body.currentProfile };
         }
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(ownedApiClient, workspace);

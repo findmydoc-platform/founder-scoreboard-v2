@@ -109,3 +109,19 @@ test("a Team read started during initial session binding publishes only for its 
     expect(state.planning.team()).toMatchObject({ readStatus: "current", completeness: "complete", profiles: [{ id: "ceo" }, { id: "founder" }] });
   } finally { state.internal.dispose(); }
 });
+
+test("a Team response from a different initial session revision is not published", async () => {
+  const now = Date.now();
+  const session = { userId: "user", user: { id: "user" }, revision: "current-revision", expiresAt: (now + 3_600_000) / 1000 };
+  const held = deferred<{ data: typeof emptyPlanningShellState; coverage: { profiles: "complete"; tasks: "partial" }; scopeRevision: string; currentProfile: typeof actor; readAuthority: { userId: string; deadline: number }; sessionRevision: string }>();
+  const state = createPlanningState({ userId: session.userId, initialCurrentProfile: actor, initialWorkspace: "team", initialData: emptyPlanningShellState, adapter: {
+    saveTask: async task => ({ task }), readWorkspace: () => held.promise,
+  } });
+  try {
+    const read = state.planning.refreshWorkspace("team");
+    state.internal.bindSession(session);
+    held.resolve({ data: { ...emptyPlanningShellState, profiles: [actor as Profile, member] }, coverage: { profiles: "complete", tasks: "partial" }, scopeRevision: "source-1", currentProfile: actor, readAuthority: { userId: session.userId, deadline: now + 60_000 }, sessionRevision: "old-revision" });
+    expect(await read).toBe(false);
+    expect(state.planning.team().profiles).toEqual([]);
+  } finally { state.internal.dispose(); }
+});

@@ -63,7 +63,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 type PlanningTableResult = import("../planning-table-result").PlanningTableResult;
 
-export type PlanningWorkspaceRead = { gantt?: PlanningGanttResult; backlogRankTarget?: BacklogRankTarget; backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { sessionRevision?: string; gantt?: PlanningGanttResult; backlogRankTarget?: BacklogRankTarget; backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
@@ -2128,7 +2128,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     });
   }
   function readIsCurrent(workspace: AppWorkspace, token: ReturnType<typeof beginWorkspaceRead>) {
-    if (!isActive() || token.generation !== sessionGeneration || token.sessionRevision !== sessionRevision || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
+    const initialTeamBinding = workspace === "team" && token.sessionRevision === undefined && Boolean(sessionRevision);
+    if (!isActive() || token.generation !== sessionGeneration || (token.sessionRevision !== sessionRevision && !initialTeamBinding) || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
     if (token.ganttKey) return ganttSequence === token.started && Boolean(ganttQuery && planningGanttQueryKey(ganttQuery) === token.ganttKey);
     if (token.backlogArea) return token.sourceEpoch === planningSourceEpoch && backlogSupportSequences.get(token.backlogArea) === token.started;
     if (token.tablePage) return acceptedRead.get(workspace) === token.tablePage.baseRead && tableRequest === token.started
@@ -2569,6 +2570,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
     const { started, notificationRead, eventRead, toolRead } = token;
     if (!readIsCurrent(workspace, token)) return false;
+    if (workspace === "team" && token.sessionRevision !== sessionRevision && (!result.sessionRevision || result.sessionRevision !== sessionRevision)) {
+      workspaceStatuses.set(workspace, "unavailable"); publish(); return false;
+    }
     if (workspace === "team" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()) || token.sourceEpoch !== planningSourceEpoch || !result.scopeRevision || !result.currentProfile || Boolean(actorIdentity && (result.currentProfile.id !== actorIdentity.id || result.currentProfile.platformRole !== actorIdentity.platformRole)))) {
       workspaceStatuses.set(workspace, "unavailable"); publish(); return false;
     }
