@@ -1334,6 +1334,13 @@
       "target": "planning_gantt_selection",
       "fingerprint": "0f815d4a53d8d1aa7a0aee3bb459d326a534a091a4febc22f0bed11383e1b52a",
       "contract": "GANTT-SELECTED"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-team-metrics-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_team_metrics",
+      "fingerprint": "e8fde3c544961b75369baaa2efc4a648c226ead82261bba9f96ae8cab889b13f",
+      "contract": "TEAM-METRICS"
     }
   ]
 }
