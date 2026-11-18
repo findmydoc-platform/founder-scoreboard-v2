@@ -50,22 +50,41 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       ]);
       return result.status === "ready" ? { ...result, headerData } : result.status === "staleContinuation" ? { status: "unavailable" as const } : result;
   }
+  async function loadTeamPeople(options?: { signal?: AbortSignal }) {
+    if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+    const readAuthority = context.readAuthority;
+    if (!readAuthority) return { status: "unavailable" as const };
+    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+    const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+    try {
+      await bound.current(); bound.assertCurrent();
+      const result = await loadSupabaseTeamPeople(service, { authorized: true, actorProfileId: profile.id,
+        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+      bound.assertCurrent();
+      return result.status === "ready" ? { ...result, readAuthority } : result;
+    } catch (error) {
+      return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+    }
+  }
   let observedNotification: { id: number; recipient_profile_id: string | null; status: string; seen_at: string | null; dismissed_at: string | null } | null = null;
   let observedTool: DbFmdTool | null = null;
   let observedEvent: DbFounderEvent | null = null;
   return { ok: true as const, profile, resource: {
-    async loadTeamPeople(options?: { signal?: AbortSignal }) {
+    loadTeamPeople,
+    async loadTeamPeoplePage(options?: { signal?: AbortSignal }) {
       if (action !== "team.read" || !profile) return { status: "forbidden" as const };
-      const readAuthority = context.readAuthority;
-      if (!readAuthority) return { status: "unavailable" as const };
-      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
-      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
       try {
-        await bound.current(); bound.assertCurrent();
-        const result = await loadSupabaseTeamPeople(service, { authorized: true, actorProfileId: profile.id,
-          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+        const [people, headerData] = await Promise.all([loadTeamPeople(options),
+          loadPlanningHeaderData(service, { currentProfileId: profile.id, platformRole: profile.platformRole, sharedSlotLoaders: planningHeaderSlotLoaders(service) })]);
+        if (people.status !== "ready") return people;
+        if (people.readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        const publication = await planningPublicationSource(userData, profile, bound.assertCurrent)?.read(options?.signal);
+        if (!publication) return { status: "unavailable" as const };
+        if (publication.status !== "ready") return publication;
+        if (publication.revision !== people.model.scopeRevision || options?.signal?.aborted) return { status: "unavailable" as const };
+        if (people.readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
         bound.assertCurrent();
-        return result.status === "ready" ? { ...result, readAuthority } : result;
+        return { ...people, headerData, readSession: context.readSession };
       } catch (error) {
         return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
       }

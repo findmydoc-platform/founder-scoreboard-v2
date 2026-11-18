@@ -144,6 +144,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   if (initialTaskDetailRead && (initialTaskDetailRead.itemId !== initialTaskDetailRead.model.item.id || !validDetailReceipt(initialTaskDetailRead.model, initialTaskDetailRead.readAuthority)
     || initialTaskDetailRead.session.userId !== userId || initialSession?.revision !== initialTaskDetailRead.session.revision)) initialData = emptyPlanningShellState;
+  if (initialWorkspaceRead?.workspace === "team" && (initialWorkspace !== "team" || initialWorkspaceRead.session.userId !== userId
+    || initialSession?.revision !== initialWorkspaceRead.session.revision || !initialWorkspaceRead.readAuthority
+    || initialWorkspaceRead.readAuthority.userId !== userId || initialWorkspaceRead.readAuthority.deadline <= (adapter.now?.() ?? Date.now())
+    || initialWorkspaceRead.session.expiresAt * 1000 <= (adapter.now?.() ?? Date.now()) || !initialWorkspaceRead.scopeRevision
+    || initialWorkspaceRead.revision !== initialWorkspaceRead.scopeRevision || initialWorkspaceRead.coverage.profiles !== "complete"
+    || !initialCurrentProfile || !initialData.profiles.some(profile => profile.id === initialCurrentProfile.id && profile.platformRole === initialCurrentProfile.platformRole))) {
+    initialData = emptyPlanningShellState;
+    initialWorkspaceRead = undefined;
+  }
   let actorIdentity = initialCurrentProfile || null;
   let confirmed = initialData;
   let visible = initialData;
@@ -164,7 +173,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const taskReadAt = new Map<string, number>();
   let planningSourceEpoch = 0;
   type TeamBasis = { source: string; deadline: number; generation: number; session: string; epoch: number; actorId: string; role: string };
-  let teamBasis: TeamBasis | undefined;
+  let teamBasis: TeamBasis | undefined = initialWorkspaceRead?.workspace === "team" && initialSession && initialCurrentProfile && initialWorkspaceRead.readAuthority && initialWorkspaceRead.scopeRevision
+    ? { source: initialWorkspaceRead.scopeRevision, deadline: initialWorkspaceRead.readAuthority.deadline, generation: sessionGeneration,
+      session: initialSession.revision, epoch: planningSourceEpoch, actorId: initialCurrentProfile.id, role: initialCurrentProfile.platformRole }
+    : undefined;
   let teamMetricsReceipt: { basis: TeamBasis; deadline: number; model: import("@/features/team/model/team-read-model").TeamMetricsModel } | undefined;
   let teamMetricsStatus: PlanningReadStatus = "not-loaded";
   let teamMetricsMounts = 0;
@@ -720,7 +732,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const sourceChanged = JSON.stringify(directory(data.profiles)) !== JSON.stringify(directory(confirmed.profiles));
     confirmed = data;
     if (sourceChanged) invalidatePlanningSource();
-  }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
+  }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, initialTeamCompleteness: teamBasis ? "complete" : undefined, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
   const commitments = createSprintCommitmentState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,active:isActive,generation:()=>sessionGeneration,nextSequence:()=>++sequence,save:adapter.saveSprintCommitment,dependencyPending:id=>sprintLock.blocksSprint(id),checkDependency:id=>sprintLock.check(id),refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded"});
@@ -1288,6 +1300,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     loadTeamMetrics,
     activateTeamMetrics() {
       teamMetricsMounts++;
+      if (teamBasis && teamDeadlineTimer === undefined) scheduleTeamDeadline(teamBasis, teamBasis.deadline);
       return () => {
         teamMetricsMounts = Math.max(0, teamMetricsMounts - 1);
         if (!teamMetricsMounts && teamMetricsPending) {

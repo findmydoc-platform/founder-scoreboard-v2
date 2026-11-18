@@ -56,4 +56,5 @@ test("direct Team entry renders its people and CEO editing basis when Planning e
     expect.objectContaining({ id: "synthetic-founder", name: "Synthetic Founder", weeklyCapacity: 37, persistenceBasis: expect.objectContaining({ platform_role: "founder", weekly_capacity: 37 }) }),
   ]));
   expect(page.props.initialHeaderData).toBeDefined();
+  expect(page.props.initialWorkspaceRead).toMatchObject({ workspace: "team", queryKey: "workspace", scopeRevision: "42", coverage: { profiles: "complete", tasks: "partial" }, readAuthority: { userId: expect.any(String), deadline: expect.any(Number) }, session: { revision: expect.any(String) } });
 });

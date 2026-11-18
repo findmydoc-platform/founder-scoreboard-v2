@@ -22,7 +22,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
-import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
+import { planningWorkspaceHydration, teamWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 
 async function loadBacklogPageData(profile?: AuthenticatedProfile | null, params = new URLSearchParams()) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
@@ -82,6 +82,7 @@ async function loadSupportingWorkspacePageData(
   const action = workspace === "events" ? "events.read" : workspace === "tools" ? "tools.read" : workspace === "team" ? "team.read" : "notifications.read";
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  if (workspace === "team") return permission.resource.loadTeamPeoplePage();
   return permission.resource.loadWorkspace();
 }
 
@@ -202,9 +203,14 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
       if (supportingWorkspace.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
       }
+      const teamRead = initialWorkspace === "team" && "readSession" in supportingWorkspace && "readAuthority" in supportingWorkspace
+        ? teamWorkspaceHydration(supportingWorkspace.model as import("@/features/team/model/team-read-model").TeamWorkspaceModel, supportingWorkspace.readSession, supportingWorkspace.readAuthority)
+        : undefined;
+      if (initialWorkspace === "team" && !teamRead) return <WorkspaceDataUnavailablePage workspace="team" authUserEmail={auth.user?.email || ""} />;
       return (
         <PlanningApp
           initialData={supportingWorkspaceModelToPlanningShellState(initialWorkspace, supportingWorkspace.model)}
+          initialWorkspaceRead={teamRead}
           initialHeaderData={supportingWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"
