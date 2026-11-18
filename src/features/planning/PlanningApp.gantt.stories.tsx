@@ -156,7 +156,7 @@ export const GanttFiltersIncludeOptionsOutsideItsSelectedRows:Story={
     ]){
       const control=canvas.getByRole("combobox",{name:label});
       await userEvent.click(control);
-      const option=await body.findByRole("option",{name:optionName,exact:true});
+      const option=await body.findByRole("option",{name:optionName});
       await expect(option).toBeVisible();
       await userEvent.click(option);
       await expect(control).toHaveTextContent(optionName);
