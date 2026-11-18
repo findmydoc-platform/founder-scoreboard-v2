@@ -47,6 +47,7 @@ test("direct Team entry renders its people and CEO editing basis when Planning e
   });
 
   const page = await renderWorkspacePage("team");
+  expect(planningReads).toEqual([]);
   expect(page.props.initialWorkspace).toBe("team");
   expect(page.props.initialProtectedDataLoaded).toBe(true);
   expect(page.props.initialCurrentProfile).toMatchObject({ id: "synthetic-profile", platformRole: "ceo" });
@@ -55,5 +56,4 @@ test("direct Team entry renders its people and CEO editing basis when Planning e
     expect.objectContaining({ id: "synthetic-founder", name: "Synthetic Founder", weeklyCapacity: 37, persistenceBasis: expect.objectContaining({ platform_role: "founder", weekly_capacity: 37 }) }),
   ]));
   expect(page.props.initialHeaderData).toBeDefined();
-  expect(planningReads).toEqual([]);
 });
