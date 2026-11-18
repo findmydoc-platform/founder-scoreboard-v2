@@ -1,4 +1,5 @@
 import { normalizePlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
+import { normalizePlanningGanttQuery } from "@/features/planning/model/planning-gantt-query";
 import { observeRuntimeHandler, observeRuntimePhase, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeCredentialAction } from "@/lib/credentials";
@@ -21,6 +22,7 @@ async function handleGET(request: NextRequest) {
     return NextResponse.json({ summaries: result.summaries, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
   }
   let query: PlanningBoardQueryInput | undefined;
+  let ganttQuery: ReturnType<typeof normalizePlanningGanttQuery> = null;
   let candidateQuery: ReturnType<typeof normalizePlanningItemCandidateQuery> = null;
   let structureControls = false;
   let structureQuery: ReturnType<typeof normalizePlanningStructureQuery> = null;
@@ -29,7 +31,10 @@ async function handleGET(request: NextRequest) {
     try {
       const parsed = JSON.parse(rawQuery);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || rawQuery.length > 16000 || (parsed.continuation && (typeof parsed.continuation !== "string" || parsed.continuation.length > 4096))) throw new Error("Invalid scope");
-      if (parsed.view === "structure") {
+      if (parsed.view === "gantt") {
+        ganttQuery = normalizePlanningGanttQuery(parsed);
+        if (!ganttQuery) return apiError("Ungültiger Gantt-Bereich.", 400);
+      } else if (parsed.view === "structure") {
         if (parsed.area === "controls") {
           if (Object.keys(parsed).some(key => key !== "view" && key !== "area")) return apiError("Ungültiger Strukturbereich.", 400);
           structureControls = true;
@@ -42,6 +47,14 @@ async function handleGET(request: NextRequest) {
         if (!candidateQuery) return apiError("Ungültiger Auswahlbereich.", 400);
       } else query = parsed;
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
+  }
+  if (ganttQuery) {
+    const result = await permission.planning.loadGantt(ganttQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Gantt darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Gantt-Grundlage hat sich geändert.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Gantt konnte nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Gantt darf nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority, currentProfile: permission.profile }, { headers: { "cache-control": "no-store" } });
   }
   if (structureControls) {
     const result = await permission.planning.loadStructureControls({ signal: request.signal });

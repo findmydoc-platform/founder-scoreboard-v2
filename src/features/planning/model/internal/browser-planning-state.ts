@@ -513,6 +513,17 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!body.readAuthority || !body.readActor) throw new Error("Die Leseberechtigung fehlt.");
         return { model: body.model, readAuthority: body.readAuthority, readActor: body.readActor };
       },
+      async readGantt(query, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("@/features/planning-items/model/planning-workspace-model").PlanningWorkspaceModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; currentProfile?: AuthenticatedProfile; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
+        if (!response.ok || !body?.model?.gantt) throw Object.assign(new Error(body?.error || "Gantt konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        if (!body.readAuthority || !body.currentProfile) throw new Error("Die Leseberechtigung fehlt.");
+        const coverage = hierarchyReadCoverage(body.model); delete coverage.project;
+        return { gantt: body.model.gantt, readAuthority: body.readAuthority, readActor: { profileId: body.currentProfile.id, platformRole: body.currentProfile.platformRole },
+          scopeRevision: body.model.scopeRevision, data: normalizePlanningShellState(planningWorkspaceModelToPlanningShellState(body.model)), coverage,
+          taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: hierarchyOmittedFields(body.model),
+          profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], currentProfile: body.currentProfile };
+      },
       async readStructure(query, options) {
         const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-query").PlanningStructureModel; code?: string; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
         if (!response.ok || !body?.model?.structure) throw Object.assign(new Error(body?.error || "Struktur konnte nicht geladen werden."), { status: response.status, code: body?.code });

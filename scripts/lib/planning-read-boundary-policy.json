@@ -12,7 +12,8 @@
     "src/features/planning-items/server/planning-backlog-support-read-source.ts",
     "src/features/planning-items/server/planning-backlog-rank-read-source.ts",
     "src/features/planning-items/server/planning-structure-read-source.ts",
-    "src/features/planning-items/server/planning-structure-controls-read-source.ts"
+    "src/features/planning-items/server/planning-structure-controls-read-source.ts",
+    "src/features/planning-items/server/planning-gantt-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -196,6 +197,13 @@
       "reason": "Complete scalar profile, Sprint, Initiative and workstream options from the existing Table populations, independent of paged membership. No canonical Task, hierarchy snapshot or mutation authority.",
       "evidence": "tests/integration/planning-structure-controls.test.ts; tests/migrations/20261117032638_planning_structure_controls.test.mjs",
       "expiresWhen": "Revalidate when Structure filter population, source or authorization changes."
+    },
+    "GANTT-SELECTED": {
+      "consumer": "Complete selected Gantt API basis",
+      "owner": "Planning and Planning Item feature owners",
+      "reason": "The credential-bound service-only reader selects every matching approved Deliverable with the existing rich predicates and fixed Gantt priority/manual/source-ID order. One SQL statement hydrates only selected records, incident endpoints and required ancestors, referenced profiles/Sprints and the existing first-Sprint schedule fallback. Selected completeness does not imply complete workspace, directory, child or machine coverage. Original Actor/session/environment/deadline and final user-bound source publication remain required. The visible Gantt consumer is not migrated by this API-only slice.",
+      "evidence": "tests/integration/planning-gantt-selection.test.ts; tests/migrations/20261118074553_planning_gantt_selection.test.mjs",
+      "expiresWhen": "Revalidate when Gantt eligibility, ordering, schedule, incident context, field coverage, source/time or authorization changes."
     }
   },
   "allowedEdges": [
@@ -343,6 +351,21 @@
       "from": "src/lib/credentials/internal/planning.ts",
       "to": "src/features/planning-items/server/planning-structure-controls-read-source.ts",
       "contract": "STRUCTURE-CONTROLS"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-gantt-read-source.ts",
+      "contract": "GANTT-SELECTED"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-gantt-read-source.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "GANTT-SELECTED"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-gantt-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "GANTT-SELECTED"
     }
   ],
   "readSites": [
@@ -1291,6 +1314,13 @@
       "target": "planning_structure_controls",
       "fingerprint": "7e1e45e6aebf5a7296be323872ee6f31f753c7919308166a6698013ecdb92f56",
       "contract": "STRUCTURE-CONTROLS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-gantt-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_gantt_selection",
+      "fingerprint": "0f815d4a53d8d1aa7a0aee3bb459d326a534a091a4febc22f0bed11383e1b52a",
+      "contract": "GANTT-SELECTED"
     }
   ]
 }

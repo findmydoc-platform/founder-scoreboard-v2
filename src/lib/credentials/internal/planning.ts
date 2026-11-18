@@ -1,4 +1,6 @@
 import { loadPlanningStructureControls } from "@/features/planning-items/server/planning-structure-controls-read-source";
+import { loadPlanningGantt } from "@/features/planning-items/server/planning-gantt-read-source";
+import type { PlanningGanttQuery } from "@/features/planning/model/planning-gantt-query";
 import { loadPlanningStructureSelection } from "@/features/planning-items/server/planning-structure-read-source";
 import { loadPlanningBacklogRankTarget } from "@/features/planning-items/server/planning-backlog-rank-read-source";
 import { loadPlanningBacklogSupport } from "@/features/planning-items/server/planning-backlog-support-read-source";
@@ -410,6 +412,17 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     async loadTrashDetail() {
       if (action !== "planning.task.read" || !targetId || !detailPeople || await current()) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
       return loadPlanningTrashTaskDetail(service, targetId, detailPeople);
+    },
+    async loadGantt(query: PlanningGanttQuery, options?: { signal?: AbortSignal }) {
+      if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningGantt(service, { authorized: true, actorProfileId: profile?.id || null,
+        actorUserId: readAuthority?.userId, authorityDeadline: readAuthority?.deadline, publicationSource, signal }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority ? { ...result, readAuthority: {
+        ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline),
+      } } : result;
     },
     async startBoardQuery(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
