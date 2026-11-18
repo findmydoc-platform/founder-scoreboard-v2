@@ -165,7 +165,8 @@ export function usePlanningAppController({
 
   const planningBoard = planningState.board();
   const activeGantt = workspace === "planning" && view === "gantt";
-  const ganttQuery = useMemo(() => normalizePlanningGanttQuery({ view: "gantt", filters }), [filters]);
+  const ganttScopeKey = planningGanttQueryKey({ view: "gantt", filters });
+  const ganttQuery = useMemo(() => normalizePlanningGanttQuery(JSON.parse(ganttScopeKey)), [ganttScopeKey]);
   const submitGanttRead = useRef<(() => Promise<boolean>) | null>(null);
   const previousGanttSearch = useRef<string | undefined>(undefined);
   useEffect(() => {
