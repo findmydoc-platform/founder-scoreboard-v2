@@ -130,7 +130,8 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
     );
   }
 
-  const structureOptions = displayedView === "structure" ? controller.planningState.structureControls() : undefined;
+  const usesScalarOptions = displayedView === "structure" || (workspace === "planning" && displayedView === "gantt");
+  const scalarOptions = usesScalarOptions ? controller.planningState.structureControls() : undefined;
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
       {!focusModeActive ? (
@@ -167,23 +168,23 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
 
         <ProductUpdatesProvider profileId={currentProfile?.id || null} />
 
-        {structureOptions && structureOptions.readStatus !== "current" ? <UiNotice role="status" tone="info">
-          {structureOptions.readStatus === "loading" || structureOptions.readStatus === "not-loaded" ? "Filteroptionen werden geladen." : "Filteroptionen sind nicht aktuell."}
-          {["unavailable", "stale", "forbidden"].includes(structureOptions.readStatus) ? <UiButton type="button" onClick={() => void controller.planningState.loadStructureControls({ refresh: true })}>Filteroptionen erneut laden</UiButton> : null}
+        {scalarOptions && scalarOptions.readStatus !== "current" ? <UiNotice role="status" tone="info">
+          {scalarOptions.readStatus === "loading" || scalarOptions.readStatus === "not-loaded" ? "Filteroptionen werden geladen." : "Filteroptionen sind nicht aktuell."}
+          {["unavailable", "stale", "forbidden"].includes(scalarOptions.readStatus) ? <UiButton type="button" onClick={() => void controller.planningState.loadStructureControls({ refresh: true })}>Filteroptionen erneut laden</UiButton> : null}
         </UiNotice> : null}
         {filtersAvailable && (
           <PlanningFilters
             filters={filters}
-            scalarReadStatus={structureOptions?.readStatus}
+            scalarReadStatus={scalarOptions?.readStatus}
             planningLevel={planningLevel}
             planningParentFilterId={resolvedParentFilterId}
             levelTotals={controller.planningBoard?.result?.levelTotals}
-            profiles={structureOptions ? structureOptions.controls?.people || [] : data.profiles}
-            initiatives={structureOptions ? structureOptions.controls?.initiatives || [] : controller.planningBoard?.table?.initiativeOptions || displayedView === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
+            profiles={scalarOptions ? scalarOptions.controls?.people || [] : data.profiles}
+            initiatives={scalarOptions ? scalarOptions.controls?.initiatives || [] : controller.planningBoard?.table?.initiativeOptions || displayedView === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
             epics={displayedView === "board" ? controller.planningBoard?.result?.epicOptions : undefined}
-            sprints={structureOptions ? structureOptions.controls?.sprints || [] : data.sprints}
+            sprints={scalarOptions ? scalarOptions.controls?.sprints || [] : data.sprints}
             tasks={data.tasks}
-            workstreams={structureOptions ? [...structureOptions.controls?.workstreams || []] : controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
+            workstreams={scalarOptions ? [...scalarOptions.controls?.workstreams || []] : controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={displayedView === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.planningBoard?.table?.page.total ?? controller.visibleTasks.length}

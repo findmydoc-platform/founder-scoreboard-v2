@@ -195,6 +195,13 @@ export function usePlanningAppController({
       submitGanttRead.current = null;
     };
   }, [activeGantt, ganttQuery, planningState, protectedDataLoaded]);
+  useEffect(() => {
+    if (!activeGantt || !protectedDataLoaded) return;
+    const release = planningState.activateStructureControls();
+    const abort = new AbortController();
+    void planningState.loadStructureControls({ signal: abort.signal });
+    return () => { abort.abort(); release(); };
+  }, [activeGantt, planningState, protectedDataLoaded]);
   const selectedGantt = activeGantt ? planningState.gantt() : undefined;
   const ganttReady = Boolean(selectedGantt?.selection && ganttQuery
     && selectedGantt.selection.queryKey === planningGanttQueryKey(ganttQuery));
