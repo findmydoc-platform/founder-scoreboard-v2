@@ -96,7 +96,7 @@ function TeamIndependentHeader() {
   </>;
 }
 
-const meta = { title: "Planning/Team independent reserved Header", component: TeamIndependentHeader, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/team" } } } } satisfies Meta<typeof TeamMetricsReady>;
+const meta = { title: "Planning/Team independent reserved Header", component: TeamIndependentHeader, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/team" } } } } satisfies Meta<typeof TeamIndependentHeader>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
