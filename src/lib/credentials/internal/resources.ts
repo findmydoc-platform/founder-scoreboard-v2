@@ -50,7 +50,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       ]);
       return result.status === "ready" ? { ...result, headerData } : result.status === "staleContinuation" ? { status: "unavailable" as const } : result;
   }
-  async function loadTeamPeople(options?: { signal?: AbortSignal }) {
+  async function loadTeamPeopleRead(options?: { signal?: AbortSignal }, publicationBarrier?: Promise<unknown>) {
     if (action !== "team.read" || !profile) return { status: "forbidden" as const };
     const readAuthority = bound.readAuthority;
     if (!readAuthority) return { status: "unavailable" as const };
@@ -76,7 +76,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       // Every directory page keeps fresh admission; local failures must also be admitted.
       const peopleService = planningService(false, admitPeople, bound.assertCurrent, signal);
       const result = peopleService ? await loadSupabaseTeamPeople(peopleService, { authorized: true, actorProfileId: profile.id,
-        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
+        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal, publicationBarrier }) : { status: "unavailable" as const };
       if (!admissionChecked) await admitPeople();
       if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
       if (admissionFailure) return { status: admissionFailure };
@@ -93,18 +93,15 @@ export async function authorizeResource(input: ResourceCredentialInput) {
   let observedTool: DbFmdTool | null = null;
   let observedEvent: DbFounderEvent | null = null;
   return { ok: true as const, profile, resource: {
-    loadTeamPeople,
+    loadTeamPeople(options?: { signal?: AbortSignal }) { return loadTeamPeopleRead(options); },
     async loadTeamPeoplePage(options?: { signal?: AbortSignal }) {
       if (action !== "team.read" || !profile) return { status: "forbidden" as const };
       try {
-        const [people, headerData] = await Promise.all([loadTeamPeople(options),
-          loadPlanningHeaderData(service, { currentProfileId: profile.id, platformRole: profile.platformRole, sharedSlotLoaders: planningHeaderSlotLoaders(service) })]);
+        const header = loadPlanningHeaderData(service, { currentProfileId: profile.id, platformRole: profile.platformRole, sharedSlotLoaders: planningHeaderSlotLoaders(service) });
+        // People cannot become ready until the joint SSR publication fence has checked the completed Header interval.
+        const [people, headerData] = await Promise.all([loadTeamPeopleRead(options, header), header]);
         if (people.status !== "ready") return people;
-        if (people.readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
-        const publication = await planningPublicationSource(userData, profile, bound.assertCurrent)?.read(options?.signal);
-        if (!publication) return { status: "unavailable" as const };
-        if (publication.status !== "ready") return publication;
-        if (publication.revision !== people.model.scopeRevision || options?.signal?.aborted) return { status: "unavailable" as const };
+        if (options?.signal?.aborted) return { status: "unavailable" as const };
         if (people.readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
         bound.assertCurrent();
         return { ...people, headerData, readSession: context.readSession };
