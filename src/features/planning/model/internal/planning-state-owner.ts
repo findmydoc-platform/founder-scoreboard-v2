@@ -168,12 +168,25 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   let teamMetricsReceipt: { basis: TeamBasis; deadline: number; model: import("@/features/team/model/team-read-model").TeamMetricsModel } | undefined;
   let teamMetricsStatus: PlanningReadStatus = "not-loaded";
   let teamMetricsMounts = 0;
+  let teamDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let teamSourceCheck: Promise<void> | undefined;
   let teamMetricsPending: { basis: TeamBasis; controller: AbortController; result: Promise<boolean> } | undefined;
   function teamBasisCurrent(basis: TeamBasis) {
     return isActive() && teamBasis === basis && basis.generation === sessionGeneration && basis.session === sessionRevision
       && basis.epoch === planningSourceEpoch && basis.deadline > (adapter.now?.() ?? Date.now())
       && actorIdentity?.id === basis.actorId && actorIdentity.platformRole === basis.role;
+  }
+  function scheduleTeamDeadline(basis: TeamBasis, deadline: number) {
+    if (teamDeadlineTimer !== undefined) clearTimeout(teamDeadlineTimer);
+    const remaining = Math.max(0, deadline - (adapter.now?.() ?? Date.now()));
+    teamDeadlineTimer = setTimeout(() => {
+      teamDeadlineTimer = undefined;
+      if (teamBasis !== basis || !isActive()) return;
+      if (deadline > (adapter.now?.() ?? Date.now())) { scheduleTeamDeadline(basis, deadline); return; }
+      teamMetricsPending?.controller.abort(); teamMetricsPending = undefined;
+      teamMetricsReceipt = undefined; teamMetricsStatus = "stale";
+      workspaceStatuses.set("team", "stale"); publish();
+    }, Math.min(remaining, 2_147_483_647));
   }
   function teamMetricsView() {
     const receipt = teamMetricsReceipt;
@@ -205,7 +218,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
               && Number.isFinite(stats.loadHours) && stats.loadHours >= 0;
           });
         if (!valid) { teamMetricsStatus = "unavailable"; return false; }
-        teamMetricsReceipt = { basis, model, deadline: Math.min(basis.deadline, response.readAuthority.deadline) };
+        const deadline = Math.min(basis.deadline, response.readAuthority.deadline);
+        teamMetricsReceipt = { basis, model, deadline };
+        scheduleTeamDeadline(basis, deadline);
         teamMetricsStatus = "current";
         return true;
       } catch (error) {
@@ -1264,7 +1279,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     rejectTask: (task, reason) => backlogBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Eine betroffene Aufgabenänderung ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "reject", reason),
     beginOwnProfileEdit: profileSettings.beginOwnEdit,
     beginTeamProfileEdit: profileSettings.beginTeamEdit,
-    team: profileSettings.team,
+    team() {
+      const view = profileSettings.team();
+      if (teamBasis && teamBasis.deadline <= (adapter.now?.() ?? Date.now())) return { ...view, profiles: [], completeness: "none", readStatus: "stale" };
+      return view;
+    },
     teamMetrics: teamMetricsView,
     loadTeamMetrics,
     activateTeamMetrics() {
@@ -2742,6 +2761,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       teamBasis = result.scopeRevision && result.readAuthority && sessionRevision && actorIdentity && coverage.profiles === "complete" && !stale
         ? { source: result.scopeRevision, deadline: result.readAuthority.deadline, generation: sessionGeneration, session: sessionRevision, epoch: planningSourceEpoch, actorId: actorIdentity.id, role: actorIdentity.platformRole }
         : undefined;
+      if (teamBasis) scheduleTeamDeadline(teamBasis, teamBasis.deadline);
+      else if (teamDeadlineTimer !== undefined) { clearTimeout(teamDeadlineTimer); teamDeadlineTimer = undefined; }
     }
     acceptWorkspaceContext?.(result);
     if (!token.ganttKey) freshness = stale ? "stale" : "current";
@@ -2757,6 +2778,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return !token.ganttKey || !stale;
   }
   function suspendProtected() {
+    if (teamDeadlineTimer !== undefined) { clearTimeout(teamDeadlineTimer); teamDeadlineTimer = undefined; }
     teamMetricsPending?.controller.abort(); teamMetricsPending = undefined; teamMetricsReceipt = undefined; teamBasis = undefined; teamMetricsStatus = "not-loaded";
     backlogSelectionQuery = undefined;
     for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
