@@ -6,6 +6,7 @@ import type { PlanningState } from "../model/planning-state";
 type UsePlanningRemoteChangesOptions = {
   planningState: PlanningState;
   enabled: boolean;
+  workspace?: "planning" | "backlog";
   refreshCurrentWorkspaceModel: () => Promise<void>;
   scopeRevision?: string;
   authoritativeRevision?: import("../model/planning-revision").PlanningTaskRevision;
@@ -14,6 +15,7 @@ type UsePlanningRemoteChangesOptions = {
 export function usePlanningRemoteChanges({
   planningState,
   enabled,
+  workspace = "planning",
   refreshCurrentWorkspaceModel,
   scopeRevision,
   authoritativeRevision,
@@ -39,7 +41,7 @@ export function usePlanningRemoteChanges({
     checkingRef.current = true;
     const context = contextRef.current;
     try {
-      const result = await planningState.checkPlanningSource();
+      const result = await planningState.checkPlanningSource(workspace);
       if (!mountedRef.current || context !== contextRef.current) return;
       return result;
     } catch {
@@ -47,7 +49,7 @@ export function usePlanningRemoteChanges({
     } finally {
       checkingRef.current = false;
     }
-  }, [planningState, enabled]);
+  }, [planningState, enabled, workspace]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -61,7 +63,7 @@ export function usePlanningRemoteChanges({
         interval = undefined;
         return;
       }
-      release ||= planningState.activatePlanningView();
+      release ||= planningState.activatePlanningView(workspace);
       interval ??= window.setInterval(() => void checkForPlanningRemoteChanges(), 60_000);
       void checkForPlanningRemoteChanges();
     };
@@ -75,7 +77,7 @@ export function usePlanningRemoteChanges({
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("online", visible);
     };
-  }, [checkForPlanningRemoteChanges, enabled, planningState]);
+  }, [checkForPlanningRemoteChanges, enabled, planningState, workspace]);
 
   const refreshPlanningRemoteChanges = useCallback(async () => {
     if (planningRemoteChangesRefreshing) return;

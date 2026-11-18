@@ -1,12 +1,14 @@
 "use client";
 
+import { backlogSelectionRead } from "../planning-backlog-hydration";
+
 import { classifyTaskGitHubSyncResponse } from "@/lib/github-sync/contract";
 import { githubUserConnectionStateFromStatus } from "../github-app-connection";
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
 
 import { googleWorkspaceApi } from "@/features/team-workweek/model/google-workspace-api";
 import { privateWorkweekApi } from "@/features/team-workweek/model/private-workweek-api";
-import { requestBacklogModel } from "@/features/backlog/model/backlog-api-client";
+import { requestBacklogModel, requestBacklogSelection, requestBacklogSupport, requestBacklogRankTarget } from "@/features/backlog/model/backlog-api-client";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
 import { supportingReadCoverage, supportingOmittedFields } from "./supporting-read-coverage";
 import { hierarchyReadCoverage, hierarchyOmittedFields } from "./hierarchy-read-coverage";
@@ -28,6 +30,7 @@ import { mapScoreObjection, mapFounderSprintScore } from "@/lib/planning-sprint-
 import type { DbScoreObjection, DbFounderSprintScore } from "@/lib/planning-row-types";
 import { sprintNumber } from "@/lib/planning-schedule";
 import { normalizePlanningShellState } from "../planning-app-model";
+import { emptyPlanningShellState } from "../planning-shell-state";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
 import { sprintModelCoverage } from "./sprint-read-coverage";
@@ -38,6 +41,7 @@ import type { AppWorkspace } from "../workspace-routes";
 
 export type PlanningPageState = {
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
+  initialBacklogRead?: import("../planning-backlog-hydration").PlanningBacklogHydration;
   initialWorkspaceRead?: import("../planning-workspace-hydration").PlanningWorkspaceHydration;
   initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialData: PlanningShellState;
@@ -106,6 +110,7 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     if (runtime.userId && (!authority || authority.userId !== runtime.userId || !Number.isFinite(authority.deadline) || authority.deadline <= Date.now())) throw new Error("Die ursprüngliche Leseberechtigung konnte nicht bestätigt werden.");
   }
   const owner = createPlanningState({
+    initialBacklogRead: options.initialBacklogRead,
     initialWorkspaceRead: options.initialWorkspaceRead,
     initialServerHeaderRead: options.initialServerHeaderRead,
     initialSession: options.initialWorkspaceRead?.session || options.initialTaskDetailRead?.session,
@@ -484,6 +489,42 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if (!response.ok || !body?.summaries) throw Object.assign(new Error(body?.error || "Fortschritt und Signale konnten nicht geladen werden."), { status: response.status, code: body?.code });
         requireReadAuthority(body.readAuthority);
         return { summaries: body.summaries, readAuthority: body.readAuthority! };
+      },
+      async readBacklogRankTarget(query, options) {
+        const { response, body } = await requestBacklogRankTarget(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model?.rankTarget) throw Object.assign(new Error(body?.error || "Backlog-Ziel konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        return { data: backlogModelToPlanningShellState(body.model), readAuthority: body.readAuthority, readActor: body.readActor, backlogRankTarget: body.model.rankTarget,
+          coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+          taskCoverage: "partial", taskOmittedFields: backlogOmittedFields(body.model) };
+      },
+      async readBacklogSupport(query, options) {
+        const { response, body } = await requestBacklogSupport(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog-Grundlage konnte nicht geladen werden."), { status: response.status });
+        requireReadAuthority(body.readAuthority);
+        const sprintRows = body.model.sprintBasis?.buckets.map(bucket => bucket.sprint) || [];
+        return { data: { ...emptyPlanningShellState, sprints: sprintRows }, coverage: sprintRows.length ? { sprints: "partial" } : {}, taskCoverage: "none",
+          readAuthority: body.readAuthority, readActor: body.readActor, backlogControls: body.model.controls, backlogSprintBasis: body.model.sprintBasis };
+      },
+      async readStructureControls(options) {
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-controls").PlanningStructureControlsModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string; code?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "structure", area: "controls" }))}`, { signal: options.signal });
+        if (!response.ok || !body?.model?.controls) throw Object.assign(new Error(body?.error || "Strukturfilter konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        if (!body.readAuthority || !body.readActor) throw new Error("Die Leseberechtigung fehlt.");
+        return { model: body.model, readAuthority: body.readAuthority, readActor: body.readActor };
+      },
+      async readStructure(query, options) {
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("../planning-structure-query").PlanningStructureModel; code?: string; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; readActor?: { profileId: string; platformRole: string }; error?: string }>(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal });
+        if (!response.ok || !body?.model?.structure) throw Object.assign(new Error(body?.error || "Struktur konnte nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        if (!body.readAuthority || !body.readActor) throw new Error("Die Leseberechtigung fehlt.");
+        return { model: body.model, readAuthority: body.readAuthority, readActor: body.readActor };
+      },
+      async readBacklogSelection(query, options) {
+        const { response, body } = await requestBacklogSelection(ownedApiClient, query, options?.signal);
+        if (!response.ok || !body?.model?.selection) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return backlogSelectionRead(body.model, body.readAuthority!, body.readActor);
       },
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {

@@ -1,3 +1,4 @@
+import { normalizePlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
 import { observeRuntimeHandler, observeRuntimePhase, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeCredentialAction } from "@/lib/credentials";
@@ -21,16 +22,43 @@ async function handleGET(request: NextRequest) {
   }
   let query: PlanningBoardQueryInput | undefined;
   let candidateQuery: ReturnType<typeof normalizePlanningItemCandidateQuery> = null;
+  let structureControls = false;
+  let structureQuery: ReturnType<typeof normalizePlanningStructureQuery> = null;
   const rawQuery = request.nextUrl.searchParams.get("scope");
   if (rawQuery) {
     try {
       const parsed = JSON.parse(rawQuery);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || rawQuery.length > 16000 || (parsed.continuation && (typeof parsed.continuation !== "string" || parsed.continuation.length > 4096))) throw new Error("Invalid scope");
-      if (parsed.view === "candidates") {
+      if (parsed.view === "structure") {
+        if (parsed.area === "controls") {
+          if (Object.keys(parsed).some(key => key !== "view" && key !== "area")) return apiError("Ungültiger Strukturbereich.", 400);
+          structureControls = true;
+        } else {
+          structureQuery = normalizePlanningStructureQuery(parsed);
+          if (!structureQuery) return apiError("Ungültiger Strukturbereich.", 400);
+        }
+      } else if (parsed.view === "candidates") {
         candidateQuery = normalizePlanningItemCandidateQuery(parsed);
         if (!candidateQuery) return apiError("Ungültiger Auswahlbereich.", 400);
       } else query = parsed;
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
+  }
+  if (structureControls) {
+    const result = await permission.planning.loadStructureControls({ signal: request.signal });
+    if (result.status === "forbidden") return apiError("Strukturfilter dürfen nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Strukturfilter haben sich geändert.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Strukturfilter konnten nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Strukturfilter dürfen nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority, readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
+  }
+  if (structureQuery) {
+    const result = await permission.planning.loadStructure(structureQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Struktur darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Struktur hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Struktur konnte nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Struktur darf nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority,
+      readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
   }
   if (candidateQuery) {
     const result = await permission.planning.loadCandidates(candidateQuery, { signal: request.signal });

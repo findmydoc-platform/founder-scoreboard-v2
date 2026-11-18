@@ -32,14 +32,15 @@ function useCompactPlanningViewport() {
 }
 
 type PlanningFiltersProps = {
+  scalarReadStatus?: import("../model/planning-state").PlanningReadStatus;
   filters: PlanningFiltersValue;
   planningLevel: PlanningLevel;
   planningParentFilterId: string;
   levelTotals?: Partial<Record<PlanningLevel, number>>;
-  profiles: Profile[];
+  profiles: readonly Pick<Profile, "id" | "name">[];
   initiatives: readonly Pick<Task, "id" | "title">[];
   epics?: readonly Pick<Task, "id" | "title">[];
-  sprints: Sprint[];
+  sprints: readonly Pick<Sprint, "id" | "name">[];
   tasks: Task[];
   workstreams: string[];
   quickFilters: Array<{ id: string; label: string }>;
@@ -55,6 +56,7 @@ type PlanningFiltersProps = {
 };
 
 export function PlanningFilters({
+  scalarReadStatus,
   filters,
   planningLevel,
   planningParentFilterId,
@@ -81,11 +83,12 @@ export function PlanningFilters({
     open: expanded && compactViewport,
     onClose: () => onExpandedChange(false),
   });
-  const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee;
+  const optionsCurrent = scalarReadStatus === undefined || scalarReadStatus === "current";
+  const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || (optionsCurrent ? filters.assignee : "Kontext nicht aktuell");
   const selectedInitiative = initiatives.find((initiative) => initiative.id === filters.initiativeId);
-  const initiativeUnavailable = filters.initiativeId !== "Alle" && !selectedInitiative;
-  const initiativeName = selectedInitiative?.title || "nicht verfügbar";
-  const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
+  const initiativeUnavailable = optionsCurrent && filters.initiativeId !== "Alle" && !selectedInitiative;
+  const initiativeName = selectedInitiative?.title || (optionsCurrent ? "nicht verfügbar" : "Kontext nicht aktuell");
+  const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || (optionsCurrent ? filters.sprintId : "Kontext nicht aktuell");
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
     ? epics || tasks.filter((task) => task.taskType === "epic")
@@ -143,6 +146,7 @@ export function PlanningFilters({
         <FilterField label="Zuständig">
           <CustomSelect
             aria-label="Nach Zuständigkeit filtern"
+              disabled={!optionsCurrent}
             value={filters.assignee}
             onChange={(assignee) => onChange({ ...filters, assignee })}
             className="h-10 text-sm"
@@ -189,6 +193,7 @@ export function PlanningFilters({
           <FilterField label="Initiative">
             <CustomSelect
               aria-label="Nach Initiative filtern"
+              disabled={!optionsCurrent}
               value={initiativeUnavailable ? "" : filters.initiativeId}
               onChange={(initiativeId) => onChange({ ...filters, initiativeId })}
               className="h-10 text-sm"
@@ -200,6 +205,7 @@ export function PlanningFilters({
           <FilterField label="Sprint">
             <CustomSelect
               aria-label="Nach Sprint filtern"
+              disabled={!optionsCurrent}
               value={filters.sprintId}
               onChange={(sprintId) => onChange({ ...filters, sprintId })}
               className="h-10 text-sm"
@@ -211,6 +217,7 @@ export function PlanningFilters({
           <FilterField label="Bereich">
             <CustomSelect
               aria-label="Nach Bereich filtern"
+              disabled={!optionsCurrent}
               value={filters.workstream}
               onChange={(workstream) => onChange({ ...filters, workstream })}
               className="h-10 text-sm"

@@ -235,7 +235,7 @@ async function loadSelectedPlanningPage(supabase: SupabaseClient, context: Plann
   context = { ...context, authorityDeadline: authorityDeadline ?? undefined,
     signal: context.signal && deadlineSignal ? AbortSignal.any([context.signal, deadlineSignal]) : context.signal || deadlineSignal };
   const read = supabase.rpc("planning_deliverable_selection", {
-    p_actor_profile_id: context.actorProfileId, p_query: query, p_column: column ?? null, p_offset: cursor?.offset || 0,
+    p_actor_profile_id: context.actorProfileId, p_query: { ...query, ...(context.structureParentId ? { structureParentId: context.structureParentId } : {}) }, p_column: column ?? null, p_offset: cursor?.offset || 0,
     p_limit: Math.min(20, Math.max(1, Math.trunc(Number(input.limit) || 20))), p_source_revision: cursor?.source || null, p_evaluated_at: cursor?.evaluatedAt || null,
   });
   const result = await observeRuntimePhase("board.selection", () => context.signal ? read.abortSignal(context.signal) : read);

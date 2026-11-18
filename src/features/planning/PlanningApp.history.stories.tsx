@@ -7,7 +7,7 @@ import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import type { Profile, TaskStatus } from "@/lib/types";
+import type { Profile, Task, TaskStatus } from "@/lib/types";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-browser-fixture";
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
@@ -19,14 +19,15 @@ import { sortTaskTableRows, type TaskTableSort } from "@/features/tasks/model/ta
 import { taskPlanningAttentionSignals } from "@/features/tasks/model/task-attention-signals";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { isTaskPlanningActive } from "./model/approval-domain";
+import { normalizePlanningStructureQuery } from "./model/planning-structure-query";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 
 const profile: Profile = { id: "history-person", name: "History Person", platformRole: "ceo", orgRole: "CEO", githubLogin: "history-person", weeklyCapacity: 40 };
 const user = { id: "history-user", email: "history@example.com" } as User;
 const session = { user, userId: user.id, revision: "history-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
-const initiative = taskDetailStoryTask({ id: "history-parent", title: "Historical parent context", taskType: "initiative" });
+const initiative = taskDetailStoryTask({ id: "history-parent", title: "Historical parent context", taskType: "initiative", updatedAt: "2026-11-01T00:00:00Z" });
 const sprint = { id: "history-sprint", name: "Historical Sprint", startDate: "2026-11-01", endDate: "2026-11-14", reviewDueAt: "", scoreLocked: false, status: "planning" as const };
-const active = taskDetailStoryTask({ id: "history-active", title: "Active work stays visible", status: "Offen", assigneeId: profile.id, ownerId: profile.id, parentTaskId: initiative.id, sprintId: sprint.id });
+const active = taskDetailStoryTask({ id: "history-active", title: "Active work stays visible", status: "Offen", updatedAt: "2026-11-01T00:00:00Z", assigneeId: profile.id, ownerId: profile.id, parentTaskId: initiative.id, sprintId: sprint.id });
 const completed = Array.from({ length: 25 }, (_, index) => taskDetailStoryTask({ id: `history-${index}`, title: `Completed work ${index + 1}`, status: "Erledigt", updatedAt: "2026-11-01T00:00:00Z", order: index, assigneeId: profile.id, ownerId: profile.id, parentTaskId: initiative.id, sprintId: sprint.id }));
 function page(input: PlanningBoardQueryInput = {}) {
   const query = normalizePlanningBoardQuery(input);
@@ -56,10 +57,31 @@ function tablePage(input: PlanningBoardQueryInput): PlanningWorkspaceModel {
       workspaceRevision: { activeTaskCount: 27, latestUpdatedAt: "history-r1" } },
   };
 }
+function structureResponse(input: unknown) {
+  const raw = input as { area?: string }, deadline = session.expiresAt * 1000;
+  const receipt = { sourceRevision: "history-source", scopeRevision: `history-structure-${raw.area}`, observedAt: "2026-11-07T00:00:00Z", validUntil: new Date(deadline).toISOString() };
+  const workstreams = Array.from(new Set(completeFixture.tasks.map(task => task.workstream).filter(Boolean))).sort((left,right)=>left.localeCompare(right,"de"));
+  if (raw.area === "controls") return Response.json({ readAuthority: { userId: session.userId, deadline }, readActor: { profileId: profile.id, platformRole: profile.platformRole }, model: { revision: "history-source", controls: {
+    ...receipt, coverage: "complete", people: [{ id: profile.id, name: profile.name }], sprints: [{ id: sprint.id, name: sprint.name }], initiatives: [{ id: initiative.id, title: initiative.title }], workstreams,
+  } } });
+  const query = normalizePlanningStructureQuery(input);
+  if (!query) throw new Error("Invalid Structure fixture scope");
+  const roots = query.area === "roots";
+  const matches = roots ? [initiative] : buildPlanningTaskTableViewModel({ currentProfile: profile, data: completeFixture, filters: query.filters }).visibleTasks.filter(task => task.taskType === "deliverable" && isTaskPlanningActive(task) && task.parentTaskId === query.parentId);
+  const offset = query.continuation ? 20 : 0, selected = matches.slice(offset, offset + query.limit), next = offset + selected.length;
+  const omitted: (keyof Task)[] = ["note", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason", ...(roots ? [] : ["description", "strategy"] as const)];
+  const context = roots ? [] : [initiative];
+  const items = [...selected, ...context].map(task => { const row = { ...task, detailAvailability: "summary" as const }; for (const field of omitted) Reflect.deleteProperty(row, field); return row; });
+  return Response.json({ readAuthority: { userId: session.userId, deadline }, readActor: { profileId: profile.id, platformRole: profile.platformRole }, model: {
+    revision: "history-source", items, people: [profile], taskOmittedFields: omitted, structure: { ...receipt, query, itemIds: selected.map(task => task.id), contextIds: context.map(task => task.id), total: matches.length, coverage: next >= matches.length ? "complete" : "partial", continuation: next >= matches.length ? null : "next-structure-history-page" },
+  } });
+}
+type HistoryReadClass = "board" | "table" | "complete" | "roots" | "controls" | "children";
 const initial = page();
 function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = false }: { failCompleteRead?: boolean; delayCompleteRead?: boolean }) {
   const [ready, setReady] = useState(false);
   const [reads, setReads] = useState(0);
+  const [readClasses, setReadClasses] = useState({ board: 0, table: 0, complete: 0, roots: 0, controls: 0, children: 0 });
   const [releaseCompleteRead, setReleaseCompleteRead] = useState<(() => void) | null>(null);
   useEffect(() => {
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
@@ -73,6 +95,9 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
       if (url.pathname === "/api/planning-board-data") {
         setReads(value => value + 1);
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
+        const kind: HistoryReadClass = query.view === "structure" ? query.area : query.view === "table" ? "table" : query.view === "complete" ? "complete" : "board";
+        setReadClasses(value => ({ ...value, [kind]: value[kind] + 1 }));
+        if (query.view === "structure") return structureResponse(query);
         if (query.view === "complete" || query.view === "table") {
           const response = () => Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: query.view === "table" ? tablePage(query) : { ...page(query), board: undefined, items: completeFixture.tasks, coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
           if (!query.continuation && failCompleteRead && ++completeAttempts === 1) return Response.json({ error: "Alternative view unavailable" }, { status: 503 });
@@ -91,7 +116,7 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
   }, [failCompleteRead, delayCompleteRead]);
-  return <><output aria-label="History reads">{reads}</output>{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output aria-label="History reads">{reads}</output>{Object.entries(readClasses).map(([kind,count])=><output key={kind} aria-label={`History ${kind} reads`}>{count}</output>)}{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = {
   title: "Planning/Completed history flow",
@@ -152,15 +177,25 @@ export const AlternativeViewsRetainBoardPages: Story = {
     await waitFor(() => expect(canvas.getByText("25 von 25 geladen")).toBeVisible());
     for (const label of ["Struktur", "Gantt", "Tabelle"]) {
       await userEvent.click(canvas.getByRole("button", { name: label }));
-      if (label === "Struktur") await userEvent.click(await canvas.findByRole("button", { name: "Alle ausklappen" }));
-      await expect(await canvas.findByRole("link", { name: "Completed work 25" })).toBeVisible();
-      if (label === "Gantt") {
-        await expect(canvas.getByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
+      if (label === "Struktur") {
+        await userEvent.click(await canvas.findByRole("button", { name: "Alle ausklappen" }));
+        await userEvent.click(await canvas.findByRole("button", { name: "Weitere Deliverables laden" }));
+        await expect(canvas.getByLabelText("History roots reads")).toHaveTextContent("1");
+        await expect(canvas.getByLabelText("History controls reads")).toHaveTextContent("1");
+        await expect(canvas.getByLabelText("History children reads")).toHaveTextContent("2");
       }
+      if (label === "Gantt") {
+        await expect(await canvas.findByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
+      }
+      if (label === "Tabelle") await canvas.findByRole("heading", { name: "Aufgaben" });
+      const lastLink = await canvas.findByRole("link", { name: "Completed work 25" });
+      await expect(lastLink).toBeVisible();await expect(lastLink).toHaveAttribute("href", "/tasks/history-24");
       await userEvent.click(canvas.getByRole("button", { name: "Board" }));
       await expect(await canvas.findByText("25 von 25 geladen")).toBeVisible();
       await expect(canvas.getByRole("link", { name: "Completed work 25" })).toBeVisible();
-      await expect(canvas.getByLabelText("History reads")).toHaveTextContent("5");
+      await expect(canvas.getByLabelText("History board reads")).toHaveTextContent("2");
+      await expect(canvas.getByLabelText("History table reads")).toHaveTextContent("2");
+      await expect(canvas.getByLabelText("History complete reads")).toHaveTextContent(label === "Struktur" ? "0" : "1");
     }
   },
 };

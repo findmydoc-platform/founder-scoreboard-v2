@@ -1,3 +1,4 @@
+import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
 import { hasGitHubIssue } from "@/lib/platform";
 import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
@@ -129,6 +130,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
     );
   }
 
+  const structureOptions = displayedView === "structure" ? controller.planningState.structureControls() : undefined;
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
       {!focusModeActive ? (
@@ -165,18 +167,23 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
 
         <ProductUpdatesProvider profileId={currentProfile?.id || null} />
 
+        {structureOptions && structureOptions.readStatus !== "current" ? <UiNotice role="status" tone="info">
+          {structureOptions.readStatus === "loading" || structureOptions.readStatus === "not-loaded" ? "Filteroptionen werden geladen." : "Filteroptionen sind nicht aktuell."}
+          {["unavailable", "stale", "forbidden"].includes(structureOptions.readStatus) ? <UiButton type="button" onClick={() => void controller.planningState.loadStructureControls({ refresh: true })}>Filteroptionen erneut laden</UiButton> : null}
+        </UiNotice> : null}
         {filtersAvailable && (
           <PlanningFilters
             filters={filters}
+            scalarReadStatus={structureOptions?.readStatus}
             planningLevel={planningLevel}
             planningParentFilterId={resolvedParentFilterId}
             levelTotals={controller.planningBoard?.result?.levelTotals}
-            profiles={data.profiles}
-            initiatives={controller.planningBoard?.table?.initiativeOptions || displayedView === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
+            profiles={structureOptions ? structureOptions.controls?.people || [] : data.profiles}
+            initiatives={structureOptions ? structureOptions.controls?.initiatives || [] : controller.planningBoard?.table?.initiativeOptions || displayedView === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
             epics={displayedView === "board" ? controller.planningBoard?.result?.epicOptions : undefined}
-            sprints={data.sprints}
+            sprints={structureOptions ? structureOptions.controls?.sprints || [] : data.sprints}
             tasks={data.tasks}
-            workstreams={controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
+            workstreams={structureOptions ? [...structureOptions.controls?.workstreams || []] : controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
             visibleCount={displayedView === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.planningBoard?.table?.page.total ?? controller.visibleTasks.length}

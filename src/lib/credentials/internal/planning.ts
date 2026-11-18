@@ -1,3 +1,9 @@
+import { loadPlanningStructureControls } from "@/features/planning-items/server/planning-structure-controls-read-source";
+import { loadPlanningStructureSelection } from "@/features/planning-items/server/planning-structure-read-source";
+import { loadPlanningBacklogRankTarget } from "@/features/planning-items/server/planning-backlog-rank-read-source";
+import { loadPlanningBacklogSupport } from "@/features/planning-items/server/planning-backlog-support-read-source";
+import type { BacklogSelectionQuery } from "@/features/backlog/model/backlog-selection";
+import { loadPlanningBacklogSelection } from "@/features/planning-items/server/planning-backlog-read-source";
 import "server-only";
 import type { Session } from "@supabase/supabase-js";
 import { projectSessionView } from "./session-view";
@@ -19,7 +25,7 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 
-import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlog-read-model-supabase";
+import { createSupabaseBacklogReadModel, loadSupabaseBacklogBootstrap } from "@/features/backlog/server/backlog-read-model-supabase";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
@@ -60,7 +66,7 @@ const planningPolicyActions: Record<PlanningCredentialInput["action"], SessionPo
   "planning.comment.create": "planning.contribute", "planning.blocker.report": "planning.contribute",
   "planning.focus.write": "planning.contribute", "planning.focus.delete": "planning.contribute", "planning.attendance.write": "planning.contribute",
   "planning.revision.read": "planning.revision.read", "planning.board.read": "planning.board.read", "planning.header.read": "team.read",
-  "planning.backlog.read": "team.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
+  "planning.backlog.read": "planning.backlog.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
   "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
   "planning.review.withdraw": "planning.contribute", "planning.review.reopen": "planning.contribute",
   "planning.task.update": "planning.correct", "planning.relationship.add": "planning.correct", "planning.relationship.remove": "planning.correct",
@@ -160,7 +166,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   // Preserve the existing explicit local profile-override path. Ordinary Board
   // publications use only the original user's bound data capability.
   const localProfileOverride = "localProfileOverride" in permission && permission.localProfileOverride === true;
-  const publicationSource = action === "planning.board.read" && !localProfileOverride
+  const publicationSource = (action === "planning.board.read" || action === "planning.backlog.read") && !localProfileOverride
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
@@ -320,9 +326,48 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (result.ok && result.status === "committed") reviewCommitted = true;
       return result;
     },
-    async loadBacklog() {
-      if (action !== "planning.backlog.read" || await current()) return { status: "forbidden" as const };
-      return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+    async loadBacklogBootstrap() {
+      if (action !== "planning.backlog.read" || !profile || !("user" in permission) || !permission.user.id || await current()) return { status: "forbidden" as const };
+      const result = await loadSupabaseBacklogBootstrap(service, { userId: permission.user.id, profileId: profile.id, platformRole: profile.platformRole });
+      if (await current()) return { status: "forbidden" as const };
+      return result;
+    },
+    async loadBacklog(query?: BacklogSelectionQuery | import("@/features/backlog/model/backlog-support").BacklogSupportQuery | import("@/features/backlog/model/backlog-rank-target").BacklogRankQuery, options?: { signal?: AbortSignal }) {
+      const selected = query?.view === "backlog";
+      if (action !== "planning.backlog.read" || !selected && await current()) return { status: "forbidden" as const };
+      let admissionChecked = false, admissionDenied = false;
+      const admitSelection = async () => {
+        admissionChecked = true;
+        admissionDenied = true;
+        const denial = await current();
+        admissionDenied = Boolean(denial);
+        return denial;
+      };
+      try {
+        if (!query) return createSupabaseBacklogReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
+        const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+        const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+        const context = { authorized: true, actorProfileId: profile?.id || null,
+          authorityDeadline: readAuthority?.deadline, publicationSource, signal,
+          authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+            .update(JSON.stringify(["backlog-selection-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") };
+        // The selected RPC keeps its fresh dispatch guard. Local rejection still needs admission before disclosure.
+        const selectedService = selected ? planningService(strictService, admitSelection, () => {
+          if (!detailEnvironmentCurrent()) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+          assertKnown();
+        }) : null;
+        const result = query.view === "backlog-support" ? await loadPlanningBacklogSupport(service, context, query)
+          : query.view === "backlog-rank" ? await loadPlanningBacklogRankTarget(service, context, query)
+            : selectedService ? await loadPlanningBacklogSelection(selectedService, context, query) : { status: "unavailable" as const };
+        if (selected && !admissionChecked) await admitSelection();
+        if (admissionDenied) return { status: "forbidden" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        return result.status === "ready" && readAuthority ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline ?? readAuthority.deadline) } } : result;
+      } catch (error) {
+        if (selected && !admissionChecked) await admitSelection();
+        if (admissionDenied) return { status: "forbidden" as const };
+        throw error;
+      }
     },
     async loadSprint() {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
@@ -412,6 +457,28 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
         : { status: "forbidden" as const };
       return result;
+    },
+    async loadStructureControls(options?: { signal?: AbortSignal }) {
+      if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningStructureControls(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } } : result;
+    },
+    async loadStructure(query: import("@/features/planning/model/planning-structure-query").PlanningStructureQuery, options?: { signal?: AbortSignal }) {
+      if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningStructureSelection(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource,
+        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+          .update(JSON.stringify(["planning-structure-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      return result.status === "ready" && readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } } : result;
     },
     async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
