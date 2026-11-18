@@ -1,3 +1,4 @@
+import { loadPlanningTeamMetrics } from "@/features/planning-items/server/planning-team-metrics-read-source";
 import "server-only";
 import { disconnectBookkeeping } from "./disconnect-bookkeeping";
 import { getGoogleWorkspaceDisconnectView, disconnectGoogleWorkspace } from "@/features/team-workweek/server/google-workspace-disconnect";
@@ -62,6 +63,22 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       try {
         await bound.current(); bound.assertCurrent();
         const result = await loadSupabaseTeamPeople(service, { authorized: true, actorProfileId: profile.id,
+          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+        bound.assertCurrent();
+        return result.status === "ready" ? { ...result, readAuthority } : result;
+      } catch (error) {
+        return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+      }
+    },
+    async loadTeamMetrics(options?: { signal?: AbortSignal }) {
+      if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+      const readAuthority = context.readAuthority;
+      if (!readAuthority) return { status: "unavailable" as const };
+      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      try {
+        await bound.current(); bound.assertCurrent();
+        const result = await loadPlanningTeamMetrics(service, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
           authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
         bound.assertCurrent();
         return result.status === "ready" ? { ...result, readAuthority } : result;
