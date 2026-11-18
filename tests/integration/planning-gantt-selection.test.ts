@@ -137,3 +137,53 @@ test("selected Gantt retains its credential environment and original deadline wi
     expect(permission.readAuthority.deadline).toBe(originalDeadline);
   } finally { vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY",f.local.SERVICE_ROLE_KEY); }
 }),120_000);
+
+test("selected Gantt retains complete filtered and unfiltered toolbar counts beyond its approved Deliverable membership", () => withPlanningCredentialDatabase(async f => {
+  const query = `${f.prefix} Count 50%_Ä`, epicId = `${f.prefix}-epic`;
+  const doneId = `${f.prefix}-count-done`, proposalId = `${f.prefix}-count-proposal`, otherId = `${f.prefix}-count-other`, childId = `${f.prefix}-count-child`;
+  await f.db.query("update public.tasks set description=$1 where id=any($2)", [query, [epicId, f.initiativeId]]);
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,approval_status,owner,assignee)
+    values($1,'findmydoc-founder-execution','Completed count member',$5||' only-done','deliverable',$6,'Erledigt','P2','approved',$7,$7),
+      ($2,'findmydoc-founder-execution','Proposed count member',$5,'deliverable',$6,'Offen','P2','proposed',$7,$7),
+      ($3,'findmydoc-founder-execution','Unmatched count member','Outside the search','deliverable',$6,'Offen','P2','approved',$7,$7),
+      ($4,'findmydoc-founder-execution','Matching count Sub-Issue',$5,'sub_issue',$1,'Offen','P2',null,$7,$7)`,
+  [doneId, proposalId, otherId, childId, query, f.initiativeId, f.actors.founder.profileId]);
+
+  const { createCompletePlanningReference } = await importTestModule("tests/helpers/complete-planning-reference.ts", { "server-only": {} });
+  const client = createClient(f.local.API_URL, f.local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const reference = await createCompletePlanningReference(client).load({ authorized: true, actorProfileId: f.actors.founder.profileId, query: { view: "complete" } });
+  expect(reference.status).toBe("ready");
+  if (reference.status !== "ready") throw new Error("Complete toolbar reference unavailable");
+  const data = planningWorkspaceModelToPlanningShellState(reference.model);
+  const currentProfile = data.profiles.find(profile => profile.id === f.actors.founder.profileId)!;
+  const unfilteredIds = data.tasks.filter(task => task.taskType !== "sub_issue").map(task => task.id).sort();
+  expect(unfilteredIds).toEqual([epicId, f.initiativeId, doneId, proposalId, otherId].sort());
+  const filters = { ...DEFAULT_PLANNING_FILTERS, query };
+  const legacy = buildPlanningTaskTableViewModel({ data, filters, currentProfile, includeAssignedSubIssueParents: false });
+  expect(legacy.visibleTasks.map(task => task.id).sort()).toEqual([epicId, f.initiativeId, doneId, proposalId].sort());
+  expect(legacy.visibleTasks.filter(task => task.taskType === "deliverable" && isTaskPlanningActive(task)).map(task => task.id)).toEqual([doneId]);
+  const narrowed = { ...filters, query: "only-done" };
+  const narrowLegacy = buildPlanningTaskTableViewModel({ data, filters: narrowed, currentProfile, includeAssignedSubIssueParents: false });
+  expect(narrowLegacy.visibleTasks.map(task => task.id)).toEqual([doneId]);
+
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const before = f.observed.length;
+  const request = async (selectedFilters: typeof filters) => {
+    const response = await GET(f.request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "gantt", filters: selectedFilters }))}`));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.model.gantt.itemIds).toEqual([doneId]);
+    expect(body.model.gantt.coverage).toEqual({ items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" });
+    expect(body.currentProfile).toMatchObject({ id: f.actors.founder.profileId, platformRole: "founder" });
+    expect(body.readAuthority.userId).toBe(f.actors.founder.userId);
+    expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+    expect(body.model.gantt.sourceRevision).toBe(reference.model.scopeRevision);
+    expect(body.model.items.map((task: Task) => task.id).sort()).toEqual([epicId, f.initiativeId, doneId].sort());
+    return body;
+  };
+  const selected = await request(filters);
+  expect(selected.model.gantt.toolbarCounts).toEqual({ filtered: 4, unfiltered: 5 });
+  const narrowSelected = await request(narrowed);
+  expect(narrowSelected.model.gantt.toolbarCounts).toEqual({ filtered: 1, unfiltered: 5 });
+  expect(f.observed.slice(before).filter(row => ["/rest/v1/active_tasks", "/rest/v1/profiles", "/rest/v1/sprints", "/rest/v1/rpc/planning_workspace_snapshot"].includes(row.path))).toEqual([]);
+}), 120_000);
