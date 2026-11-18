@@ -1,13 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
+import { usePlanningBusinessState } from "./hooks/use-planning-business-state";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
 import { itemPageHeaderData, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../tests/helpers/task-detail-page-browser-fixture";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 
 const teammate = { ...itemPageProfile, id: "independent-team-member", name: "Bea Team", platformRole: "founder" as const, weeklyCapacity: 37, persistenceBasis: { platform_role: "founder", org_role: "", weekly_capacity: 37 } };
+
+function ReceiptProbe() {
+  const state = usePlanningBusinessState();
+  const snapshot = () => state ? `${state.team().readStatus}/${state.team().completeness}/${state.team().profiles.length}/${state.teamMetrics().readStatus}` : "none";
+  const value = useSyncExternalStore(state?.subscribe || (() => () => {}), snapshot, snapshot);
+  return <output aria-label="Team receipt state">{value}</output>;
+}
 
 function IndependentTeamPeople() {
   const [ready, setReady] = useState(false);
@@ -42,7 +50,7 @@ function IndependentTeamPeople() {
     <output aria-label="People reads">{reads.people}</output>
     <output aria-label="Metrics reads">{reads.metrics}</output>
     <output aria-label="Broad Team reads">{reads.broad}</output>
-    {ready && <PlanningStateProvider><PlanningApp initialWorkspace="team" initialData={{ ...emptyPlanningShellState, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={false} authRequired source="supabase" /></PlanningStateProvider>}
+    {ready && <PlanningStateProvider><PlanningApp initialWorkspace="team" initialData={{ ...emptyPlanningShellState, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={false} authRequired source="supabase"><ReceiptProbe /></PlanningApp></PlanningStateProvider>}
   </>;
 }
 
@@ -56,7 +64,7 @@ export const PeopleAndCeoEditingRemainAvailableWhenMetricsFail: Story = {
     await waitFor(() => {
       if (!canvas.queryByRole("heading", { name: "Bea Team" })) {
         const value = (label: string) => canvas.getByLabelText(label).textContent || "unknown";
-        throw new Error(`Team startup: people=${value("People reads")}; metrics=${value("Metrics reads")}; broad=${value("Broad Team reads")}`);
+        throw new Error(`Team startup: people=${value("People reads")}; metrics=${value("Metrics reads")}; broad=${value("Broad Team reads")}; state=${value("Team receipt state")}`);
       }
     });
     await expect(canvas.getByRole("heading", { name: "Bea Team" })).toBeVisible();
