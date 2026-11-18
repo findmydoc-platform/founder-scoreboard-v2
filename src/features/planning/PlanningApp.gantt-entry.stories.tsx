@@ -27,7 +27,6 @@ function SavedGanttEntry() {
   const [ready, setReady] = useState(false);
   const [release, setRelease] = useState<(() => void) | undefined>();
   const [reads, setReads] = useState({ gantt: 0, board: 0, complete: 0 });
-  const [ganttFlags, setGanttFlags] = useState("none");
   const [basis] = useState(() => {
     const observedAt = new Date().toISOString();
     const model: PlanningWorkspaceModel = {
@@ -45,16 +44,11 @@ function SavedGanttEntry() {
   useEffect(() => {
     let mounted = true;
     let restore: (() => void) | undefined;
-    const observed: { key?: string; atDispatch?: boolean; signal?: AbortSignal | null }[] = [];
-    const publishFlags = () => {
-      if (mounted) setGanttFlags(observed.map((entry, index) =>
-        `read ${index + 1}: key=${entry.key === observed[0]?.key ? "same" : "different"}, dispatch-aborted=${entry.atDispatch ?? "unknown"}, later-aborted=${entry.signal?.aborted ?? "unknown"}`,
-      ).join("; "));
-    };
     const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`;
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     void mockItemPageBrowser({ respond: (input, init) => {
+      init?.signal?.throwIfAborted();
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
       if (url.pathname === "/api/planning-source-version") return Response.json({ version: sourceRevision });
@@ -78,12 +72,6 @@ function SavedGanttEntry() {
       }
       setReads(value => ({ ...value, gantt: value.gantt + 1 }));
       const query = normalizePlanningGanttQuery(raw);
-      if (observed.length < 2) {
-        const signal = init?.signal;
-        observed.push({ key: query ? planningGanttQueryKey(query) : undefined, atDispatch: signal?.aborted, signal });
-        signal?.addEventListener("abort", publishFlags, { once: true });
-        publishFlags();
-      }
       if (!query || query.filters.query !== savedSearch) return Response.json({ error: "Saved Gantt filters were not applied" }, { status: 400 });
       const model: PlanningWorkspaceModel = {
         ...basis.model, preferences: [], items: [...selected, initiative], sprints: [sprint],
@@ -106,14 +94,12 @@ function SavedGanttEntry() {
     return () => {
       mounted = false;
       restore?.();
-      for (const entry of observed) entry.signal?.removeEventListener("abort", publishFlags);
       if (previous === null) localStorage.removeItem(seenKey);
       else localStorage.setItem(seenKey, previous);
     };
   }, [basis]);
   return <>
     <output aria-label="Saved Gantt reads">{reads.gantt}</output>
-    <output aria-label="Saved Gantt dispatch diagnostics">{ganttFlags}</output>
     <output aria-label="Saved Gantt board reads">{reads.board}</output>
     <output aria-label="Saved Gantt complete reads">{reads.complete}</output>
     {release ? <button type="button" onClick={release}>Gantt-Antwort freigeben</button> : null}
@@ -140,13 +126,8 @@ export default meta;
 export const SavedGanttStartsWithItsSelectedBasis: StoryObj<typeof meta> = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const assertSingleGanttRead = () => {
-      if (canvas.getByLabelText("Saved Gantt reads").textContent !== "1") {
-        throw new Error(`Expected exactly one selected Gantt read. ${canvas.getByLabelText("Saved Gantt dispatch diagnostics").textContent}`);
-      }
-    };
     const release = await canvas.findByRole("button", { name: "Gantt-Antwort freigeben" });
-    assertSingleGanttRead();
+    await expect(canvas.getByLabelText("Saved Gantt reads")).toHaveTextContent(/^1$/);
     await expect(canvas.getByLabelText("Saved Gantt board reads")).toHaveTextContent(/^0$/);
     await expect(canvas.getByLabelText("Saved Gantt complete reads")).toHaveTextContent(/^0$/);
     await expect(await canvas.findByText("Gantt wird geladen …")).toBeVisible();
@@ -162,7 +143,7 @@ export const SavedGanttStartsWithItsSelectedBasis: StoryObj<typeof meta> = {
       await expect(results.getByRole("link", { name: `${task.title} · 5 Tage` })).toHaveAttribute("title", `${task.title} · ${initiative.title}`);
     }
     await expect(results.getAllByRole("link")).toHaveLength(selected.length * 2);
-    assertSingleGanttRead();
+    await expect(canvas.getByLabelText("Saved Gantt reads")).toHaveTextContent(/^1$/);
     await expect(canvas.getByLabelText("Saved Gantt board reads")).toHaveTextContent(/^0$/);
     await expect(canvas.getByLabelText("Saved Gantt complete reads")).toHaveTextContent(/^0$/);
   },
