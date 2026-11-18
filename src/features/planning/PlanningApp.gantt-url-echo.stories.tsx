@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { ReadonlyURLSearchParams, useSearchParams } from "@storybook/nextjs-vite/navigation.mock";
 import { expect, userEvent, waitFor, within } from "storybook/test";
@@ -22,6 +22,7 @@ const task = taskDetailStoryTask({ id: "echo-task", title: "Echo needle work", p
 
 function GanttUrlEcho() {
   const [ready, setReady] = useState(false), [echo, setEcho] = useState(0);
+  const echoedParams = useRef<ReadonlyURLSearchParams | undefined>(undefined);
   const [counts, setCounts] = useState({ searched: 0, aborted: 0, complete: 0, sameQuery: true });
   const [release, setRelease] = useState<(() => void) | undefined>();
   const [basis] = useState(() => {
@@ -35,6 +36,11 @@ function GanttUrlEcho() {
   useEffect(() => {
     let mounted = true, restore: (() => void) | undefined, searchedKey: string | undefined;
     const held: Array<() => void> = [], originalNavigation = useSearchParams.getMockImplementation();
+    // Keep the original Next hook calls in every render, including after its URL value changes.
+    useSearchParams.mockImplementation(() => {
+      const current = originalNavigation?.();
+      return echoedParams.current ?? current ?? new ReadonlyURLSearchParams();
+    });
     const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`, previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     void mockItemPageBrowser({ respond: (input, init) => {
@@ -80,7 +86,7 @@ function GanttUrlEcho() {
     <button type="button" onClick={() => {
       const params = new URLSearchParams(window.location.search); params.set("tasks.query", needle);
       window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
-      useSearchParams.mockReturnValue(new ReadonlyURLSearchParams(params)); setEcho(value => value + 1);
+      echoedParams.current = new ReadonlyURLSearchParams(params); setEcho(value => value + 1);
     }}>Gleiche Such-URL übernehmen</button>
     {release ? <button type="button" onClick={release}>Suchantwort freigeben</button> : null}
     {ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialData={planningWorkspaceModelToPlanningShellState(basis.model)}
