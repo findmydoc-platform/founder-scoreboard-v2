@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/model/planning-board-query";
@@ -76,4 +76,64 @@ test("selected Gantt supplies every matching approved Deliverable with complete 
   expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
   expect(gantt.sourceRevision).toEqual(expect.any(String));
   expect(Number.isFinite(Date.parse(gantt.observedAt))).toBe(true);
+}),120_000);
+
+test("selected Gantt retains mapped readers and denies unmapped, unauthenticated and direct-user RPC access", () => withPlanningCredentialDatabase(async f => {
+  const {GET}=await importTestModule("src/app/api/planning-board-data/route.ts",{"server-only":{}});
+  const scope={view:"gantt",filters:{...DEFAULT_PLANNING_FILTERS,query:f.prefix}};
+  const path=`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`;
+  for(const actor of ["ceo","deputy","founder","viewer","administrator"] as const) {
+    const response=await GET(f.request(actor,path));expect(response.status).toBe(200);
+    const body=await response.json();expect(body.model.gantt.itemIds).toEqual([]);
+    expect(body.model.gantt.coverage).toEqual({items:"complete",hierarchy:"complete",schedule:"complete",relationships:"complete"});
+    expect(body.currentProfile).toMatchObject({id:f.actors[actor].profileId,platformRole:actor==="administrator"?"founder":actor});
+    expect(body.readAuthority.userId).toBe(f.actors[actor].userId);expect(body.readAuthority.deadline).toBeGreaterThan(Date.now());
+  }
+  const unmapped=await GET(f.request("unmapped",path));expect(unmapped.status).toBe(403);expect(await unmapped.json()).not.toHaveProperty("model");
+  const anonymous=f.request("founder",path);anonymous.headers.delete("authorization");
+  const denied=await GET(anonymous);expect(denied.status).toBe(401);expect(await denied.json()).not.toHaveProperty("model");
+  for(const actor of ["founder","unmapped","anonymous"] as const) {
+    const response=await f.rpc("planning_gantt_selection",{p_actor_profile_id:f.actors.founder.profileId,p_actor_user_id:f.actors.founder.userId,p_filters:scope.filters,p_evaluated_at:null},actor);
+    expect(response.status).toBe(actor==="anonymous"?401:403);
+  }
+}),120_000);
+
+test.each(["role","session","source","deadline"] as const)("selected Gantt rejects %s loss after selection without publishing an overall view", boundary => withPlanningCredentialDatabase(async f => {
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const permission=await authorizeCredentialAction({credential:{kind:"session-request",request:f.request("founder","/api/planning-board-data")},action:"planning.board.read"});
+  expect(permission.ok).toBe(true);if(!permission.ok||!permission.readAuthority)throw new Error("Expected original Gantt authority");
+  const originalDeadline=permission.readAuthority.deadline,transport=globalThis.fetch;
+  let changed=false,restoreClock:(()=>void)|undefined;
+  vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const request=new Request(input,init),response=await transport(request);
+    if(new URL(request.url).pathname==="/rest/v1/rpc/planning_gantt_selection"&&!changed) {
+      expect(response.status).toBe(200);changed=true;
+      if(boundary==="role")await f.db.query("update public.profiles set platform_role='viewer' where id=$1",[f.actors.founder.profileId]);
+      if(boundary==="session")await f.db.query("delete from auth.sessions where id=$1",[f.actors.founder.sessionId]);
+      if(boundary==="source")await f.db.query("update public.tasks set title=title||' changed source' where id=$1",[f.initiativeId]);
+      if(boundary==="deadline") {
+        const clock=vi.spyOn(Date,"now").mockReturnValue(originalDeadline);restoreClock=()=>clock.mockRestore();
+      }
+    }
+    return response;
+  });
+  try {
+    const result=await permission.planning.loadGantt({view:"gantt",filters:{...DEFAULT_PLANNING_FILTERS,query:f.prefix}});
+    expect(changed).toBe(true);expect(result.status).toBe(boundary==="source"?"staleContinuation":"forbidden");
+    expect(result).not.toHaveProperty("model");expect(permission.readAuthority.deadline).toBe(originalDeadline);
+  } finally { restoreClock?.();vi.stubGlobal("fetch",transport); }
+}),120_000);
+
+test("selected Gantt retains its credential environment and original deadline without a full-reader fallback", () => withPlanningCredentialDatabase(async f => {
+  const {authorizeCredentialAction}=await importTestModule("src/lib/credentials/index.ts",{"server-only":{}});
+  const permission=await authorizeCredentialAction({credential:{kind:"session-request",request:f.request("founder","/api/planning-board-data")},action:"planning.board.read"});
+  expect(permission.ok).toBe(true);if(!permission.ok||!permission.readAuthority)throw new Error("Expected original Gantt environment");
+  const originalDeadline=permission.readAuthority.deadline,before=f.observed.length;
+  try {
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY","replaced-synthetic-gantt-key");
+    const result=await permission.planning.loadGantt({view:"gantt",filters:{...DEFAULT_PLANNING_FILTERS,query:f.prefix}});
+    expect(result).toEqual({status:"unavailable"});expect(result).not.toHaveProperty("model");
+    expect(f.observed.slice(before).filter(row=>row.path==="/rest/v1/rpc/planning_gantt_selection"||row.path==="/rest/v1/active_tasks")).toEqual([]);
+    expect(permission.readAuthority.deadline).toBe(originalDeadline);
+  } finally { vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY",f.local.SERVICE_ROLE_KEY); }
 }),120_000);

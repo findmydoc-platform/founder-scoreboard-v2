@@ -9,6 +9,7 @@ export type PlanningWorkspaceModel = Readonly<{
   scopeRevision?: string;
   board?: import("@/features/planning/model/planning-board-query").PlanningBoardResult;
   table?: import("@/features/planning/model/planning-table-result").PlanningTableResult;
+  gantt?: import("@/features/planning/model/planning-gantt-result").PlanningGanttResult;
   coverage?: PlanningWorkspaceReadCoverage;
   taskOmittedFields?: readonly (keyof Task)[];
   project: Project;
@@ -23,6 +24,7 @@ export type PlanningWorkspaceModel = Readonly<{
 export type PlanningWorkspaceLoadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
+  actorUserId?: string;
   structureParentId?: string;
   authorityKey?: string;
   authorityDeadline?: number;
