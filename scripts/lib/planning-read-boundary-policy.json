@@ -1314,6 +1314,13 @@
       "target": "planning_structure_controls",
       "fingerprint": "7e1e45e6aebf5a7296be323872ee6f31f753c7919308166a6698013ecdb92f56",
       "contract": "STRUCTURE-CONTROLS"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-gantt-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_gantt_selection",
+      "fingerprint": "0f815d4a53d8d1aa7a0aee3bb459d326a534a091a4febc22f0bed11383e1b52a",
+      "contract": "GANTT-SELECTED"
     }
   ]
 }
