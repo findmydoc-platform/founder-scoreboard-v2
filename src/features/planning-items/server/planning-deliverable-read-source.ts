@@ -189,11 +189,11 @@ async function resolveQuery(supabase: SupabaseClient, context: PlanningWorkspace
     if (!input.view && preference?.defaultTaskView === "gantt") {
       if (preference.profileId !== context.actorProfileId) return { status: "unavailable" };
       // This is only the admitted mount context; selected Gantt data starts in its visible client owner.
-      const projectRead = supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId).single<Parameters<typeof mapPlanningProject>[0]>();
-      const selfRead = supabase.from("profiles").select(planningProfileSelect).eq("id", context.actorProfileId || "").single<DbProfile>();
+      const projectRead = supabase.from("projects").select("id,name,range_label,review_objection_window_hours").eq("id", planningProjectId);
+      const selfRead = supabase.from("profiles").select(planningProfileSelect).eq("id", context.actorProfileId || "");
       const [project, self] = await Promise.all([
-        context.signal ? projectRead.abortSignal(context.signal) : projectRead,
-        context.signal ? selfRead.abortSignal(context.signal) : selfRead,
+        (context.signal ? projectRead.abortSignal(context.signal) : projectRead).single<Parameters<typeof mapPlanningProject>[0]>(),
+        (context.signal ? selfRead.abortSignal(context.signal) : selfRead).single<DbProfile>(),
       ]);
       if (project.error || !project.data || project.data.id !== planningProjectId || typeof project.data.name !== "string"
         || self.error || !self.data || self.data.id !== context.actorProfileId || typeof self.data.name !== "string") return { status: "unavailable" };
