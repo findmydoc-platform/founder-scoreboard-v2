@@ -188,3 +188,31 @@ test("selected Gantt retains complete filtered and unfiltered toolbar counts bey
   expect(narrowSelected.model.gantt.toolbarCounts).toEqual({ filtered: 1, unfiltered: 5 });
   expect(f.observed.slice(before).filter(row => ["/rest/v1/active_tasks", "/rest/v1/profiles", "/rest/v1/sprints", "/rest/v1/rpc/planning_workspace_snapshot"].includes(row.path))).toEqual([]);
 }), 120_000);
+
+test("selected Gantt includes a matching approved paused Deliverable without fallback hydration", () => withPlanningCredentialDatabase(async f => {
+  const id = `${f.prefix}-paused-gantt`, query = `Paused Gantt marker ${f.prefix}`;
+  await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,approval_status,owner,assignee)
+    values($1,'findmydoc-founder-execution','Paused Gantt work',$2,'deliverable',$3,'Pausiert','P2','approved',$4,$4)`,
+  [id, query, f.initiativeId, f.actors.founder.profileId]);
+  const { createCompletePlanningReference } = await importTestModule("tests/helpers/complete-planning-reference.ts", { "server-only": {} });
+  const client = createClient(f.local.API_URL, f.local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const reference = await createCompletePlanningReference(client).load({ authorized: true, actorProfileId: f.actors.founder.profileId, query: { view: "complete" } });
+  expect(reference.status).toBe("ready");
+  if (reference.status !== "ready") throw new Error("Complete paused Gantt reference unavailable");
+  const data = planningWorkspaceModelToPlanningShellState(reference.model), filters = { ...DEFAULT_PLANNING_FILTERS, query };
+  const previous = buildPlanningTaskTableViewModel({ data, filters, currentProfile: data.profiles.find(profile => profile.id === f.actors.founder.profileId)!, includeAssignedSubIssueParents: false });
+  const expected = previous.visibleTasks.filter(task => task.taskType === "deliverable" && isTaskPlanningActive(task));
+  expect(expected.map(task => task.id)).toEqual([id]);
+  expect(expected[0].status).toBe("Pausiert");
+
+  const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+  const before = f.observed.length;
+  const response = await GET(f.request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify({ view: "gantt", filters }))}`));
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body.model.gantt.itemIds).toEqual([id]);
+  expect(body.model.gantt.total).toBe(1);
+  expect(body.model.gantt.coverage).toEqual({ items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" });
+  expect(body.model.items.find((task: Task) => task.id === id).status).toBe("Pausiert");
+  expect(f.observed.slice(before).filter(row => ["/rest/v1/active_tasks", "/rest/v1/profiles", "/rest/v1/sprints", "/rest/v1/rpc/planning_workspace_snapshot"].includes(row.path))).toEqual([]);
+}), 120_000);
