@@ -38,8 +38,11 @@ function boardModel():PlanningWorkspaceModel {
   };
 }
 
-function SelectedGanttFlow() {
-  const [ready,setReady]=useState(false),[counts,setCounts]=useState({gantt:0,complete:0});
+const offpageInitiative={id:"gantt-offpage-initiative",title:"Initiative außerhalb der Gantt-Auswahl"};
+const offpageWorkstream="Bereich außerhalb der Gantt-Auswahl";
+
+function SelectedGanttFlow({toolbar = false}: {toolbar?: boolean}) {
+  const [ready,setReady]=useState(false),[counts,setCounts]=useState({gantt:0,complete:0,controls:0});
   const [release,setRelease]=useState<(()=>void)|null>(null);
   const [basis]=useState(()=>({model:boardModel(),deadline:Date.now()+60_000,observedAt:new Date().toISOString()}));
   useEffect(()=>{
@@ -54,9 +57,15 @@ function SelectedGanttFlow() {
       if(url.pathname!=="/api/planning-board-data")return undefined;
       const raw=JSON.parse(url.searchParams.get("scope")||"{}");
       const authority={userId:itemPageUser.id,deadline:basis.deadline};
-      if(raw.view==="structure"&&raw.area==="controls")return Response.json({readAuthority:authority,readActor:{profileId:itemPageProfile.id,platformRole:itemPageProfile.platformRole},model:{revision:sourceRevision,controls:{
-        people:[{id:itemPageProfile.id,name:itemPageProfile.name}],sprints:[{id:sprint.id,name:sprint.name}],initiatives:[{id:parent.id,title:parent.title}],workstreams:[],coverage:"complete",sourceRevision,scopeRevision:"gantt-controls",observedAt:basis.observedAt,validUntil:new Date(basis.deadline).toISOString(),
-      }}});
+      if(raw.view==="structure"&&raw.area==="controls") {
+        setCounts(value=>({...value,controls:value.controls+1}));
+        const initiatives=[{id:parent.id,title:parent.title}];
+        if(toolbar)initiatives.push(offpageInitiative);
+        return Response.json({readAuthority:authority,readActor:{profileId:itemPageProfile.id,platformRole:itemPageProfile.platformRole},model:{revision:sourceRevision,controls:{
+          people:[{id:itemPageProfile.id,name:itemPageProfile.name}],sprints:[{id:sprint.id,name:sprint.name}],initiatives,
+          workstreams:toolbar?[offpageWorkstream]:[],coverage:"complete",sourceRevision,scopeRevision:"gantt-controls",observedAt:basis.observedAt,validUntil:new Date(basis.deadline).toISOString(),
+        }}});
+      }
       if(raw.view==="complete") {
         setCounts(value=>({...value,complete:value.complete+1}));
         return Response.json({error:"Gantt must not enumerate the complete workspace"},{status:503});
@@ -65,22 +74,24 @@ function SelectedGanttFlow() {
       const query=normalizePlanningGanttQuery(raw);
       if(!query)return Response.json({error:"Invalid Gantt fixture query"},{status:400});
       setCounts(value=>({...value,gantt:value.gantt+1}));
-      if(++attempts===1)return new Promise<Response>(resolve=>{
+      if(!toolbar&&++attempts===1)return new Promise<Response>(resolve=>{
         const releaseFailure=()=>{resolve(Response.json({error:"Selected Gantt unavailable"},{status:503}));if(mounted)setRelease(null);};
         releaseHeld=releaseFailure;
         setRelease(()=>releaseFailure);
       });
+      const matches=toolbar&&(query.filters.initiativeId===offpageInitiative.id||query.filters.workstream===offpageWorkstream)?[]:all;
       const model:PlanningWorkspaceModel={project:emptyPlanningShellState.project,revision:sourceRevision,scopeRevision:sourceRevision,
-        items:[parent,...all],people:[itemPageProfile],sprints:[sprint],relationships:[],preferences:[],
+        items:matches.length?[parent,...matches]:[],people:[itemPageProfile],sprints:[sprint],relationships:[],preferences:[],
         coverage:{items:"partial",people:"partial",sprints:"partial",relationships:"partial",preferences:"partial",strategies:"partial",raci:"partial",links:"partial",blockers:"partial"},
-        gantt:{query,queryKey:planningGanttQueryKey(query),itemIds:all.map(task=>task.id),contextIds:[parent.id],total:26,
+        gantt:{query,queryKey:planningGanttQueryKey(query),itemIds:matches.map(task=>task.id),contextIds:matches.length?[parent.id]:[],total:matches.length,
           coverage:{items:"complete",hierarchy:"complete",schedule:"complete",relationships:"complete"},sourceRevision,observedAt:basis.observedAt,temporalKey:"stable",validUntil:null},
       };
       return Response.json({model,readAuthority:authority,currentProfile:itemPageProfile});
     }}).then(cleanup=>{if(!mounted)cleanup();else{restore=cleanup;setReady(true);}});
     return()=>{mounted=false;releaseHeld?.();restore?.();if(previous===null)localStorage.removeItem(seenKey);else localStorage.setItem(seenKey,previous);};
-  },[basis]);
+  },[basis,toolbar]);
   return <><output aria-label="Selected Gantt requests">{counts.gantt}</output><output aria-label="Complete workspace requests">{counts.complete}</output>
+    {toolbar?<output aria-label="Structure controls requests">{counts.controls}</output>:null}
     {release?<button onClick={release}>Gantt-Leseantwort freigeben</button>:null}
     {ready?<PlanningStateProvider><PlanningApp initialWorkspace="planning" initialData={{...emptyPlanningShellState,tasks:[...basis.model.items],profiles:[itemPageProfile],sprints:[sprint]}}
       initialWorkspaceRead={planningWorkspaceHydration("planning",basis.model,session,{userId:itemPageUser.id,deadline:basis.deadline})}
@@ -121,6 +132,34 @@ export const SelectedGanttRetriesItsCompleteBasisWithoutWorkspaceFallback:Story=
     for(const task of all) {
       await expect(results.getByRole("link",{name:task.title})).toHaveAttribute("href",`/tasks/${task.id}`);
       await expect(results.getByRole("link",{name:`${task.title} · 5 Tage`})).toHaveAttribute("href",`/tasks/${task.id}`);
+    }
+    await expect(canvas.getByLabelText("Complete workspace requests")).toHaveTextContent(/^0$/);
+  },
+};
+
+
+export const GanttFiltersIncludeOptionsOutsideItsSelectedRows:Story={
+  args:{toolbar:true},
+  play:async({canvasElement})=>{
+    const canvas=within(canvasElement),body=within(document.body);
+    const board=within(await canvas.findByRole("region",{name:"Board nach Status"}));
+    await expect(await board.findByRole("link",{name:active.title})).toBeVisible();
+    await userEvent.click(canvas.getByRole("button",{name:"Gantt"}));
+    const results=within(await canvas.findByRole("region",{name:"Planungsergebnisse"}));
+    await expect(await results.findByRole("link",{name:active.title})).toBeVisible();
+    await expect(canvas.getByLabelText("Complete workspace requests")).toHaveTextContent(/^0$/);
+    await waitFor(()=>expect(canvas.getByLabelText("Structure controls requests")).toHaveTextContent(/^1$/));
+    await userEvent.click(canvas.getByRole("button",{name:"Filter"}));
+    for(const [label,optionName] of [
+      ["Nach Initiative filtern",offpageInitiative.title],
+      ["Nach Bereich filtern",offpageWorkstream],
+    ]){
+      const control=canvas.getByRole("combobox",{name:label});
+      await userEvent.click(control);
+      const option=await body.findByRole("option",{name:optionName,exact:true});
+      await expect(option).toBeVisible();
+      await userEvent.click(option);
+      await expect(control).toHaveTextContent(optionName);
     }
     await expect(canvas.getByLabelText("Complete workspace requests")).toHaveTextContent(/^0$/);
   },
