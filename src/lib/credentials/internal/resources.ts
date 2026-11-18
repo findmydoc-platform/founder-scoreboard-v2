@@ -80,6 +80,7 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         await bound.current(); bound.assertCurrent();
         const result = await loadPlanningTeamMetrics(service, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
           authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+        if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
         bound.assertCurrent();
         return result.status === "ready" ? { ...result, readAuthority } : result;
       } catch (error) {
