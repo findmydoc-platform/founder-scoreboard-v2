@@ -65,5 +65,6 @@ export async function resourceAuthority(input: ResourceCredentialInput, startedA
   const service = planningService(false, reassert, assertCurrent)!;
   const strictService = planningService(true, reassert, assertCurrent);
   const userData = "constrainedData" in permission ? permission.constrainedData(assertCurrent) : permission.data;
-  return { ok: true as const, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
+  const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
+  return { ok: true as const, readAuthority, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
 }

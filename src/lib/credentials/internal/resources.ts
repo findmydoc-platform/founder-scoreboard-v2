@@ -21,7 +21,8 @@ import { resourceAuthority } from "./resource-authority";
 import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
 import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
-import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
+import { planningPublicationSource } from "./planning-service";
+import { createSupabaseTeamReadModel, loadSupabaseTeamPeople } from "@/features/team/server/team-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { loadPlanningHeaderData } from "../../planning-header-data";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
@@ -52,6 +53,22 @@ export async function authorizeResource(input: ResourceCredentialInput) {
   let observedTool: DbFmdTool | null = null;
   let observedEvent: DbFounderEvent | null = null;
   return { ok: true as const, profile, resource: {
+    async loadTeamPeople(options?: { signal?: AbortSignal }) {
+      if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+      const readAuthority = context.readAuthority;
+      if (!readAuthority) return { status: "unavailable" as const };
+      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      try {
+        await bound.current(); bound.assertCurrent();
+        const result = await loadSupabaseTeamPeople(service, { authorized: true, actorProfileId: profile.id,
+          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+        bound.assertCurrent();
+        return result.status === "ready" ? { ...result, readAuthority } : result;
+      } catch (error) {
+        return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+      }
+    },
     loadStrategic() {
       if (action !== "strategic.read") return Promise.resolve({ status: "forbidden" as const });
       return load(createSupabaseStrategicPlanningReadModel(service));
