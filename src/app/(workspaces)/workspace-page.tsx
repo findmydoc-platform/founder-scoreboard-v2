@@ -211,6 +211,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
         <PlanningApp
           initialData={supportingWorkspaceModelToPlanningShellState(initialWorkspace, supportingWorkspace.model)}
           initialWorkspaceRead={teamRead}
+          initialServerHeaderRead={"serverHeaderRead" in supportingWorkspace ? supportingWorkspace.serverHeaderRead : undefined}
           initialHeaderData={supportingWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"
@@ -219,7 +220,9 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialCurrentProfile={auth.profile}
           initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
-        />
+        >
+          {"serverHeaderRead" in supportingWorkspace && supportingWorkspace.serverHeaderRead && supportingWorkspace.headerSlots ? <PlanningServerHeaderSlots read={supportingWorkspace.serverHeaderRead} results={supportingWorkspace.headerSlots} /> : null}
+        </PlanningApp>
       );
     }
 

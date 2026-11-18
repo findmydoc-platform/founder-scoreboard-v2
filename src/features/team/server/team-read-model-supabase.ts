@@ -26,7 +26,7 @@ export function createSupabaseTeamReadModel(supabase: SupabaseClient): TeamReadM
   };
 }
 
-export async function loadSupabaseTeamPeople(supabase: SupabaseClient, context: Pick<PlanningWorkspaceLoadContext, "authorized" | "actorProfileId" | "authorityDeadline" | "publicationSource" | "signal"> & { publicationBarrier?: Promise<unknown> }): Promise<TeamLoadResult> {
+export async function loadSupabaseTeamPeople(supabase: SupabaseClient, context: Pick<PlanningWorkspaceLoadContext, "authorized" | "actorProfileId" | "authorityDeadline" | "publicationSource" | "signal">): Promise<TeamLoadResult> {
   if (!context.authorized || !context.actorProfileId) return { status: "forbidden" };
   if (!context.publicationSource || !context.authorityDeadline) return { status: "unavailable" };
   if (context.authorityDeadline <= Date.now()) return { status: "forbidden" };
@@ -47,8 +47,6 @@ export async function loadSupabaseTeamPeople(supabase: SupabaseClient, context: 
   } while (rows.length < expectedCount);
   if (!rows.some(row => row.id === context.actorProfileId)) return { status: "forbidden" };
   if (rows.some(row => typeof row.id !== "string" || !row.id || typeof row.name !== "string")) return { status: "unavailable" };
-  // SSR waits for its independent Header slots before the only final publication check.
-  if (context.publicationBarrier) await context.publicationBarrier;
   const publication = await context.publicationSource.read(context.signal);
   if (publication.status !== "ready") return { status: publication.status };
   if (context.signal?.aborted || publication.revision !== source.revision) return { status: "unavailable" };
