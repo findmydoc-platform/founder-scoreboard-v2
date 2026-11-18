@@ -89,7 +89,7 @@ function SavedGanttEntry() {
         ...basis.model, preferences: [], items: [...selected, initiative], sprints: [sprint],
         gantt: {
           query, queryKey: planningGanttQueryKey(query), itemIds: selected.map(task => task.id), contextIds: [initiative.id],
-          total: selected.length, coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
+          total: selected.length, toolbarCounts: { filtered: selected.length, unfiltered: selected.length + 1 }, coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
           sourceRevision, observedAt: basis.observedAt, temporalKey: "stable", validUntil: null,
         },
       };
@@ -140,8 +140,13 @@ export default meta;
 export const SavedGanttStartsWithItsSelectedBasis: StoryObj<typeof meta> = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const assertSingleGanttRead = () => {
+      if (canvas.getByLabelText("Saved Gantt reads").textContent !== "1") {
+        throw new Error(`Expected exactly one selected Gantt read. ${canvas.getByLabelText("Saved Gantt dispatch diagnostics").textContent}`);
+      }
+    };
     const release = await canvas.findByRole("button", { name: "Gantt-Antwort freigeben" });
-    await expect(canvas.getByLabelText("Saved Gantt reads"), canvas.getByLabelText("Saved Gantt dispatch diagnostics").textContent || undefined).toHaveTextContent(/^1$/);
+    assertSingleGanttRead();
     await expect(canvas.getByLabelText("Saved Gantt board reads")).toHaveTextContent(/^0$/);
     await expect(canvas.getByLabelText("Saved Gantt complete reads")).toHaveTextContent(/^0$/);
     await expect(await canvas.findByText("Gantt wird geladen …")).toBeVisible();
@@ -157,7 +162,7 @@ export const SavedGanttStartsWithItsSelectedBasis: StoryObj<typeof meta> = {
       await expect(results.getByRole("link", { name: `${task.title} · 5 Tage` })).toHaveAttribute("title", `${task.title} · ${initiative.title}`);
     }
     await expect(results.getAllByRole("link")).toHaveLength(selected.length * 2);
-    await expect(canvas.getByLabelText("Saved Gantt reads"), canvas.getByLabelText("Saved Gantt dispatch diagnostics").textContent || undefined).toHaveTextContent(/^1$/);
+    assertSingleGanttRead();
     await expect(canvas.getByLabelText("Saved Gantt board reads")).toHaveTextContent(/^0$/);
     await expect(canvas.getByLabelText("Saved Gantt complete reads")).toHaveTextContent(/^0$/);
   },
