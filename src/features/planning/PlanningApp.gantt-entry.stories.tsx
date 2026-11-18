@@ -14,7 +14,7 @@ import { planningWorkspaceHydration } from "./model/planning-workspace-hydration
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 
 const sourceRevision = "1";
-const savedSearch = "Saved timeline";
+const savedSearch = "saved timeline";
 const session = { userId: itemPageUser.id, user: itemPageUser, revision: "item-page-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 const sprint = { id: "saved-gantt-sprint", name: "Timeline Sprint", startDate: "2026-11-16", endDate: "2026-11-20", reviewDueAt: "", scoreLocked: false, status: "planning" as const };
 const initiative = taskDetailStoryTask({ id: "saved-gantt-parent", title: "Saved initiative", taskType: "initiative" });
