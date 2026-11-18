@@ -42,7 +42,7 @@ function IndependentTeamPeople() {
     <output aria-label="People reads">{reads.people}</output>
     <output aria-label="Metrics reads">{reads.metrics}</output>
     <output aria-label="Broad Team reads">{reads.broad}</output>
-    {ready && <PlanningStateProvider><PlanningApp initialWorkspace="team" initialData={{ ...emptyPlanningShellState, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider>}
+    {ready && <PlanningStateProvider><PlanningApp initialWorkspace="team" initialData={{ ...emptyPlanningShellState, profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded={false} authRequired source="supabase" /></PlanningStateProvider>}
   </>;
 }
 
