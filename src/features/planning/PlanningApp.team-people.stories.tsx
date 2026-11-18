@@ -53,7 +53,13 @@ type Story = StoryObj<typeof meta>;
 export const PeopleAndCeoEditingRemainAvailableWhenMetricsFail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole("heading", { name: "Bea Team" })).toBeVisible();
+    await waitFor(() => {
+      if (!canvas.queryByRole("heading", { name: "Bea Team" })) {
+        const value = (label: string) => canvas.getByLabelText(label).textContent || "unknown";
+        throw new Error(`Team startup: people=${value("People reads")}; metrics=${value("Metrics reads")}; broad=${value("Broad Team reads")}`);
+      }
+    });
+    await expect(canvas.getByRole("heading", { name: "Bea Team" })).toBeVisible();
     await waitFor(() => expect(canvas.getByLabelText("Metrics reads")).not.toHaveTextContent(/^0$/));
     await expect(canvas.getByLabelText("People reads")).not.toHaveTextContent(/^0$/);
     await expect(canvas.getByLabelText("Broad Team reads")).toHaveTextContent(/^0$/);
