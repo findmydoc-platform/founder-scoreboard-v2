@@ -20,6 +20,8 @@ const sprint={id:"gantt-sprint",name:"Gantt Sprint",startDate:"2026-11-16",endDa
 const active=taskDetailStoryTask({id:"gantt-active",title:"Active Gantt work",parentTaskId:parent.id,sprintId:sprint.id,assigneeId:itemPageProfile.id,ownerId:itemPageProfile.id,updatedAt});
 const completed=Array.from({length:25},(_,index)=>taskDetailStoryTask({id:`gantt-done-${index+1}`,title:`Completed Gantt work ${index+1}`,status:"Erledigt",parentTaskId:parent.id,sprintId:sprint.id,order:index+1,updatedAt}));
 const all=[active,...completed],initialCards=[active,...completed.slice(0,20)];
+// The toolbar also counts non-deliverables that the Gantt timeline does not render.
+const workspaceToolbarCount=all.length+5;
 const session={userId:itemPageUser.id,user:itemPageUser,revision:"item-page-session",expiresAt:Math.floor(Date.now()/1000)+3600};
 const revision={activeTaskCount:all.length+1,latestUpdatedAt:updatedAt};
 
@@ -84,6 +86,7 @@ function SelectedGanttFlow({toolbar = false}: {toolbar?: boolean}) {
         items:matches.length?[parent,...matches]:[],people:[itemPageProfile],sprints:[sprint],relationships:[],preferences:[],
         coverage:{items:"partial",people:"partial",sprints:"partial",relationships:"partial",preferences:"partial",strategies:"partial",raci:"partial",links:"partial",blockers:"partial"},
         gantt:{query,queryKey:planningGanttQueryKey(query),itemIds:matches.map(task=>task.id),contextIds:matches.length?[parent.id]:[],total:matches.length,
+          toolbarCounts:{filtered:matches.length?workspaceToolbarCount:0,unfiltered:workspaceToolbarCount},
           coverage:{items:"complete",hierarchy:"complete",schedule:"complete",relationships:"complete"},sourceRevision,observedAt:basis.observedAt,temporalKey:"stable",validUntil:null},
       };
       return Response.json({model,readAuthority:authority,currentProfile:itemPageProfile});
@@ -121,6 +124,7 @@ export const SelectedGanttRetriesItsCompleteBasisWithoutWorkspaceFallback:Story=
     await expect(canvas.getByRole("button",{name:"Board"})).toBeEnabled();
     await userEvent.click(canvas.getByRole("button",{name:"Gantt-Leseantwort freigeben"}));
     const retry=await canvas.findByRole("button",{name:"Ansicht erneut laden"});
+    await expect(canvas.queryByText(/^von [0-9]+$/, { selector: "span" })).not.toBeInTheDocument();
     await expect(retry).toBeEnabled();
     await expect(canvas.getByLabelText("Complete workspace requests")).toHaveTextContent(/^0$/);
     await userEvent.click(retry);
@@ -129,6 +133,7 @@ export const SelectedGanttRetriesItsCompleteBasisWithoutWorkspaceFallback:Story=
     const bar=await results.findByRole("link",{name:`${target.title} · 5 Tage`});
     await expect(bar).toHaveAttribute("href",`/tasks/${target.id}`);
     await expect(bar).toHaveAttribute("title",`${target.title} · ${parent.title}`);
+    await expect(canvas.getByText(`von ${workspaceToolbarCount}`, { selector: "span" })).toHaveTextContent(`${workspaceToolbarCount} von ${workspaceToolbarCount}`);
     for(const task of all) {
       await expect(results.getByRole("link",{name:task.title})).toHaveAttribute("href",`/tasks/${task.id}`);
       await expect(results.getByRole("link",{name:`${task.title} · 5 Tage`})).toHaveAttribute("href",`/tasks/${task.id}`);

@@ -45,8 +45,8 @@ type PlanningFiltersProps = {
   workstreams: string[];
   quickFilters: Array<{ id: string; label: string }>;
   expanded: boolean;
-  visibleCount: number;
-  totalCount: number;
+  visibleCount: number | null;
+  totalCount: number | null;
   showPlanningLevel: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onChange: (filters: PlanningFiltersValue, history?: TableUrlHistoryMode) => void;
@@ -78,6 +78,7 @@ export function PlanningFilters({
   onPlanningLevelChange,
   onPlanningParentFilterChange,
 }: PlanningFiltersProps) {
+  const resultCounts = visibleCount !== null && totalCount !== null ? { visibleCount, totalCount } : undefined;
   const compactViewport = useCompactPlanningViewport();
   const mobileDialogRef = useModalDialog<HTMLDivElement>({
     open: expanded && compactViewport,
@@ -293,7 +294,7 @@ export function PlanningFilters({
           activeFilters={activeFilters}
           isDirty={isDirty}
           onReset={resetFilters}
-          results={[{ id: "tasks", visibleCount, totalCount }]}
+          results={resultCounts ? [{ id: "tasks", ...resultCounts }] : []}
           leadingControls={showPlanningLevel ? (
             <div data-tour-id="planning-kanban-level-switch">
               <PlanningLevelSelect
@@ -332,7 +333,7 @@ export function PlanningFilters({
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div className="min-w-0">
                 <h2 id="planning-mobile-filter-title" className="text-base font-semibold text-slate-950">Planung filtern</h2>
-                <p className="text-xs text-slate-500" aria-live="polite">{visibleCount} von {totalCount} Ergebnissen</p>
+                {resultCounts ? <p className="text-xs text-slate-500" aria-live="polite">{resultCounts.visibleCount} von {resultCounts.totalCount} Ergebnissen</p> : null}
               </div>
               <button
                 type="button"
@@ -415,7 +416,7 @@ export function PlanningFilters({
                 </UiButton>
               ) : null}
               <UiButton variant="primary" size="lg" onClick={() => onExpandedChange(false)} className="min-w-0 flex-1">
-                {visibleCount} anzeigen
+                {resultCounts ? `${resultCounts.visibleCount} anzeigen` : "Ergebnisse anzeigen"}
               </UiButton>
             </div>
           </div>

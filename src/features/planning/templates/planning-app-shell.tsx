@@ -132,6 +132,10 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
 
   const usesScalarOptions = displayedView === "structure" || (workspace === "planning" && displayedView === "gantt");
   const scalarOptions = usesScalarOptions ? controller.planningState.structureControls() : undefined;
+  const showsGantt = workspace === "planning" && displayedView === "gantt";
+  const ganttCounts = showsGantt && controller.ganttReady && controller.selectedGantt?.readStatus === "current"
+    ? controller.selectedGantt.selection?.toolbarCounts
+    : undefined;
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
       {!focusModeActive ? (
@@ -187,8 +191,8 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
             workstreams={scalarOptions ? [...scalarOptions.controls?.workstreams || []] : controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
-            visibleCount={displayedView === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.planningBoard?.table?.page.total ?? controller.visibleTasks.length}
-            totalCount={displayedView === "board" ? controller.planningBoard?.result?.levelTotals?.[planningLevel] ?? planningLevelTasks.length : controller.planningBoard?.table?.page.total ?? workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
+            visibleCount={showsGantt ? ganttCounts?.filtered ?? null : displayedView === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.planningBoard?.table?.page.total ?? controller.visibleTasks.length}
+            totalCount={showsGantt ? ganttCounts?.unfiltered ?? null : displayedView === "board" ? controller.planningBoard?.result?.levelTotals?.[planningLevel] ?? planningLevelTasks.length : controller.planningBoard?.table?.page.total ?? workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
             showPlanningLevel={displayedView === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}

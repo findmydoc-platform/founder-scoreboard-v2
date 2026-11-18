@@ -22,6 +22,7 @@ const emptyGantt = {
     itemIds: [],
     contextIds: [],
     total: 0,
+    toolbarCounts: { filtered: 0, unfiltered: 0 },
     sourceRevision: "1",
     observedAt: "2026-11-18T00:00:00Z",
     temporalKey: "fixed",

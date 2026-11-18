@@ -87,6 +87,7 @@ function ganttPage(input: unknown): PlanningWorkspaceModel {
     items: [...selected, ...context], people: [profile], sprints: [sprint], relationships: [], preferences: [],
     coverage: { items: "partial", people: "partial", sprints: "partial", relationships: "partial", preferences: "partial", strategies: "partial", raci: "partial", links: "partial", blockers: "partial" },
     gantt: { query, queryKey: planningGanttQueryKey(query), itemIds: selected.map(task => task.id), contextIds: context.map(task => task.id), total: selected.length,
+      toolbarCounts: { filtered: filtered.visibleTasks.filter(task => task.taskType !== "sub_issue").length, unfiltered: completeFixture.tasks.filter(task => task.taskType !== "sub_issue").length },
       coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
       sourceRevision: "history-source", observedAt: "2026-11-07T00:00:00Z", temporalKey: "stable", validUntil: null },
   };
