@@ -19,6 +19,7 @@ import { sortTaskTableRows, type TaskTableSort } from "@/features/tasks/model/ta
 import { taskPlanningAttentionSignals } from "@/features/tasks/model/task-attention-signals";
 import { hasOpenWaitingRelation, taskRelationsFor } from "@/lib/platform";
 import { isTaskPlanningActive } from "./model/approval-domain";
+import { normalizePlanningGanttQuery, planningGanttQueryKey } from "./model/planning-gantt-query";
 import { normalizePlanningStructureQuery } from "./model/planning-structure-query";
 import type { PlanningWorkspaceModel } from "@/features/planning-items/model/planning-workspace-model";
 
@@ -76,32 +77,47 @@ function structureResponse(input: unknown) {
     revision: "history-source", items, people: [profile], taskOmittedFields: omitted, structure: { ...receipt, query, itemIds: selected.map(task => task.id), contextIds: context.map(task => task.id), total: matches.length, coverage: next >= matches.length ? "complete" : "partial", continuation: next >= matches.length ? null : "next-structure-history-page" },
   } });
 }
-type HistoryReadClass = "board" | "table" | "complete" | "roots" | "controls" | "children";
+function ganttPage(input: unknown): PlanningWorkspaceModel {
+  const query = normalizePlanningGanttQuery(input);
+  if (!query) throw new Error("Invalid Gantt fixture scope");
+  const filtered = buildPlanningTaskTableViewModel({ currentProfile: profile, data: completeFixture, filters: query.filters });
+  const selected = sortTaskTableRows({ tasks: filtered.visibleTasks.filter(task => task.taskType === "deliverable" && isTaskPlanningActive(task)), profiles: [profile], sprints: [sprint], sort: "priority", direction: "asc" });
+  const context = selected.length ? [initiative] : [];
+  return { revision: "history-source", scopeRevision: "history-source", project: completeFixture.project,
+    items: [...selected, ...context], people: [profile], sprints: [sprint], relationships: [], preferences: [],
+    coverage: { items: "partial", people: "partial", sprints: "partial", relationships: "partial", preferences: "partial", strategies: "partial", raci: "partial", links: "partial", blockers: "partial" },
+    gantt: { query, queryKey: planningGanttQueryKey(query), itemIds: selected.map(task => task.id), contextIds: context.map(task => task.id), total: selected.length,
+      coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
+      sourceRevision: "history-source", observedAt: "2026-11-07T00:00:00Z", temporalKey: "stable", validUntil: null },
+  };
+}
+type HistoryReadClass = "board" | "table" | "gantt" | "complete" | "roots" | "controls" | "children";
 const initial = page();
-function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = false }: { failCompleteRead?: boolean; delayCompleteRead?: boolean }) {
+function CompletedHistoryFlow({ failAlternativeRead = false, delayAlternativeRead = false }: { failAlternativeRead?: boolean; delayAlternativeRead?: boolean }) {
   const [ready, setReady] = useState(false);
   const [reads, setReads] = useState(0);
-  const [readClasses, setReadClasses] = useState({ board: 0, table: 0, complete: 0, roots: 0, controls: 0, children: 0 });
-  const [releaseCompleteRead, setReleaseCompleteRead] = useState<(() => void) | null>(null);
+  const [readClasses, setReadClasses] = useState({ board: 0, table: 0, gantt: 0, complete: 0, roots: 0, controls: 0, children: 0 });
+  const [releaseAlternativeRead, setReleaseAlternativeRead] = useState<(() => void) | null>(null);
   useEffect(() => {
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let attempts = 0;
-    let completeAttempts = 0;
+    let alternativeAttempts = 0;
     const restore = mockAccountLifecycle("google", { linked: true }, input => {
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
       if (url.pathname === "/api/planning-board-data") {
         setReads(value => value + 1);
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
-        const kind: HistoryReadClass = query.view === "structure" ? query.area : query.view === "table" ? "table" : query.view === "complete" ? "complete" : "board";
+        const kind: HistoryReadClass = query.view === "structure" ? query.area : query.view === "table" || query.view === "gantt" || query.view === "complete" ? query.view : "board";
         setReadClasses(value => ({ ...value, [kind]: value[kind] + 1 }));
         if (query.view === "structure") return structureResponse(query);
-        if (query.view === "complete" || query.view === "table") {
-          const response = () => Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: query.view === "table" ? tablePage(query) : { ...page(query), board: undefined, items: completeFixture.tasks, coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
-          if (!query.continuation && failCompleteRead && ++completeAttempts === 1) return Response.json({ error: "Alternative view unavailable" }, { status: 503 });
-          if (!query.continuation && delayCompleteRead) return new Promise<Response>(resolve => { setReleaseCompleteRead(() => () => { resolve(response()); setReleaseCompleteRead(null); }); });
+        if (query.view === "complete") return Response.json({ error: "Alternative views must read their own selection" }, { status: 503 });
+        if (query.view === "gantt" || query.view === "table") {
+          const response = () => Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: query.view === "table" ? tablePage(query) : ganttPage(query), currentProfile: profile });
+          if (!query.continuation && failAlternativeRead && ++alternativeAttempts === 1) return Response.json({ error: "Alternative view unavailable" }, { status: 503 });
+          if (!query.continuation && delayAlternativeRead) return new Promise<Response>(resolve => { setReleaseAlternativeRead(() => () => { resolve(response()); setReleaseAlternativeRead(null); }); });
           return response();
         }
         if (query.continuation && ++attempts === 1) return Response.json({ error: "History unavailable" }, { status: 503 });
@@ -115,8 +131,8 @@ function CompletedHistoryFlow({ failCompleteRead = false, delayCompleteRead = fa
     });
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
-  }, [failCompleteRead, delayCompleteRead]);
-  return <><output aria-label="History reads">{reads}</output>{Object.entries(readClasses).map(([kind,count])=><output key={kind} aria-label={`History ${kind} reads`}>{count}</output>)}{releaseCompleteRead ? <button onClick={releaseCompleteRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  }, [failAlternativeRead, delayAlternativeRead]);
+  return <><output aria-label="History reads">{reads}</output>{Object.entries(readClasses).map(([kind,count])=><output key={kind} aria-label={`History ${kind} reads`}>{count}</output>)}{releaseAlternativeRead ? <button onClick={releaseAlternativeRead}>Ansichtsantwort freigeben</button> : null}{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile], sprints: [sprint] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = {
   title: "Planning/Completed history flow",
@@ -186,6 +202,7 @@ export const AlternativeViewsRetainBoardPages: Story = {
       }
       if (label === "Gantt") {
         await expect(await canvas.findByRole("link", { name: "Completed work 25 · 14 Tage" })).toHaveAttribute("title", "Completed work 25 · Historical parent context");
+        await expect(canvas.getByLabelText("History gantt reads")).toHaveTextContent(/^1$/);
       }
       if (label === "Tabelle") await canvas.findByRole("heading", { name: "Aufgaben" });
       const lastLink = await canvas.findByRole("link", { name: "Completed work 25" });
@@ -195,13 +212,13 @@ export const AlternativeViewsRetainBoardPages: Story = {
       await expect(canvas.getByRole("link", { name: "Completed work 25" })).toBeVisible();
       await expect(canvas.getByLabelText("History board reads")).toHaveTextContent("2");
       await expect(canvas.getByLabelText("History table reads")).toHaveTextContent("2");
-      await expect(canvas.getByLabelText("History complete reads")).toHaveTextContent(label === "Struktur" ? "0" : "1");
+      await expect(canvas.getByLabelText("History complete reads")).toHaveTextContent(/^0$/);
     }
   },
 };
 
 export const FailedAlternativeViewKeepsBoardUsable: Story = {
-  args: { failCompleteRead: true },
+  args: { failAlternativeRead: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const board = await canvas.findByRole("region", { name: "Board nach Status" });
@@ -228,39 +245,46 @@ export const FailedAlternativeViewKeepsBoardUsable: Story = {
 };
 
 export const DelayedAlternativeViewCannotReplaceReturnedBoard: Story = {
-  args: { delayCompleteRead: true },
+  args: { delayAlternativeRead: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const board = await canvas.findByRole("region", { name: "Board nach Status" });
+    const expectRetainedBoard = async () => {
+      const board = within(await canvas.findByRole("region", { name: "Board nach Status" }));
+      await expect(board.getByRole("link", { name: "Active work stays visible" })).toBeVisible();
+      await expect(board.getByText("20 von 25 geladen")).toBeVisible();
+      await expect(board.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
+      await expect(canvas.queryByRole("link", { name: "Active work stays visible · 14 Tage" })).not.toBeInTheDocument();
+    };
+    await expectRetainedBoard();
     await userEvent.click(canvas.getByRole("button", { name: "Gantt" }));
-    await expect(await canvas.findByRole("status", { name: "Vorherige Suchergebnisse" })).toHaveTextContent("Vorherige Suche: ohne Suchtext. Neue Ergebnisse werden geladen …");
+    await expect(await canvas.findByText("Gantt wird geladen …")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Board" })).toBeEnabled();
     await canvas.findByRole("button", { name: "Ansichtsantwort freigeben" });
-    await expect(board).toBeVisible();
-    await expect(within(board).getByRole("link", { name: "Active work stays visible" })).toBeVisible();
-    await expect(within(board).getByText("20 von 25 geladen")).toBeVisible();
     await expect(canvas.queryByRole("link", { name: "Active work stays visible · 14 Tage" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Board" }));
-    await expect(await canvas.findByText("20 von 25 geladen")).toBeVisible();
-    await waitFor(() => expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument());
+    await expectRetainedBoard();
+    await expect(canvas.queryByText("Gantt wird geladen …")).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Ansichtsantwort freigeben" }));
     await waitFor(() => expect(canvas.queryByRole("button", { name: "Ansichtsantwort freigeben" })).not.toBeInTheDocument());
-    await expect(canvas.getByText("20 von 25 geladen")).toBeVisible();
-    await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
-    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("1");
-    // Obsolete success must not establish reusable complete coverage for a new Table demand.
+    await expectRetainedBoard();
+    await expect(canvas.getByLabelText("History gantt reads")).toHaveTextContent(/^1$/);
+    await expect(canvas.getByLabelText("History board reads")).toHaveTextContent(/^0$/);
+    await expect(canvas.getByLabelText("History complete reads")).toHaveTextContent(/^0$/);
+    // A late Gantt response cannot satisfy a separate Table demand.
     await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
     await canvas.findByRole("button", { name: "Ansichtsantwort freigeben" });
     await expect(canvas.getByRole("status", { name: "Vorherige Suchergebnisse" })).toBeVisible();
     await expect(canvas.queryByRole("link", { name: "Completed work 25" })).not.toBeInTheDocument();
-    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("2");
+    await expect(canvas.getByLabelText("History table reads")).toHaveTextContent(/^1$/);
     await userEvent.click(canvas.getByRole("button", { name: "Ansichtsantwort freigeben" }));
     await revealLastTablePage(canvas);
     await expect(canvas.queryByRole("region", { name: "Board nach Status" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("status", { name: "Vorherige Suchergebnisse" })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Board" }));
-    await expect(await canvas.findByText("20 von 25 geladen")).toBeVisible();
-    await expect(canvas.getByLabelText("History reads")).toHaveTextContent("3");
+    await expectRetainedBoard();
+    await expect(canvas.getByLabelText("History table reads")).toHaveTextContent(/^2$/);
+    await expect(canvas.getByLabelText("History complete reads")).toHaveTextContent(/^0$/);
   },
 };
 
