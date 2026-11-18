@@ -94,7 +94,7 @@ function TeamOverviewContent({
     <div className="grid gap-4">
       {team.readStatus === "unavailable" && <UiNotice tone="warning">Der aktuelle Teamstand konnte nicht geladen werden. Bereits bekannte Daten bleiben sichtbar.</UiNotice>}
       {team.completeness === "partial" && <UiNotice tone="info">Du siehst nur einen Teil der Teamprofile.</UiNotice>}
-      {metrics.readStatus === "unavailable" && <UiNotice tone="warning">Teamkennzahlen konnten nicht geladen werden. <button type="button" className="underline" onClick={() => { void planningState.refreshWorkspace("team"); }}>Erneut versuchen</button></UiNotice>}
+      {metrics.readStatus === "unavailable" && <UiNotice tone="warning">Teamkennzahlen konnten nicht geladen werden. <button type="button" className="underline" onClick={() => { void planningState.loadTeamMetrics(); }}>Erneut versuchen</button></UiNotice>}
       {team.saves.filter(save => save.phase === "unconfirmed" || save.phase === "saved" && save.followup !== "current" && save.followup !== "not-needed").map(save => <TeamProfileSaveNotice profiles={profiles} key={save.profileId} save={save} onCheck={() => planningState.checkTeamProfile(save.profileId)} />)}
       <TeamRoleSummary profiles={profiles} today={today} />
 
