@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TeamProfileEditor } from "@/features/planning/model/planning-team-state";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTeamProfileDialog } from "@/features/team/hooks/use-team-profile-dialog";
@@ -9,7 +9,7 @@ import { TeamProfileSaveNotice } from "../molecules/team-profile-save-notice";
 import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { TeamMemberCard } from "@/features/team/molecules/team-member-card";
 import { TeamRoleSummary } from "@/features/team/molecules/team-role-summary";
-import { deputyLabel, teamMemberStats } from "@/features/team/model/team-profile-view-model";
+import { deputyLabel } from "@/features/team/model/team-profile-view-model";
 import { TeamProfileEditDialog } from "@/features/team/organisms/team-profile-edit-dialog";
 import { isIsoCalendarDate } from "@/features/team-workweek/model/team-workweek-calendar";
 import { PrivateTeamWorkweekCard } from "@/features/team-workweek/molecules/private-team-workweek-card";
@@ -20,7 +20,6 @@ import type { Profile, Task } from "@/lib/types";
 
 function TeamOverviewContent({
   planningState,
-  tasks,
   pending,
   canManageTeam,
   apiClient,
@@ -36,6 +35,28 @@ function TeamOverviewContent({
   onSaveProfileSettings: (profile: Profile, patch: Partial<Profile>, editor?: TeamProfileEditor, resave?: boolean) => Promise<void>;
 }) {
   const team = planningState.team();
+  const metrics = planningState.teamMetrics();
+  const staleRefreshRequested = useRef(false);
+  useEffect(() => {
+    if (!metrics.enabled) return;
+    if (team.readStatus === "current") {
+      staleRefreshRequested.current = false;
+      if (team.completeness !== "complete" || metrics.readStatus === "stale") void planningState.refreshWorkspace("team");
+      else if (metrics.readStatus === "not-loaded") void planningState.loadTeamMetrics();
+    } else if (team.readStatus === "stale" && !staleRefreshRequested.current) {
+      staleRefreshRequested.current = true;
+      void planningState.refreshWorkspace("team");
+    }
+  }, [planningState, team.readStatus, team.completeness, metrics.enabled, metrics.readStatus]);
+  useEffect(() => {
+    if (!metrics.enabled) return;
+    const release = planningState.activateTeamMetrics();
+    const check = () => { if (document.visibilityState !== "hidden") void planningState.checkTeamMetricsSource(); };
+    const interval = window.setInterval(check, 60_000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("online", check);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", check); window.removeEventListener("online", check); release(); };
+  }, [planningState, metrics.enabled]);
   const profiles = [...team.profiles];
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +94,7 @@ function TeamOverviewContent({
     <div className="grid gap-4">
       {team.readStatus === "unavailable" && <UiNotice tone="warning">Der aktuelle Teamstand konnte nicht geladen werden. Bereits bekannte Daten bleiben sichtbar.</UiNotice>}
       {team.completeness === "partial" && <UiNotice tone="info">Du siehst nur einen Teil der Teamprofile.</UiNotice>}
+      {metrics.readStatus === "unavailable" && <UiNotice tone="warning">Teamkennzahlen konnten nicht geladen werden. <button type="button" className="underline" onClick={() => { void planningState.refreshWorkspace("team"); }}>Erneut versuchen</button></UiNotice>}
       {team.saves.filter(save => save.phase === "unconfirmed" || save.phase === "saved" && save.followup !== "current" && save.followup !== "not-needed").map(save => <TeamProfileSaveNotice profiles={profiles} key={save.profileId} save={save} onCheck={() => planningState.checkTeamProfile(save.profileId)} />)}
       <TeamRoleSummary profiles={profiles} today={today} />
 
@@ -89,7 +111,7 @@ function TeamOverviewContent({
             canManageTeam={canManageTeam}
             deputyText={deputyLabel(profile, profiles)}
             profile={profile}
-            stats={teamMemberStats(tasks, profile)}
+            stats={metrics.metricsByProfileId[profile.id]}
             onEdit={() => { if (!editors[profile.id]) setEditors(current => ({ ...current, [profile.id]: planningState.beginTeamProfileEdit(profile) })); openProfileDialog(profile.id); }}
           />
         ))}

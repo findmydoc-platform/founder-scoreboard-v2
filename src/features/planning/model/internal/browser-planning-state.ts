@@ -537,6 +537,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         requireReadAuthority(body.readAuthority);
         return backlogSelectionRead(body.model, body.readAuthority!, body.readActor);
       },
+      async readTeamMetrics(options) {
+        const { response, body } = await ownedApiClient.requestJson<{ model?: import("@/features/team/model/team-read-model").TeamMetricsModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; currentProfile?: import("@/lib/types").AuthenticatedProfile | null; error?: string; code?: string }>("/api/team-data?area=metrics", { signal: options.signal });
+        if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Teamkennzahlen konnten nicht geladen werden."), { status: response.status, code: body?.code });
+        requireReadAuthority(body.readAuthority);
+        return { model: body.model, readAuthority: body.readAuthority!, currentProfile: body.currentProfile || null };
+      },
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {
           const response = await ownedApiClient.requestResponse(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal, headers: { accept: "application/x-ndjson" } });
@@ -577,6 +583,12 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           const { response, body } = await requestBacklogModel(ownedApiClient);
           if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Backlog konnte nicht geladen werden."), { status: response.status });
           return { data: backlogModelToPlanningShellState(body.model), coverage: backlogModelCoverage(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], taskCoverage: body.model.coverage?.items || "partial", taskOmittedFields: backlogOmittedFields(body.model), backlogCoverage: body.model.coverage };
+        }
+        if (workspace === "team") {
+          const { response, body } = await ownedApiClient.requestJson<{ model?: import("@/features/team/model/team-read-model").TeamWorkspaceModel; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; currentProfile?: import("@/lib/types").AuthenticatedProfile | null; error?: string; code?: string }>("/api/team-data?area=people", { signal: options?.signal });
+          if (!response.ok || !body?.model) throw Object.assign(new Error(body?.error || "Team konnte nicht geladen werden."), { status: response.status, code: body?.code });
+          requireReadAuthority(body.readAuthority);
+          return { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState("team", body.model)), coverage: supportingReadCoverage("team", body.model), scopeRevision: body.model.scopeRevision, readAuthority: body.readAuthority, profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], currentProfile: body.currentProfile };
         }
         if (isSupportingWorkspace(workspace)) {
           const { response, body } = await planningApi.requestSupportingWorkspaceData(ownedApiClient, workspace);
