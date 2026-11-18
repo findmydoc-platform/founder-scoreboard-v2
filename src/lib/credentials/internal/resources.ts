@@ -22,7 +22,7 @@ import { resourceAuthority } from "./resource-authority";
 import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
 import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
-import { planningPublicationSource } from "./planning-service";
+import { planningPublicationSource, planningService } from "./planning-service";
 import { createSupabaseTeamReadModel, loadSupabaseTeamPeople } from "@/features/team/server/team-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
 import { loadPlanningHeaderData } from "../../planning-header-data";
@@ -93,16 +93,38 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       if (action !== "team.read" || !profile) return { status: "forbidden" as const };
       const readAuthority = context.readAuthority;
       if (!readAuthority) return { status: "unavailable" as const };
-      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
-      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      let admissionChecked = false;
+      let admissionFailure: "forbidden" | "unavailable" | undefined;
+      const admitMetrics = async () => {
+        admissionChecked = true;
+        admissionFailure = "unavailable";
+        try {
+          await bound.current();
+          bound.assertCurrent();
+          admissionFailure = undefined;
+          return null;
+        } catch (error) {
+          const status = error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
+          admissionFailure = status === 403 ? "forbidden" : "unavailable";
+          return { status, message: "Team konnte nicht autorisiert werden." };
+        }
+      };
       try {
-        await bound.current(); bound.assertCurrent();
-        const result = await loadPlanningTeamMetrics(service, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
-          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal });
+        const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+        const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+        // The RPC checks fresh authority; local rejection still needs admission before disclosure.
+        const metricsService = planningService(false, admitMetrics, bound.assertCurrent);
+        const result = metricsService ? await loadPlanningTeamMetrics(metricsService, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
+          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
+        if (!admissionChecked) await admitMetrics();
         if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        if (admissionFailure) return { status: admissionFailure };
         bound.assertCurrent();
         return result.status === "ready" ? { ...result, readAuthority } : result;
       } catch (error) {
+        if (!admissionChecked) await admitMetrics();
+        if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        if (admissionFailure) return { status: admissionFailure };
         return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
       }
     },
