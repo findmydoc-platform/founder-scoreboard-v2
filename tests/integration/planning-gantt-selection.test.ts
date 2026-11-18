@@ -143,11 +143,12 @@ test("selected Gantt retains complete filtered and unfiltered toolbar counts bey
   const doneId = `${f.prefix}-count-done`, proposalId = `${f.prefix}-count-proposal`, otherId = `${f.prefix}-count-other`, childId = `${f.prefix}-count-child`;
   await f.db.query("update public.tasks set description=$1 where id=any($2)", [query, [epicId, f.initiativeId]]);
   await f.db.query(`insert into public.tasks(id,project_id,title,description,task_type,parent_task_id,status,priority,approval_status,owner,assignee)
-    values($1,'findmydoc-founder-execution','Completed count member',$5||' only-done','deliverable',$6,'Erledigt','P2','approved',$7,$7),
+    values($1,'findmydoc-founder-execution','Completed count member',$5||' only-done','deliverable',$6,'Offen','P2','approved',$7,$7),
       ($2,'findmydoc-founder-execution','Proposed count member',$5,'deliverable',$6,'Offen','P2','proposed',$7,$7),
       ($3,'findmydoc-founder-execution','Unmatched count member','Outside the search','deliverable',$6,'Offen','P2','approved',$7,$7),
       ($4,'findmydoc-founder-execution','Matching count Sub-Issue',$5,'sub_issue',$1,'Offen','P2',null,$7,$7)`,
   [doneId, proposalId, otherId, childId, query, f.initiativeId, f.actors.founder.profileId]);
+  await f.db.query("update public.tasks set status='Erledigt' where id=$1", [doneId]);
 
   const { createCompletePlanningReference } = await importTestModule("tests/helpers/complete-planning-reference.ts", { "server-only": {} });
   const client = createClient(f.local.API_URL, f.local.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
