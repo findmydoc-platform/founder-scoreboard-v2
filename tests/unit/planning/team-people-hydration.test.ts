@@ -37,7 +37,7 @@ test("a delayed Team page cannot overwrite a confirmed profile write", async () 
 
 test("an initial Team receipt from another session revision cannot expose People", () => {
   const { session, read, data } = fixture();
-  const state = createPlanningState({ userId: session.userId, initialSession: { ...session, revision: "session-2" }, initialCurrentProfile: actor, initialWorkspace: "team", initialData: data, initialWorkspaceRead: read, adapter: { saveTask: async task => ({ task }) } });
+  const state = createPlanningState({ userId: session.userId, initialSession: { ...session, revision: "session-2" }, initialCurrentProfile: actor, initialWorkspace: "team", initialData: data, initialWorkspaceRead: read, adapter: { saveTask: async task => ({ task }), readWorkspace: async () => ({ data, coverage: { profiles: "complete", tasks: "partial" } }) } });
   try { expect(state.planning.team().profiles).toEqual([]); }
   finally { state.internal.dispose(); }
 });
