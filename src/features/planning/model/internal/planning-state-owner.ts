@@ -1598,7 +1598,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     refreshWorkspace(workspace) {
       if (!isActive()) return Promise.resolve(false);
-      if (workspace === "planning" && ganttMounts && ganttQuery) return loadGantt(ganttQuery, { refresh: true });
+      if (workspace === "planning" && ganttMounts && ganttQuery) return Promise.all([loadGantt(ganttQuery, { refresh: true }), structureReads.refresh(true)]).then(results => results.every(Boolean));
       if (workspace === "planning" && structureReads.mounted()) return structureReads.refresh();
       if (workspace === "backlog" && backlogSelectionQuery) {
         const queries = [backlogSelectionQuery, ...(backlogSelectionQuery.filters.level === "epic" ? orphanSections.flatMap(section => { const query = orphanBacklogQueries.get(section); return query ? [query] : []; }) : [])];
@@ -1758,15 +1758,28 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     return Promise.all(reads).then(results => results.every(Boolean));
   }
+  function ensureCurrentGantt() {
+    if (!ganttQuery) return Promise.resolve(false);
+    const selectedSource = ganttView().selection?.sourceRevision, controls = structureReads.observationBasis(true);
+    if (selectedSource && controls.source && selectedSource !== controls.source) invalidatePlanningSource();
+    return Promise.all([loadGantt(ganttQuery), structureReads.ensureCurrent(true)]).then(results => results.every(Boolean));
+  }
   function checkScopedPlanningSource(kind: "backlog" | "structure" | "gantt"): Promise<import("../planning-state").PlanningSourceObservation> {
     if (!isActive()) return Promise.resolve("session-ended");
-    const basis = () => kind === "backlog" ? backlogObservationBasis() : kind === "structure" ? structureReads.observationBasis() : {
-      key: ganttQuery && planningGanttQueryKey(ganttQuery), source: ganttView().selection?.sourceRevision,
-      forbidden: ganttStatus === "forbidden", pending: ganttPending ? [ganttPending.result] : [] };
+    const basis = () => {
+      if (kind === "backlog") return backlogObservationBasis();
+      if (kind === "structure") return structureReads.observationBasis();
+      const selected = ganttView(), controls = structureReads.observationBasis(true);
+      const source = selected.selection?.sourceRevision;
+      return { key: ganttQuery && JSON.stringify([planningGanttQueryKey(ganttQuery), controls.active]),
+        source: source && (!controls.active || controls.source === source) ? source : undefined,
+        forbidden: ganttStatus === "forbidden" || controls.forbidden,
+        pending: [...(ganttPending ? [ganttPending.result] : []), ...controls.pending] };
+    };
     const initial = basis();
     if (initial.forbidden) return Promise.resolve("unverified");
     if (!initial.key) return Promise.resolve("unverified");
-    if (initial.pending.length || !initial.source) return (kind === "backlog" ? ensureCurrentBacklog() : kind === "structure" ? structureReads.ensureCurrent() : ganttQuery ? loadGantt(ganttQuery) : Promise.resolve(false)).then(ok => ok ? "content-read" as const : "unverified" as const);
+    if (initial.pending.length || !initial.source) return (kind === "backlog" ? ensureCurrentBacklog() : kind === "structure" ? structureReads.ensureCurrent() : ensureCurrentGantt()).then(ok => ok ? "content-read" as const : "unverified" as const);
     const source = initial.source, key = JSON.stringify([kind, initial.key, source, userId, sessionGeneration, sessionRevision, planningSourceEpoch, actorIdentity?.id, actorIdentity?.platformRole]);
     if (scopedSourceObservation?.key === key) return scopedSourceObservation.result;
     scopedSourceObservation?.controller.abort();
