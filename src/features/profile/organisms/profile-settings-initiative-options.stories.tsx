@@ -6,7 +6,6 @@ import { emptyPlanningShellState } from "@/features/planning/model/planning-shel
 import { useOwnProfileSettingsCommands } from "../hooks/use-own-profile-settings-commands";
 import { defaultFilters } from "../model/profile-settings-view-model";
 import { ProfileSettingsOverview } from "./profile-settings-overview";
-import type { OwnProfileSettingsPatch } from "../hooks/use-own-profile-settings-commands";
 import type { PlanningItemCandidateReceipt } from "@/features/planning-items/model/planning-item-candidates";
 import type { Profile, ProfileUiPreference } from "@/lib/types";
 
@@ -16,7 +15,7 @@ const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspac
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
 
 function ProfileOptionsFixture() {
-  const [saved, setSaved] = useState<OwnProfileSettingsPatch>();
+  const [saved, setSaved] = useState<ProfileUiPreference>();
   const [candidateReads, setCandidateReads] = useState(0);
   const [bundle] = useState(() => {
     const now = Date.now(), deadline = now + 60_000;
@@ -36,8 +35,9 @@ function ProfileOptionsFixture() {
           return held;
         },
         saveOwnProfileSettings: async patch => {
-          setSaved(patch);
-          return { profile: { ...profile, ...patch.profilePatch }, uiPreference: { ...preference, ...patch.uiPreferences, updatedAt: "saved" }, notificationPreferences: [] };
+          const uiPreference = { ...preference, ...patch.uiPreferences, updatedAt: "saved" };
+          setSaved(uiPreference);
+          return { profile: { ...profile, ...patch.profilePatch }, uiPreference, notificationPreferences: [] };
         },
       } });
     return { ...owner, release: () => release(page) };
@@ -49,8 +49,8 @@ function ProfileOptionsFixture() {
   return <div className="p-4">
     <p role="status">{error}</p>
     <output aria-label="Initiative discovery reads">{candidateReads}</output>
-    <output aria-label="Saved Initiative filter">{saved?.uiPreferences?.planningFilters?.initiativeId || "not-saved"}</output>
-    <output aria-label="Saved expanded Initiatives">{saved?.uiPreferences?.expandedInitiativeIds?.join(",") || "not-saved"}</output>
+    <output aria-label="Saved Initiative filter">{saved?.planningFilters.initiativeId || "not-saved"}</output>
+    <output aria-label="Saved expanded Initiatives">{saved?.expandedInitiativeIds.join(",") || "not-saved"}</output>
     <button type="button" onClick={bundle.release}>Erste Initiativenseite freigeben</button>
     <ProfileSettingsOverview planningState={bundle.planning} currentProfile={data.profiles[0] || profile} data={data} pending={false} source="supabase" onSaveOwnProfileSettings={saveOwnProfileSettings} />
   </div>;
