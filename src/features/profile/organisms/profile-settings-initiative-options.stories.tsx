@@ -70,13 +70,13 @@ export const SavesFocusWithoutLosingOffPageInitiativePreferences: Story = {
     await expect(focus).toHaveValue("Independent focus draft");
     await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^saved-filter-outside-page$/);
     await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
-    await userEvent.click(canvas.getByRole("button", { name: /Planung.*Start und Standardansicht/ }));
+    await userEvent.click(within(canvas.getByRole("navigation", { name: "Profilbereiche" })).getByRole("button", { name: /^Planung$/ }));
     await userEvent.click(canvas.getByRole("button", { name: /^Öffnen$/ }));
     await waitFor(() => expect(canvas.getByLabelText("Initiative discovery reads")).toHaveTextContent(/^1$/));
     await expect(canvas.queryByText("Keine Initiativen vorhanden.")).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Erste Initiativenseite freigeben" }));
     await expect(await canvas.findByRole("button", { name: /^Discovered initiative 0$/ })).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: /Profil.*Identität, Fokus und Farbe/ }));
+    await userEvent.click(within(canvas.getByRole("navigation", { name: "Profilbereiche" })).getByRole("button", { name: /^Profil$/ }));
     const refreshedFocus = canvas.getByRole("textbox");
     await userEvent.clear(refreshedFocus);
     await userEvent.type(refreshedFocus, "Focus after partial options");
