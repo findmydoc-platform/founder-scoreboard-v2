@@ -82,15 +82,15 @@ export function BoardSettingsSection({
               <div className="grid gap-2 md:min-w-96 md:grid-cols-2">
                 <UiField as="div">
                   Zuständig
-                  <CustomSelect value={draft.planningFilters.assignee} onChange={(assignee) => onPlanningFiltersChange({ assignee })} options={assigneeOptions} className="h-9 text-sm" />
+                  <CustomSelect aria-label="Zuständig" value={draft.planningFilters.assignee} onChange={(assignee) => onPlanningFiltersChange({ assignee })} options={assigneeOptions} className="h-9 text-sm" />
                 </UiField>
                 <UiField as="div">
                   Status
-                  <CustomSelect value={draft.planningFilters.status} onChange={(status) => onPlanningFiltersChange({ status })} options={statusOptions} className="h-9 text-sm" />
+                  <CustomSelect aria-label="Status" value={draft.planningFilters.status} onChange={(status) => onPlanningFiltersChange({ status })} options={statusOptions} className="h-9 text-sm" />
                 </UiField>
                 <UiField as="div">
                   Priorität
-                  <CustomSelect value={draft.planningFilters.priority} onChange={(priority) => onPlanningFiltersChange({ priority })} options={priorityOptions} className="h-9 text-sm" />
+                  <CustomSelect aria-label="Priorität" value={draft.planningFilters.priority} onChange={(priority) => onPlanningFiltersChange({ priority })} options={priorityOptions} className="h-9 text-sm" />
                 </UiField>
                 <UiField as="div">
                   Initiative
