@@ -457,19 +457,41 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       return result;
     },
     async loadCandidates(query: PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) {
-      const denial = action === "planning.board.read" ? await current() : forbidden();
-      if (denial) return { status: "forbidden" as const };
-      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
-      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
-      const result = await loadPlanningItemCandidates(service, { authorized: true, actorProfileId: profile?.id || null,
-        authorityDeadline: readAuthority?.deadline, signal, publicationSource,
-        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
-          .update(JSON.stringify(["planning-candidate-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
-      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
-      if (result.status === "ready") return readAuthority
-        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
-        : { status: "forbidden" as const };
-      return result;
+      if (action !== "planning.board.read") return { status: "forbidden" as const };
+      let admissionChecked = false, admissionDenied = false;
+      const admitCandidates = async () => {
+        admissionChecked = true;
+        admissionDenied = true;
+        const denial = await current();
+        admissionDenied = Boolean(denial);
+        return denial;
+      };
+      const assertCandidateEnvironment = () => {
+        if (!detailEnvironmentCurrent()) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+        assertKnown();
+      };
+      try {
+        const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+        const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+        const candidateService = planningService(strictService, admitCandidates, assertCandidateEnvironment, signal);
+        const result = candidateService ? await loadPlanningItemCandidates(candidateService, { authorized: true, actorProfileId: profile?.id || null,
+          authorityDeadline: readAuthority?.deadline, signal, publicationSource,
+          authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+            .update(JSON.stringify(["planning-candidate-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query) : { status: "unavailable" as const };
+        // Cursor and local validation failures must be admitted before disclosure, too.
+        if (!admissionChecked) await admitCandidates();
+        if (admissionDenied) return { status: "forbidden" as const };
+        if (!detailEnvironmentCurrent()) return { status: "unavailable" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        if (result.status === "ready") return readAuthority
+          ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
+          : { status: "forbidden" as const };
+        return result;
+      } catch (error) {
+        if (!admissionChecked) await admitCandidates();
+        if (admissionDenied) return { status: "forbidden" as const };
+        throw error;
+      }
     },
     async loadStructureControls(options?: { signal?: AbortSignal }) {
       if (action !== "planning.board.read" || await current()) return { status: "forbidden" as const };

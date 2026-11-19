@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { importTestModule } from "../helpers/vitest-module.mjs";
 import { withPlanningCredentialDatabase } from "./helpers/planning-credential-database";
 
@@ -51,3 +51,98 @@ test("Initiative candidates retain their complete DTO and continuation with one 
   // Initial session admission is separate from the fresh check at the privileged candidate RPC.
   expect(dispatches.slice(0, rpc).filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "founder")).toHaveLength(2);
 }), 120_000);
+
+for (const boundary of ["current", "role", "unmapped", "revoked", "deadline"] as const) {
+  test(`Candidate local cursor rejection preserves fresh ${boundary} admission without data dispatch`, () => withPlanningCredentialDatabase(async f => {
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
+    expect(permission.ok).toBe(true);
+    if (!permission.ok || !permission.readAuthority) throw new Error("Original Candidate authority unavailable");
+    const deadline = permission.readAuthority.deadline;
+    const invalidBinding = Buffer.from(JSON.stringify({ offset: 1, source: "untrusted-source", observedAt: new Date().toISOString(), validUntil: new Date(deadline).toISOString(), deadline, binding: "0".repeat(64) })).toString("base64url");
+    let restoreClock: (() => void) | undefined;
+    try {
+      if (boundary === "role") await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
+      if (boundary === "unmapped") await f.db.query("update public.profiles set auth_user_id=null where id=$1", [f.actors.founder.profileId]);
+      if (boundary === "revoked") await f.db.query("delete from auth.sessions where id=$1", [f.actors.founder.sessionId]);
+      if (boundary === "deadline") { const clock = vi.spyOn(Date, "now").mockReturnValue(deadline); restoreClock = () => clock.mockRestore(); }
+      for (const continuation of ["invalid-json", invalidBinding]) {
+        const before = f.observed.length;
+        const result = await permission.planning.loadCandidates({ view: "candidates", kind: "initiative", query: f.prefix, limit: 20, continuation });
+        expect(result).toEqual({ status: boundary === "current" ? "staleContinuation" : "forbidden" });
+        expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/planning_item_candidates" || row.path === "/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+        if (boundary === "current") expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "founder")).toHaveLength(1);
+        expect(permission.readAuthority.deadline).toBe(deadline);
+      }
+      const result = await permission.planning.loadCandidates({ view: "candidates", kind: "initiative", query: f.prefix, limit: 20 });
+      expect(result.status).toBe(boundary === "current" ? "ready" : "forbidden");
+    } finally { restoreClock?.(); }
+  }), 120_000);
+}
+for (const denied of [false, true]) {
+  test(`Candidate local exceptions disclose no result before fresh admission with denial ${denied}`, () => withPlanningCredentialDatabase(async f => {
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+    const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
+    if (!permission.ok) throw new Error("Original Candidate admission unavailable");
+    if (denied) await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
+    const options: { signal?: AbortSignal } = {};
+    Object.defineProperty(options, "signal", { get() { throw new Error("Synthetic local Candidate exception"); } });
+    const before = f.observed.length;
+    const reading = permission.planning.loadCandidates({ view: "candidates", kind: "initiative", query: "", limit: 20 }, options);
+    if (denied) expect(await reading).toEqual({ status: "forbidden" });
+    else await expect(reading).rejects.toThrow("Synthetic local Candidate exception");
+    expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/planning_item_candidates" || row.path === "/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+    expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/current_authenticated_profile" && row.actor === "founder")).toHaveLength(1);
+  }), 120_000);
+}
+
+test("Candidate dispatch retains the original environment and abort boundary without replacing authority", () => withPlanningCredentialDatabase(async f => {
+  const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
+  const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request: f.request("founder", "/api/planning-board-data") }, action: "planning.board.read" });
+  if (!permission.ok || !permission.readAuthority) throw new Error("Original Candidate authority unavailable");
+  const deadline = permission.readAuthority.deadline;
+  const query = { view: "candidates" as const, kind: "initiative" as const, query: "", limit: 20 };
+  try {
+    const before = f.observed.length;
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "changed-synthetic-service-key");
+    expect(await permission.planning.loadCandidates(query)).toEqual({ status: "unavailable" });
+    expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/planning_item_candidates" || row.path === "/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+  } finally { vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", f.local.SERVICE_ROLE_KEY); }
+  const before = f.observed.length;
+  expect(await permission.planning.loadCandidates(query, { signal: AbortSignal.abort() })).toEqual({ status: "unavailable" });
+  expect(f.observed.slice(before).filter(row => row.path === "/rest/v1/rpc/planning_item_candidates" || row.path === "/rest/v1/rpc/planning_board_publication_context")).toEqual([]);
+  expect((await permission.planning.loadCandidates(query)).status).toBe("ready");
+  expect(permission.readAuthority.deadline).toBe(deadline);
+}), 120_000);
+
+for (const boundary of ["rpc-denial", "publication-role", "publication-source", "publication-deadline"] as const) {
+  test(`Candidate RPC preserves its ${boundary} boundary`, () => withPlanningCredentialDatabase(async f => {
+    const transport = globalThis.fetch;
+    let reached = false;
+    let restoreClock: (() => void) | undefined;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (new URL(request.url).pathname !== "/rest/v1/rpc/planning_item_candidates") return transport(request);
+      reached = true;
+      if (boundary === "rpc-denial") return Response.json({ code: "42501", message: "Synthetic Candidate denial" }, { status: 403 });
+      const response = await transport(request);
+      expect(response.status).toBe(200);
+      if (boundary === "publication-role") await f.db.query("update public.profiles set platform_role='viewer' where id=$1", [f.actors.founder.profileId]);
+      if (boundary === "publication-source") await f.db.query("update public.tasks set title=title||' changed' where id=$1", [f.initiativeId]);
+      if (boundary === "publication-deadline") {
+        const claims = JSON.parse(Buffer.from(f.actors.founder.token.split(".")[1], "base64url").toString());
+        const clock = vi.spyOn(Date, "now").mockReturnValue(claims.exp * 1000 + 1); restoreClock = () => clock.mockRestore();
+      }
+      return response;
+    });
+    try {
+      const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
+      const scope = { view: "candidates", kind: "initiative", query: "", limit: 20 };
+      const response = await GET(f.request("founder", `/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`));
+      expect(reached).toBe(true);
+      expect(response.status).toBe(boundary === "publication-source" ? 409 : 403);
+      const body = await response.json(); expect(body).not.toHaveProperty("candidates");
+      if (boundary === "publication-source") expect(body.code).toBe("stale_continuation");
+    } finally { restoreClock?.(); vi.stubGlobal("fetch", transport); }
+  }), 120_000);
+}
