@@ -90,6 +90,7 @@ export const AppSidebar = forwardRef<HTMLElement, AppSidebarProps>(function AppS
       <Link
         key={item.id}
         href={item.href}
+        prefetch={activeWorkspace === "team" && item.id === "planning" ? false : undefined}
         title={item.label}
         className={className}
         data-tour-id={`workspace-nav-${item.id}`}

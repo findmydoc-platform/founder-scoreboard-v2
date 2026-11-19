@@ -63,7 +63,7 @@ import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } 
 
 type PlanningTableResult = import("../planning-table-result").PlanningTableResult;
 
-export type PlanningWorkspaceRead = { gantt?: PlanningGanttResult; backlogRankTarget?: BacklogRankTarget; backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
+export type PlanningWorkspaceRead = { sessionRevision?: string; gantt?: PlanningGanttResult; backlogRankTarget?: BacklogRankTarget; backlogControls?: BacklogControls; backlogSprintBasis?: BacklogSprintBasis; backlogSelection?: BacklogSelection; readActor?: { profileId: string; platformRole: import("@/lib/types").Profile["platformRole"] }; table?: PlanningTableResult; readAuthority?: import("../planning-server-header-read").PlanningReadAuthority; scopeRevision?: string; board?: PlanningBoardResult; query?: PlanningBoardQueryInput; queryRevision?: string; append?: boolean; profileOmittedFields?: readonly (keyof import("@/lib/types").Profile)[]; projectOmittedFields?: readonly (keyof import("@/lib/types").Project)[]; backlogCoverage?: import("@/features/backlog/model/backlog-read-model").BacklogReadCoverage; taskOmittedFields?: readonly (keyof Task)[]; toolCoverage?: "complete" | "partial"; eventCoverage?: import("@/features/events/model/event-state").EventCoverage; notificationCoverage?: import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel["coverage"]; data: PlanningShellState; coverage?: PlanningReadCoverage; taskCoverage?: "complete" | "partial" | "none"; headerData?: PlanningHeaderData; currentProfile?: AuthenticatedProfile | null };
 export type PlanningWorkspaceProgress =
   | { kind: "basis"; readId: string; read: PlanningWorkspaceRead }
   | { kind: "column"; readId: string; column: TaskStatus; read: PlanningWorkspaceRead }
@@ -100,6 +100,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   saveTeamProfile?: (profileId: string, patch: import("../planning-team-state").TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<import("@/lib/types").Profile> & { id: string }>;
   saveOwnProfileSettings?: (patch: OwnProfileSettingsPatch) => Promise<OwnProfileSettingsConfirmation>;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskSave>;
+  readTeamMetrics?: (options: { signal: AbortSignal }) => Promise<{ model: import("@/features/team/model/team-read-model").TeamMetricsModel; readAuthority: import("../planning-server-header-read").PlanningReadAuthority; currentProfile: AuthenticatedProfile | null }>;
   readPlanningSourceVersion?: (options?: { signal?: AbortSignal }) => Promise<string>;
   readCandidates?: (query: import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) => Promise<import("@/features/planning-items/model/planning-item-candidates").PlanningItemCandidateReceipt>;
   readTableRisks?: (token: string, options?: { signal?: AbortSignal }) => Promise<{ summaries: import("../planning-table-result").PlanningTableRiskFrame; readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>;
@@ -143,6 +144,15 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   if (initialTaskDetailRead && (initialTaskDetailRead.itemId !== initialTaskDetailRead.model.item.id || !validDetailReceipt(initialTaskDetailRead.model, initialTaskDetailRead.readAuthority)
     || initialTaskDetailRead.session.userId !== userId || initialSession?.revision !== initialTaskDetailRead.session.revision)) initialData = emptyPlanningShellState;
+  if (initialWorkspaceRead?.workspace === "team" && (initialWorkspace !== "team" || initialWorkspaceRead.session.userId !== userId
+    || initialSession?.revision !== initialWorkspaceRead.session.revision || !initialWorkspaceRead.readAuthority
+    || initialWorkspaceRead.readAuthority.userId !== userId || initialWorkspaceRead.readAuthority.deadline <= (adapter.now?.() ?? Date.now())
+    || initialWorkspaceRead.session.expiresAt * 1000 <= (adapter.now?.() ?? Date.now()) || !initialWorkspaceRead.scopeRevision
+    || initialWorkspaceRead.revision !== initialWorkspaceRead.scopeRevision || initialWorkspaceRead.coverage.profiles !== "complete"
+    || !initialCurrentProfile || !initialData.profiles.some(profile => profile.id === initialCurrentProfile.id && profile.platformRole === initialCurrentProfile.platformRole))) {
+    initialData = emptyPlanningShellState;
+    initialWorkspaceRead = undefined;
+  }
   let actorIdentity = initialCurrentProfile || null;
   let confirmed = initialData;
   let visible = initialData;
@@ -162,6 +172,83 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const taskConfirmedAt = new Map<string, number>();
   const taskReadAt = new Map<string, number>();
   let planningSourceEpoch = 0;
+  type TeamBasis = { source: string; deadline: number; generation: number; session: string; epoch: number; actorId: string; role: string };
+  let teamBasis: TeamBasis | undefined = initialWorkspaceRead?.workspace === "team" && initialSession && initialCurrentProfile && initialWorkspaceRead.readAuthority && initialWorkspaceRead.scopeRevision
+    ? { source: initialWorkspaceRead.scopeRevision, deadline: initialWorkspaceRead.readAuthority.deadline, generation: sessionGeneration,
+      session: initialSession.revision, epoch: planningSourceEpoch, actorId: initialCurrentProfile.id, role: initialCurrentProfile.platformRole }
+    : undefined;
+  let teamMetricsReceipt: { basis: TeamBasis; deadline: number; model: import("@/features/team/model/team-read-model").TeamMetricsModel } | undefined;
+  let teamMetricsStatus: PlanningReadStatus = "not-loaded";
+  let teamMetricsMounts = 0;
+  let teamDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let teamSourceCheck: Promise<void> | undefined;
+  let teamMetricsPending: { basis: TeamBasis; controller: AbortController; result: Promise<boolean> } | undefined;
+  function teamBasisCurrent(basis: TeamBasis) {
+    return isActive() && teamBasis === basis && basis.generation === sessionGeneration && basis.session === sessionRevision
+      && basis.epoch === planningSourceEpoch && basis.deadline > (adapter.now?.() ?? Date.now())
+      && actorIdentity?.id === basis.actorId && actorIdentity.platformRole === basis.role;
+  }
+  function scheduleTeamDeadline(basis: TeamBasis, deadline: number) {
+    if (teamDeadlineTimer !== undefined) clearTimeout(teamDeadlineTimer);
+    const remaining = Math.max(0, deadline - (adapter.now?.() ?? Date.now()));
+    teamDeadlineTimer = setTimeout(() => {
+      teamDeadlineTimer = undefined;
+      if (teamBasis !== basis || !isActive()) return;
+      if (deadline > (adapter.now?.() ?? Date.now())) { scheduleTeamDeadline(basis, deadline); return; }
+      teamMetricsPending?.controller.abort(); teamMetricsPending = undefined;
+      teamMetricsReceipt = undefined; teamMetricsStatus = "stale";
+      workspaceStatuses.set("team", "stale"); publish();
+    }, Math.min(remaining, 2_147_483_647));
+  }
+  function teamMetricsView() {
+    const receipt = teamMetricsReceipt;
+    const current = receipt && teamBasisCurrent(receipt.basis) && receipt.deadline > (adapter.now?.() ?? Date.now());
+    return { enabled: Boolean(adapter.readTeamMetrics), readStatus: current ? "current" as const : teamMetricsPending && teamBasisCurrent(teamMetricsPending.basis) ? "loading" as const : teamMetricsStatus === "current" ? "stale" as const : teamMetricsStatus,
+      metricsByProfileId: current ? receipt.model.metricsByProfileId : {} };
+  }
+  function loadTeamMetrics(): Promise<boolean> {
+    const basis = teamBasis, read = adapter.readTeamMetrics;
+    if (!basis || !teamBasisCurrent(basis) || !read) return Promise.resolve(false);
+    if (teamMetricsPending?.basis === basis) return teamMetricsPending.result;
+    const controller = new AbortController();
+    teamMetricsPending?.controller.abort();
+    teamMetricsStatus = "loading";
+    const result = (async () => {
+      try {
+        const response = await read({ signal: controller.signal });
+        if (controller.signal.aborted || !teamBasisCurrent(basis)) return false;
+        const model = response.model, actor = response.currentProfile;
+        const values = model.metricsByProfileId;
+        const valid = model.coverage === "complete" && model.validUntil === null && model.revision === basis.source && model.scopeRevision === basis.source
+          && Number.isFinite(Date.parse(model.observedAt)) && response.readAuthority.userId === userId
+          && Number.isFinite(response.readAuthority.deadline) && response.readAuthority.deadline > (adapter.now?.() ?? Date.now())
+          && actor?.id === basis.actorId && actor.platformRole === basis.role && values && typeof values === "object"
+          && profileSettings.team().profiles.every(profile => {
+            const stats = values[profile.id];
+            return stats && Number.isSafeInteger(stats.openTasks) && stats.openTasks >= 0
+              && Number.isSafeInteger(stats.highPriorityTasks) && stats.highPriorityTasks >= 0 && stats.highPriorityTasks <= stats.openTasks
+              && Number.isFinite(stats.loadHours) && stats.loadHours >= 0;
+          });
+        if (!valid) { teamMetricsStatus = "unavailable"; return false; }
+        const deadline = Math.min(basis.deadline, response.readAuthority.deadline);
+        teamMetricsReceipt = { basis, model, deadline };
+        scheduleTeamDeadline(basis, deadline);
+        teamMetricsStatus = "current";
+        return true;
+      } catch (error) {
+        if (!controller.signal.aborted && teamBasisCurrent(basis)) {
+          teamMetricsStatus = readErrorStatus(error);
+          if (teamMetricsStatus === "forbidden") { workspaceStatuses.set("team", "forbidden"); profileSettings.readStatus("forbidden", "team"); }
+        }
+        return false;
+      } finally {
+        if (teamMetricsPending?.controller === controller) { teamMetricsPending = undefined; publish(); }
+      }
+    })();
+    teamMetricsPending = { basis, controller, result };
+    publish();
+    return result;
+  }
   let ganttStatus: PlanningReadStatus = "not-loaded", ganttSequence = 0, ganttMounts = 0;
   let ganttQuery: PlanningGanttQuery | undefined;
   let ganttReceipt: { selection: PlanningGanttResult; deadline: number; generation: number; session?: string; epoch: number; actorId: string; role: string; sprintIds: string[]; relationIds: number[] } | undefined;
@@ -645,7 +732,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     const sourceChanged = JSON.stringify(directory(data.profiles)) !== JSON.stringify(directory(confirmed.profiles));
     confirmed = data;
     if (sourceChanged) invalidatePlanningSource();
-  }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
+  }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, initialTeamCompleteness: teamBasis ? "complete" : undefined, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
   const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
   const commitments = createSprintCommitmentState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,active:isActive,generation:()=>sessionGeneration,nextSequence:()=>++sequence,save:adapter.saveSprintCommitment,dependencyPending:id=>sprintLock.blocksSprint(id),checkDependency:id=>sprintLock.check(id),refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded"});
@@ -1204,7 +1291,40 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     rejectTask: (task, reason) => backlogBlocksRemoval(task) ? Promise.resolve({ ok: false, kind: "unconfirmed", error: "Eine betroffene Aufgabenänderung ist noch nicht bestätigt." }) : lifecycle.removeTask(task, "reject", reason),
     beginOwnProfileEdit: profileSettings.beginOwnEdit,
     beginTeamProfileEdit: profileSettings.beginTeamEdit,
-    team: profileSettings.team,
+    team() {
+      const view = profileSettings.team();
+      if (teamBasis && teamBasis.deadline <= (adapter.now?.() ?? Date.now())) return { ...view, profiles: [], completeness: "none", readStatus: "stale" };
+      return view;
+    },
+    teamMetrics: teamMetricsView,
+    loadTeamMetrics,
+    activateTeamMetrics() {
+      teamMetricsMounts++;
+      if (teamBasis && teamDeadlineTimer === undefined) scheduleTeamDeadline(teamBasis, teamBasis.deadline);
+      return () => {
+        teamMetricsMounts = Math.max(0, teamMetricsMounts - 1);
+        if (!teamMetricsMounts && teamMetricsPending) {
+          teamMetricsPending.controller.abort(); teamMetricsPending = undefined;
+          teamMetricsStatus = teamMetricsReceipt ? "stale" : "not-loaded"; publish();
+        }
+      };
+    },
+    checkTeamMetricsSource() {
+      const basis = teamBasis, read = adapter.readPlanningSourceVersion;
+      if (!teamMetricsMounts || !basis || !teamBasisCurrent(basis) || !read) return Promise.resolve();
+      if (teamSourceCheck) return teamSourceCheck;
+      const check = (async () => {
+        try {
+          const remote = await read();
+          if (teamMetricsMounts && teamBasisCurrent(basis) && remote && remote !== basis.source) {
+            invalidatePlanningSource(); workspaceStatuses.set("team", "stale"); publish();
+          }
+        } catch { /* Keep the current receipt until its original deadline. */ }
+      })();
+      teamSourceCheck = check;
+      void check.finally(() => { if (teamSourceCheck === check) teamSourceCheck = undefined; });
+      return check;
+    },
     saveTeamProfile: profileSettings.saveTeam,
     checkTeamProfile: profileSettings.checkTeam,
     profileApiTokens: profileTokens.view,
@@ -2021,7 +2141,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     });
   }
   function readIsCurrent(workspace: AppWorkspace, token: ReturnType<typeof beginWorkspaceRead>) {
-    if (!isActive() || token.generation !== sessionGeneration || token.sessionRevision !== sessionRevision || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
+    const initialTeamBinding = workspace === "team" && token.sessionRevision === undefined && Boolean(sessionRevision);
+    if (!isActive() || token.generation !== sessionGeneration || (token.sessionRevision !== sessionRevision && !initialTeamBinding) || (workspace === "planning" && token.sourceEpoch !== planningSourceEpoch)) return false;
     if (token.ganttKey) return ganttSequence === token.started && Boolean(ganttQuery && planningGanttQueryKey(ganttQuery) === token.ganttKey);
     if (token.backlogArea) return token.sourceEpoch === planningSourceEpoch && backlogSupportSequences.get(token.backlogArea) === token.started;
     if (token.tablePage) return acceptedRead.get(workspace) === token.tablePage.baseRead && tableRequest === token.started
@@ -2462,6 +2583,12 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   function acceptWorkspaceRead(workspace: AppWorkspace, result: PlanningWorkspaceRead, token: ReturnType<typeof beginWorkspaceRead>) {
     const { started, notificationRead, eventRead, toolRead } = token;
     if (!readIsCurrent(workspace, token)) return false;
+    if (workspace === "team" && token.sessionRevision !== sessionRevision && (!result.sessionRevision || result.sessionRevision !== sessionRevision)) {
+      workspaceStatuses.set(workspace, "unavailable"); publish(); return false;
+    }
+    if (workspace === "team" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()) || token.sourceEpoch !== planningSourceEpoch || !result.scopeRevision || !result.currentProfile || Boolean(actorIdentity && (result.currentProfile.id !== actorIdentity.id || result.currentProfile.platformRole !== actorIdentity.platformRole)))) {
+      workspaceStatuses.set(workspace, "unavailable"); publish(); return false;
+    }
     if (workspace === "planning" && result.readAuthority && (result.readAuthority.userId !== userId || !Number.isFinite(result.readAuthority.deadline) || result.readAuthority.deadline <= (adapter.now?.() ?? Date.now()))) {
       if (token.page) columnReadStatus[token.page.column] = "unavailable";
       else workspaceStatuses.set(workspace, "unavailable");
@@ -2646,6 +2773,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (!token.backlogArea && !token.ganttKey) profileSettings.readStatus(stale ? "stale" : "current", workspace);
     if (workspace === "sprint") sprintState.readStatus(stale ? "stale" : "current");
     if (result.currentProfile) actorIdentity = { ...result.currentProfile };
+    if (workspace === "team") {
+      teamMetricsPending?.controller.abort(); teamMetricsPending = undefined; teamMetricsReceipt = undefined; teamMetricsStatus = "not-loaded";
+      teamBasis = result.scopeRevision && result.readAuthority && sessionRevision && actorIdentity && coverage.profiles === "complete" && !stale
+        ? { source: result.scopeRevision, deadline: result.readAuthority.deadline, generation: sessionGeneration, session: sessionRevision, epoch: planningSourceEpoch, actorId: actorIdentity.id, role: actorIdentity.platformRole }
+        : undefined;
+      if (teamBasis) scheduleTeamDeadline(teamBasis, teamBasis.deadline);
+      else if (teamDeadlineTimer !== undefined) { clearTimeout(teamDeadlineTimer); teamDeadlineTimer = undefined; }
+    }
     acceptWorkspaceContext?.(result);
     if (!token.ganttKey) freshness = stale ? "stale" : "current";
     if (workspace === "planning" && !token.ganttKey) {
@@ -2660,6 +2795,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     return !token.ganttKey || !stale;
   }
   function suspendProtected() {
+    if (teamDeadlineTimer !== undefined) { clearTimeout(teamDeadlineTimer); teamDeadlineTimer = undefined; }
+    teamMetricsPending?.controller.abort(); teamMetricsPending = undefined; teamMetricsReceipt = undefined; teamBasis = undefined; teamMetricsStatus = "not-loaded";
     backlogSelectionQuery = undefined;
     for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
     ganttPending?.controller.abort(); ganttPending = undefined; ganttReceipt = undefined; ganttQuery = undefined; ganttStatus = "not-loaded";

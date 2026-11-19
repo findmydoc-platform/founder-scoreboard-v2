@@ -33,7 +33,7 @@ export function TeamMemberCard({
   canManageTeam: boolean;
   deputyText: string;
   profile: Profile;
-  stats: TeamMemberStats;
+  stats?: Readonly<TeamMemberStats>;
   onEdit: () => void;
 }) {
   const memberColor = profile.color || "#e2e8f0";
@@ -58,9 +58,9 @@ export function TeamMemberCard({
           </div>
         </div>
         <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-sm sm:grid-cols-4 xl:flex xl:flex-nowrap xl:items-center xl:gap-x-6">
-          <TeamMetric definition={metricDefinitions.openTasks} value={stats.openTasks} />
-          <TeamMetric definition={metricDefinitions.highPriorityTasks} value={stats.highPriorityTasks} />
-          <TeamMetric definition={metricDefinitions.loadHours} value={`${stats.loadHours}h`} />
+          <TeamMetric definition={metricDefinitions.openTasks} value={stats?.openTasks ?? "–"} />
+          <TeamMetric definition={metricDefinitions.highPriorityTasks} value={stats?.highPriorityTasks ?? "–"} />
+          <TeamMetric definition={metricDefinitions.loadHours} value={stats ? `${stats.loadHours}h` : "–"} />
           <TeamMetric definition={metricDefinitions.weeklyCapacity} value={`${profile.weeklyCapacity}h`} />
         </div>
         {canManageTeam && (

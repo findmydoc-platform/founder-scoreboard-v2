@@ -145,6 +145,10 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   beginOwnProfileEdit(shown: import("@/features/profile/model/profile-settings-contract").OwnProfileEditingSnapshot): import("@/features/profile/model/profile-settings-contract").OwnProfileEditor;
   beginTeamProfileEdit(shown: import("@/lib/types").Profile): import("./planning-team-state").TeamProfileEditor;
   team(): import("./planning-team-state").PlanningTeamView;
+  teamMetrics(): { enabled: boolean; readStatus: PlanningReadStatus; metricsByProfileId: Readonly<Record<string, Readonly<import("@/features/team/model/team-profile-view-model").TeamMemberStats>>> };
+  loadTeamMetrics(): Promise<boolean>;
+  activateTeamMetrics(): () => void;
+  checkTeamMetricsSource(): Promise<void>;
   saveTeamProfile(profileId: string, patch: import("./planning-team-state").TeamProfilePatch): Promise<import("./planning-team-state").TeamProfileResult>;
   checkTeamProfile(profileId: string): Promise<boolean>;
   profileApiTokens(): import("@/features/profile/model/profile-api-token-state").ProfileApiTokensView;
