@@ -14,7 +14,7 @@ const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspac
   planningFilters: { ...defaultFilters(), initiativeId: "saved-filter-outside-page" }, expandedInitiativeIds: ["saved-expanded-outside-page"], createdAt: "before", updatedAt: "before" };
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
 
-function ProfileOptionsFixture() {
+function ProfileOptionsFixture({ mode = "held" }: { mode?: "held" | "retry" | "query" | "empty" }) {
   const [saved, setSaved] = useState<ProfileUiPreference>();
   const [candidateReads, setCandidateReads] = useState(0);
   const [bundle] = useState(() => {
@@ -24,14 +24,26 @@ function ProfileOptionsFixture() {
     const held = new Promise<PlanningItemCandidateReceipt>(resolve => { release = resolve; });
     const page: PlanningItemCandidateReceipt = { candidates: { kind: "initiative", items: Array.from({ length: 20 }, (_, index) => ({
       id: `discovered-initiative-${index}`, title: `Discovered initiative ${index}`, taskType: "initiative" as const, parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-19T00:00:00Z",
-    })), total: 21, coverage: "partial", continuation: "next-profile-options-page", sourceRevision: "profile-options-source", observedAt: new Date(now).toISOString(), validUntil: new Date(deadline).toISOString() },
+    })), total: mode === "retry" ? 22 : 21, coverage: "partial", continuation: "next-profile-options-page", sourceRevision: "profile-options-source", observedAt: new Date(now).toISOString(), validUntil: new Date(deadline).toISOString() },
       readAuthority: { userId: session.userId, deadline }, readActor: { profileId: profile.id, platformRole: profile.platformRole } };
+    let attempts = 0;
     const owner = createPlanningState({ userId: session.userId, initialSession: session, initialCurrentProfile: profile,
       initialData: initial, initialWorkspace: "profile", adapter: {
         saveTask: async () => ({ task: {} }), readWorkspace: async () => { throw new Error("Profile options must not enumerate a Workspace"); },
         readCandidates: async query => {
           if (query.kind !== "initiative" || query.limit !== 20) throw new Error("Unexpected Profile discovery scope");
           setCandidateReads(count => count + 1);
+          attempts++;
+          if (mode === "retry") {
+            if (attempts === 1) throw Object.assign(new Error("Initiative discovery unavailable"), { status: 503 });
+            if (query.continuation) return { ...page, candidates: { ...page.candidates, coverage: "complete", continuation: null, items: [
+              { id: preference.planningFilters.initiativeId, title: "Saved filter Initiative", taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-19T00:00:00Z" },
+              { id: preference.expandedInitiativeIds[0], title: "Saved expanded Initiative", taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-19T00:00:00Z" },
+            ] } };
+            return page;
+          }
+          if (mode === "empty") return { ...page, candidates: { ...page.candidates, items: [], total: 0, coverage: "complete", continuation: null } };
+          if (mode === "query" && query.query) return { ...page, candidates: { ...page.candidates, items: [{ id: "current-query-initiative", title: "Current query Initiative", taskType: "initiative", parentTaskId: "", approvalStatus: "approved", updatedAt: "2026-11-19T00:00:00Z" }], total: 1, coverage: "complete", continuation: null } };
           return held;
         },
         saveOwnProfileSettings: async patch => {
@@ -84,6 +96,83 @@ export const SavesFocusWithoutLosingOffPageInitiativePreferences: Story = {
     await expect(canvas.getByText("Gespeichert.")).toBeVisible();
     await expect(refreshedFocus).toHaveValue("Focus after partial options");
     await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^saved-filter-outside-page$/);
+    await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
+  },
+};
+
+async function openOptions(canvas: ReturnType<typeof within>) {
+  await userEvent.click(within(canvas.getByRole("navigation", { name: "Profilbereiche" })).getByRole("button", { name: /^Planung$/ }));
+  await userEvent.click(canvas.getByRole("button", { name: /^Öffnen$/ }));
+}
+async function saveFocusAndCheckRetainedPreferences(canvas: ReturnType<typeof within>) {
+  await userEvent.click(within(canvas.getByRole("navigation", { name: "Profilbereiche" })).getByRole("button", { name: /^Profil$/ }));
+  const focus = canvas.getByRole("textbox");
+  await userEvent.clear(focus);
+  await userEvent.type(focus, "Focus independent of options");
+  await userEvent.click(canvas.getByRole("button", { name: /^Speichern$/ }));
+  await expect(canvas.getByText("Gespeichert.")).toBeVisible();
+  await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^saved-filter-outside-page$/);
+  await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
+}
+export const RetriesDiscoveryAndFindsSavedIdentitiesOnTheNextPage: Story = {
+  args: { mode: "retry" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await openOptions(canvas);
+    await expect(await canvas.findByRole("button", { name: "Initiativen erneut laden" })).toBeVisible();
+    await expect(canvas.queryByText("Keine Initiativen vorhanden.")).not.toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Gespeicherte Initiative (saved-expanded-outside-page)" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Initiativen erneut laden" }));
+    await expect(await canvas.findByRole("button", { name: /^Discovered initiative 0$/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Weitere Initiativen laden" }));
+    await expect(await canvas.findByRole("button", { name: /^Saved expanded Initiative$/ })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: /^Saved filter Initiative$/ })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: /^Discovered initiative 0$/ })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: "Weitere Initiativen laden" })).not.toBeInTheDocument();
+    await saveFocusAndCheckRetainedPreferences(canvas);
+    await expect(canvas.getByLabelText("Initiative discovery reads")).toHaveTextContent(/^3$/);
+  },
+};
+export const OldQueryCannotReplaceTheCurrentOptionsOrDraft: Story = {
+  args: { mode: "query" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await openOptions(canvas);
+    await waitFor(() => expect(canvas.getByLabelText("Initiative discovery reads")).toHaveTextContent(/^1$/));
+    const search = canvas.getByRole("textbox", { name: "Initiativen suchen" });
+    await userEvent.type(search, "Current");
+    await userEvent.keyboard("{Enter}");
+    await expect(await canvas.findByRole("button", { name: /^Current query Initiative$/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Erste Initiativenseite freigeben" }));
+    await expect(canvas.getByRole("button", { name: /^Current query Initiative$/ })).toBeVisible();
+    await expect(canvas.queryByRole("button", { name: /^Discovered initiative 0$/ })).not.toBeInTheDocument();
+    await expect(search).toHaveValue("Current");
+    await saveFocusAndCheckRetainedPreferences(canvas);
+  },
+};
+export const ProvenEmptyOptionsDoNotEraseStoredSelections: Story = {
+  args: { mode: "empty" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await openOptions(canvas);
+    await expect(await canvas.findByText("Keine Initiativen vorhanden.")).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Gespeicherte Initiative (saved-filter-outside-page)" })).toBeVisible();
+    await expect(canvas.getByRole("button", { name: "Gespeicherte Initiative (saved-expanded-outside-page)" })).toBeVisible();
+    await saveFocusAndCheckRetainedPreferences(canvas);
+  },
+};
+
+export const ExplicitAllFilterKeepsTheSavedExpandedSelection: Story = {
+  args: { mode: "empty" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await openOptions(canvas);
+    await expect(await canvas.findByText("Keine Initiativen vorhanden.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("combobox", { name: /^Initiative$/ }));
+    await userEvent.click(within(document.body).getByRole("option", { name: /^Alle$/ }));
+    await userEvent.click(canvas.getByRole("button", { name: /^Speichern$/ }));
+    await expect(canvas.getByText("Gespeichert.")).toBeVisible();
+    await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^Alle$/);
     await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
   },
 };

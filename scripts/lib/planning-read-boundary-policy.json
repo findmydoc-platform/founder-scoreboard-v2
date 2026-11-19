@@ -62,7 +62,7 @@
     "PROFILE": {
       "consumer": "PROFILE",
       "owner": "Profile feature owner",
-      "reason": "Retain existing profile task and initiative context until its own migration.",
+      "reason": "Reuse shared project/profile projections for independent Profile settings; Initiative options use verified candidate discovery without Planning Item enumeration.",
       "evidence": "tests/unit/shared/supporting-read-coverage.test.mjs; docs/planning-item-read-contracts.md",
       "expiresWhen": "Remove on accepted PROFILE migration #655."
     },
