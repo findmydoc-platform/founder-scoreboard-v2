@@ -71,7 +71,7 @@ export function BoardSettingsSection({
       </SettingsRow>
       <div data-profile-advanced-board-defaults={advancedBoardOpen ? "open" : "closed"}>
         <SettingsRow label="Erweiterte Planungs-Defaults" description="Optionale Filter und aufgeklappte Initiativen für die Planung.">
-          <UiButton onClick={() => onAdvancedBoardOpenChange(!advancedBoardOpen)} className="min-w-44 justify-between">
+          <UiButton onClick={() => { if (!advancedBoardOpen) explicit.current = true; onAdvancedBoardOpenChange(!advancedBoardOpen); }} className="min-w-44 justify-between">
             {advancedBoardOpen ? "Schließen" : "Öffnen"}
             <ChevronDown size={15} className={classNames("transition", advancedBoardOpen && "rotate-180")} />
           </UiButton>

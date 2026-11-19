@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { act, useEffect, useState, useSyncExternalStore } from "react";
+import { vi, expect as schedulingExpect } from "vitest";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
@@ -14,9 +15,10 @@ const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspac
   planningFilters: { ...defaultFilters(), initiativeId: "saved-filter-outside-page" }, expandedInitiativeIds: ["saved-expanded-outside-page"], createdAt: "before", updatedAt: "before" };
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
 
-function ProfileOptionsFixture({ mode = "held" }: { mode?: "held" | "retry" | "query" | "empty" }) {
+function ProfileOptionsFixture({ mode = "held" }: { mode?: "held" | "retry" | "query" | "empty" | "scheduling" }) {
   const [saved, setSaved] = useState<ProfileUiPreference>();
   const [candidateReads, setCandidateReads] = useState(0);
+  const [queries, setQueries] = useState<string[]>([]);
   const [bundle] = useState(() => {
     const now = Date.now(), deadline = now + 60_000;
     const session = { userId: "profile-options-account", user: { id: "profile-options-account" }, revision: "original-profile-options-session", expiresAt: (now + 3_600_000) / 1000 };
@@ -33,7 +35,9 @@ function ProfileOptionsFixture({ mode = "held" }: { mode?: "held" | "retry" | "q
         readCandidates: async query => {
           if (query.kind !== "initiative" || query.limit !== 20) throw new Error("Unexpected Profile discovery scope");
           setCandidateReads(count => count + 1);
+          setQueries(current => [...current, query.query]);
           attempts++;
+          if (mode === "scheduling") return { ...page, candidates: { ...page.candidates, items: [], total: 0, coverage: "complete", continuation: null, observedAt: new Date().toISOString(), validUntil: new Date(Date.now() + 500).toISOString() } };
           if (mode === "retry") {
             if (attempts === 1) throw Object.assign(new Error("Initiative discovery unavailable"), { status: 503 });
             if (query.continuation) return { ...page, candidates: { ...page.candidates, coverage: "complete", continuation: null, items: [
@@ -61,6 +65,7 @@ function ProfileOptionsFixture({ mode = "held" }: { mode?: "held" | "retry" | "q
   return <div className="p-4">
     <p role="status">{error}</p>
     <output aria-label="Initiative discovery reads">{candidateReads}</output>
+    <output aria-label="Initiative discovery queries">{JSON.stringify(queries)}</output>
     <output aria-label="Saved Initiative filter">{saved?.planningFilters.initiativeId || "not-saved"}</output>
     <output aria-label="Saved expanded Initiatives">{saved?.expandedInitiativeIds.join(",") || "not-saved"}</output>
     <button type="button" onClick={bundle.release}>Erste Initiativenseite freigeben</button>
@@ -174,5 +179,36 @@ export const ExplicitAllFilterKeepsTheSavedExpandedSelection: Story = {
     await expect(canvas.getByText("Gespeichert.")).toBeVisible();
     await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^Alle$/);
     await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
+  },
+};
+
+export const ReopeningExpiredInitiativeOptionsStartsImmediately: Story = {
+  args: { mode: "scheduling" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const dispatched = () => JSON.parse(canvas.getByLabelText("Initiative discovery queries").textContent || "[]");
+    const input = (element: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    vi.useFakeTimers();
+    try {
+      await act(async () => { within(canvas.getByRole("navigation", { name: "Profilbereiche" })).getByRole("button", { name: /^Planung$/ }).click(); });
+      await act(async () => { canvas.getByRole("button", { name: /^Öffnen$/ }).click(); });
+      schedulingExpect(dispatched()).toEqual([""]);
+      const search = canvas.getByRole("textbox", { name: "Initiativen suchen" }) as HTMLInputElement;
+      await act(async () => { input(search, "Fern"); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(249); });
+      schedulingExpect(dispatched()).toEqual([""]);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      schedulingExpect(dispatched()).toEqual(["", "fern"]);
+      await act(async () => { input(search, "Weiter"); });
+      await act(async () => { search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
+      schedulingExpect(dispatched()).toEqual(["", "fern", "weiter"]);
+      await act(async () => { canvas.getByRole("button", { name: /^Schließen$/ }).click(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(501); });
+      await act(async () => { canvas.getByRole("button", { name: /^Öffnen$/ }).click(); });
+      schedulingExpect(dispatched()).toEqual(["", "fern", "weiter", "weiter"]);
+    } finally { vi.clearAllTimers(); vi.useRealTimers(); }
   },
 };
