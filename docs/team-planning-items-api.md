@@ -32,7 +32,7 @@ Optional, default-off scopes are issued only when selected while creating the to
 - `write:planning-items:delete-empty` — CEO and Deputy only; delete an empty Epic.
 - `write:planning-items:github-sync` — request GitHub projection for a Deliverable or Sub-Issue only.
 
-Create, update, and delete commits require a UUID `Idempotency-Key`. Repeating the same canonical request with the same key returns the stored response. Reusing it for different input returns `409 Conflict`.
+Create, update, delete, and approval commits require a UUID `Idempotency-Key`. Repeating the same canonical request with the same key returns the stored result. Reusing it for different input returns `409 Conflict`.
 
 ```http
 Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
@@ -72,6 +72,7 @@ A valid token without all required scopes receives `403 Forbidden`, `code: "INSU
 - `POST /api/team/planning-items/v2/items` — creates a complete batch atomically.
 - `POST /api/team/planning-items/v2/items/{id}/preview` — validates and previews a partial update.
 - `PATCH /api/team/planning-items/v2/items/{id}` — commits a partial update.
+- `POST /api/team/planning-items/v2/items/{id}/approval` — approves one proposed Initiative or Deliverable.
 - `POST /api/team/planning-items/v2/items/{id}/github-sync` — syncs one Deliverable or Sub-Issue.
 - `POST /api/team/planning-items/v2/items/{id}/delete/preview` — checks whether one Epic is empty.
 - `DELETE /api/team/planning-items/v2/items/{id}` — deletes one empty Epic.
@@ -79,6 +80,24 @@ A valid token without all required scopes receives `403 Forbidden`, `code: "INSU
 - `DELETE /api/team/planning-items/v2/tokens/{id}` — revokes one active token.
 
 Token management is session-authorized; bearer-token planning operations use the same v2 contract.
+
+## Approve an item
+
+Existing and newly issued personal tokens can request approval without an additional scope or token rotation. This expands the actions available to existing tokens. FounderOps checks the token owner's current role on every request; only a CEO or Deputy can approve. A token cannot approve an Epic or Sub-Issue, reject an item, or return it for revision.
+
+Read the exact item and its current `approvalRevision` from context, then send the user's explicitly requested approval as a single-item operation:
+
+```http
+POST /api/team/planning-items/v2/items/{id}/approval
+Idempotency-Key: 5e627de3-8e91-47ba-8c3f-e06ed8e26059
+Content-Type: application/json
+
+{"expectedApprovalRevision": 1}
+```
+
+The body accepts only `expectedApprovalRevision`, an integer from 1 through 2147483647. The response contains `ok`, `replayed`, `itemType`, `item`, `itemLink`, and `lifecycle` for a Deliverable. A `lifecycle.completed` value of `false` means GitHub lifecycle work remains outstanding or could not be checked. `_meta.operation` is `planningItems.approve`; `requiredScopes` and `missingScopes` are empty. Scope access does not grant approval authority.
+
+The item must be proposed and meet the existing parent, RACI, and review-lock rules. A stale revision, ineligible item, or a reused key with different input returns `409`; an invalid request returns `400`, an unauthorized role returns `403`, and a missing or unsupported item returns `404`. Retrying the same item and revision with the same key returns its stored approval result without repeating the decision. The stored Initiative result includes its strategy and RACI assignments at approval, even if they later change. A Deliverable retry also attempts to process outstanding durable lifecycle work. Different items are separate requests and may succeed or fail independently. Creating, updating, or syncing an item does not approve it.
 
 ## Context and canonical references
 

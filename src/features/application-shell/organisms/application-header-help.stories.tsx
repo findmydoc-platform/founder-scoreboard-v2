@@ -3,6 +3,7 @@ import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
 import { expect, userEvent, within } from "storybook/test";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
+import { useActiveProductUpdateClock } from "../../../../tests/helpers/product-update-story-clock";
 
 const meta = {
   title: "Application shell/Help navigation",
@@ -44,6 +45,7 @@ export const PhoneHelpProtectsTheItemDraft: Story = {
 };
 
 export const PhoneUpdatesProtectTheItemDraft: Story = {
+  beforeEach: useActiveProductUpdateClock,
   parameters: { viewport: { options: { phone: { name: "Phone", styles: { width: "390px", height: "844px" } } } } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

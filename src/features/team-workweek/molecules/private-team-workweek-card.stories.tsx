@@ -2,6 +2,7 @@ import { googleWorkspaceApi } from "@/features/team-workweek/model/google-worksp
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { privateWorkweekApi } from "../model/private-workweek-api";
 import { useCalendarPlanningState } from "../../../../tests/helpers/workweek-calendar-owner";
+import { useActiveProductUpdateClock } from "../../../../tests/helpers/product-update-story-clock";
 import { ProductUpdatesProvider } from "@/features/product-updates/organisms/product-updates-provider";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
 import { FeatureTourProvider } from "@/features/product-tours/organisms/feature-tour-provider";
@@ -914,6 +915,7 @@ export const WorkweekGuidePreview: Story = {
 };
 
 export const StartsTheWorkweekGuideFromTheProductGallery: Story = {
+  beforeEach: useActiveProductUpdateClock,
   args: { profile, apiClient: client({ immediateAllowed: true }) },
   render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
   play: async ({ canvasElement }) => {
