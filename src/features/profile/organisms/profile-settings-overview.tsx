@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
-import { initiativePlanningItems, quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
+import { quickFilters, viewTabs } from "@/features/planning/model/planning-app-model";
 import {
   isPersistedWorkspace,
   workspaceRoutes,
@@ -111,7 +111,6 @@ function ProfileSettingsForm({
   const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...data.profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const statusOptions = [{ value: "Alle", label: "Alle" }, ...taskStatuses.map((status) => ({ value: status, label: status }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority }));
-  const initiativeOptions = [{ value: "Alle", label: "Alle" }, ...initiativePlanningItems(data.tasks).map((initiative) => ({ value: initiative.id, label: initiative.title }))];
   const quickFilterOptions = quickFilters.map((item) => ({ value: item.id, label: item.label }));
 
   const updateDraft = <Key extends keyof ProfileSettingsDraft>(key: Key, value: ProfileSettingsDraft[Key]) => {
@@ -216,9 +215,8 @@ function ProfileSettingsForm({
           {activeSection === "board" && (
             <BoardSettingsSection
               advancedBoardOpen={advancedBoardOpen}
-              data={data}
+              planningState={planningState}
               draft={draft}
-              initiativeOptions={initiativeOptions}
               priorityOptions={priorityOptions}
               quickFilterOptions={quickFilterOptions}
               statusOptions={statusOptions}
