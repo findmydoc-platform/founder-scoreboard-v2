@@ -24,7 +24,7 @@ beforeEach(() => {
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.startsWith("/rest/v1/rpc/")) {
       const table = url.pathname.split("/").at(-1);
       reads.push({ table, query: url.searchParams });
-      if (["active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links"].includes(table)) return Response.json({ message: "Planning enumeration intentionally unavailable" }, { status: 503 });
+      if (["active_tasks", "planning_item_strategy", "planning_item_raci_assignments", "task_links"].includes(table)) return Response.json({ code: "42P01", message: "Planning enumeration intentionally unavailable" }, { status: 400 });
       if (table === "profiles") return Response.json(profileIds.map((id, index) => ({ id, name: index ? "Other Founder" : "Synthetic Founder", platform_role: "founder", org_role: "Founder", focus: index ? "Other focus" : "Independent focus", weekly_capacity: index ? 24 : 37 })), { headers: { "content-range": "0-1/2" } });
       if (table === "projects") return Response.json({ id: "findmydoc-founder-execution", name: "Planning", range_label: "Current", review_objection_window_hours: 24 });
       if (table === "profile_ui_preferences") return Response.json(preferenceRows(), { headers: { "content-range": "0-1/2" } });
