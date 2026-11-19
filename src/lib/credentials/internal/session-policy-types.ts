@@ -4,6 +4,7 @@ export type SessionPolicyAction =
   | "workweek.private.write"
   | "planning.revision.read"
   | "planning.board.read"
+  | "planning.backlog.read"
   | "team.read"
   | "planning.contribute"
   | "governance.ceo"

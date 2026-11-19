@@ -1,3 +1,4 @@
+import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 import { TaskGitHubSyncNotice } from "@/features/tasks/molecules/task-github-sync-notice";
 import { hasGitHubIssue } from "@/lib/platform";
 import { TaskReviewOperationNotice } from "@/features/reviews/molecules/task-review-operation-notice";
@@ -61,6 +62,7 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
     sidebarRef,
     workspace,
   } = controller;
+  const displayedView = controller.displayedPlanningQuery && controller.displayedPlanningQuery.view !== "complete" ? controller.displayedPlanningQuery.view : controller.view;
   const resolvedParentFilterId = planningLevel === "deliverable"
     ? filters.initiativeId === "Alle" ? "all" : filters.initiativeId
     : planningParentFilterId;
@@ -128,6 +130,12 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
     );
   }
 
+  const usesScalarOptions = displayedView === "structure" || (workspace === "planning" && displayedView === "gantt");
+  const scalarOptions = usesScalarOptions ? controller.planningState.structureControls() : undefined;
+  const showsGantt = workspace === "planning" && displayedView === "gantt";
+  const ganttCounts = showsGantt && controller.ganttReady && controller.selectedGantt?.readStatus === "current"
+    ? controller.selectedGantt.selection?.toolbarCounts
+    : undefined;
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
       {!focusModeActive ? (
@@ -164,24 +172,31 @@ export function PlanningAppShell({ authRequired, controller, administratorAccess
 
         <ProductUpdatesProvider profileId={currentProfile?.id || null} />
 
+        {scalarOptions && scalarOptions.readStatus !== "current" ? <UiNotice role="status" tone="info">
+          {scalarOptions.readStatus === "loading" || scalarOptions.readStatus === "not-loaded" ? "Filteroptionen werden geladen." : "Filteroptionen sind nicht aktuell."}
+          {["unavailable", "stale", "forbidden"].includes(scalarOptions.readStatus) ? <UiButton type="button" onClick={() => void controller.planningState.loadStructureControls({ refresh: true })}>Filteroptionen erneut laden</UiButton> : null}
+        </UiNotice> : null}
         {filtersAvailable && (
           <PlanningFilters
             filters={filters}
+            scalarReadStatus={scalarOptions?.readStatus}
             planningLevel={planningLevel}
             planningParentFilterId={resolvedParentFilterId}
             levelTotals={controller.planningBoard?.result?.levelTotals}
-            profiles={data.profiles}
-            initiatives={initiativePlanningItems(data.tasks)}
-            sprints={data.sprints}
+            profiles={scalarOptions ? scalarOptions.controls?.people || [] : data.profiles}
+            initiatives={scalarOptions ? scalarOptions.controls?.initiatives || [] : controller.planningBoard?.table?.initiativeOptions || displayedView === "board" && controller.planningBoard?.result?.initiativeOptions || initiativePlanningItems(data.tasks)}
+            epics={displayedView === "board" ? controller.planningBoard?.result?.epicOptions : undefined}
+            sprints={scalarOptions ? scalarOptions.controls?.sprints || [] : data.sprints}
             tasks={data.tasks}
-            workstreams={controller.view === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
+            workstreams={scalarOptions ? [...scalarOptions.controls?.workstreams || []] : controller.planningBoard?.table?.workstreams ? [...controller.planningBoard.table.workstreams] : displayedView === "board" && controller.planningBoard?.result?.workstreams ? [...controller.planningBoard.result.workstreams] : Array.from(new Set(data.tasks.map((task) => task.workstream).filter(Boolean))).sort((left, right) => left.localeCompare(right, "de"))}
             quickFilters={quickFilters}
             expanded={showFilters}
-            visibleCount={controller.view === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.visibleTasks.length}
-            totalCount={controller.view === "board" ? controller.planningBoard?.result?.levelTotals?.[planningLevel] ?? planningLevelTasks.length : workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
-            showPlanningLevel={controller.view === "board"}
+            visibleCount={showsGantt ? ganttCounts?.filtered ?? null : displayedView === "board" ? controller.planningBoard?.result?.metrics.total ?? planningVisibleTasks.length : controller.planningBoard?.table?.page.total ?? controller.visibleTasks.length}
+            totalCount={showsGantt ? ganttCounts?.unfiltered ?? null : displayedView === "board" ? controller.planningBoard?.result?.levelTotals?.[planningLevel] ?? planningLevelTasks.length : controller.planningBoard?.table?.page.total ?? workspaceTasks.filter((task) => task.taskType !== "sub_issue").length}
+            showPlanningLevel={displayedView === "board"}
             onExpandedChange={controller.setShowFilters}
             onChange={setFilters}
+            onSearchSubmit={() => { void controller.submitPlanningSearch(); }}
             onPlanningLevelChange={handlePlanningLevelChange}
             onPlanningParentFilterChange={handlePlanningParentFilterChange}
           />

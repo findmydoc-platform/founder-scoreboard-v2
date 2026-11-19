@@ -13,6 +13,7 @@ import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-b
 import { planningWorkspaceHydration } from "./model/planning-workspace-hydration";
 import { normalizePlanningBoardQuery, planningBoardQueryKey, type PlanningBoardColumn, type PlanningBoardQueryInput } from "./model/planning-board-query";
 import { taskStatuses } from "@/lib/status";
+import { planningBoardStoryResponse } from "./model/planning-board-story-stream";
 
 const profile: Profile = { id: "strategic-person", name: "Strategic Person", platformRole: "ceo", orgRole: "CEO", githubLogin: "strategic-person", weeklyCapacity: 40 };
 const user = { id: "strategic-user", email: "strategic@example.com" } as User;
@@ -48,10 +49,10 @@ function StrategicLevelsFlow() {
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
-    const restore = mockAccountLifecycle("google", { linked: true }, input => {
+    const restore = mockAccountLifecycle("google", { linked: true }, (input, init) => {
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
-      if (url.pathname === "/api/planning-board-data") return Response.json({ model: page(JSON.parse(url.searchParams.get("scope") || "{}")), currentProfile: profile });
+      if (url.pathname === "/api/planning-board-data") return planningBoardStoryResponse(input, init, { readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(JSON.parse(url.searchParams.get("scope") || "{}")), currentProfile: profile });
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initial.board.workspaceRevision });
       if (url.pathname === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (url.pathname === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [] });
@@ -60,7 +61,7 @@ function StrategicLevelsFlow() {
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
   }, []);
-  return ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null;
+  return ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null;
 }
 const meta = { title: "Planning/Strategic levels flow", component: StrategicLevelsFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof StrategicLevelsFlow>;
 export default meta;

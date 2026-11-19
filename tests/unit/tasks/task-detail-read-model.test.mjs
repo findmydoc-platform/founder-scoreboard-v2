@@ -127,6 +127,7 @@ function createSupabaseFixture(options = {}) {
   };
 }
 
+const { taskRowColumns } = await importTestModule("src/lib/planning-row-types.ts");
 const { mapTaskRow } = await importTestModule("src/lib/planning-task-mappers.ts");
 const { subIssueEvidenceSummary } = await importTestModule("src/features/tasks/model/sub-issue-evidence.ts");
 const { taskHasValidReviewEvidence } = await importTestModule("src/features/reviews/model/review-evidence.ts");
@@ -144,7 +145,7 @@ const { createSupabaseTaskDetailReadModel } = await importTestModule(
       mapTaskRelation: (row) => ({ id: row.id, taskId: row.task_id, relatedTaskId: row.related_task_id }),
       mapTaskReview: (row) => row,
     },
-    "@/lib/planning-row-types": { taskRowSelect: "id" },
+    "@/lib/planning-row-types": { taskRowSelect: "id", taskRowColumns },
     "@/lib/planning-profile-mappers": { mapProfile: (row) => row },
     "@/lib/planning-sprint-mappers": { mapSprint: (row) => row },
     "@/lib/planning-read-model": { ACTIVE_TASKS_TABLE: "active_tasks" },

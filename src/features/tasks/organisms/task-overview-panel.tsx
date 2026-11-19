@@ -202,13 +202,14 @@ function EvidenceGroups({
   inherited?: ReturnType<typeof subIssueEvidenceSummary>;
   onOpenTask?: (id: string) => void;
 }) {
+  const knownCount = inherited.count === null ? inherited.knownCount : inherited.count;
   return (
     <div className="mt-3 grid gap-5">
-      {evidenceLinks.length > 0 || !inherited.count ? <div>
+      {evidenceLinks.length > 0 || !knownCount ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Links</h4>
         <EvidenceLinksList links={evidenceLinks} />
       </div> : null}
-      {linkedPullRequests.length > 0 || !inherited.count ? <div>
+      {linkedPullRequests.length > 0 || !knownCount ? <div>
         <h4 className="mb-2 text-sm font-medium text-slate-600">Verknüpfte Pull Requests</h4>
         <LinkedPullRequestsList pullRequests={linkedPullRequests} />
       </div> : null}
@@ -251,6 +252,7 @@ function ReviewEvidenceSection({
 type Props = {
   task: Task;
   subIssues?: Task[];
+  subIssueMembershipComplete?: boolean;
   onOpenTask?: (id: string) => void;
   profiles: Profile[];
   baseline: TaskOverviewDraft;
@@ -275,6 +277,7 @@ type Props = {
 export function TaskOverviewPanel({
   task,
   subIssues = [],
+  subIssueMembershipComplete = true,
   onOpenTask,
   profiles,
   baseline,
@@ -306,7 +309,7 @@ export function TaskOverviewPanel({
   const evidenceInvalid = evidenceInvalidIndex >= 0;
   const evidenceLinks = draft.evidenceLinks.map((value) => value.trim()).filter((value) => Boolean(parseEvidenceUrl(value)));
   const linkedPullRequests = task.linkedPullRequests || [];
-  const inherited = subIssueEvidenceSummary(task, subIssues);
+  const inherited = subIssueEvidenceSummary(task, subIssues, { membershipComplete: subIssueMembershipComplete });
   const isSubIssue = task.taskType === "sub_issue";
   const isStrategic = task.taskType === "epic" || task.taskType === "initiative";
   const hasSubIssueBrief = isSubIssue && subIssueBriefFields.some(({ key }) => Boolean(draft[key].trim()));
@@ -320,7 +323,7 @@ export function TaskOverviewPanel({
     : overviewFields.some(({ key }) => draft[key].trim())
       || evidenceLinks.length > 0
       || linkedPullRequests.length > 0
-      || inherited.count > 0
+      || inherited.count === null || inherited.count > 0
       || Boolean(riskContent);
   const flatReadOnly = flat && !editing;
 

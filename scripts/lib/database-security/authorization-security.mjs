@@ -13,6 +13,47 @@ const planningContributorWritePolicySet = new Set(
 );
 
 export async function verifyAuthorizationSecurity(client, failures) {
+  for (const signature of [
+    "public.planning_deliverable_selection(text,jsonb,text,integer,integer,text,timestamptz)",
+    "public.planning_selection_status(text,boolean)",
+    "public.planning_deliverable_query_basis(text,jsonb,text,integer,integer,text,timestamptz,boolean)",
+    "public.planning_deliverable_query_plan(text,jsonb,integer,timestamptz)",
+    "public.planning_deliverable_column(text,text[],text,timestamptz,timestamptz)",
+    "public.planning_deliverable_summaries(text,text[],text,timestamptz,timestamptz)",
+  ]) {
+    const privileges = (await client.query(`select to_regprocedure($1) is not null as present,
+      has_function_privilege('anon',to_regprocedure($1),'EXECUTE') as anonymous_execute,
+      has_function_privilege('authenticated',to_regprocedure($1),'EXECUTE') as user_execute,
+      has_function_privilege('service_role',to_regprocedure($1),'EXECUTE') as server_execute,
+      (select not prosecdef from pg_proc where oid=to_regprocedure($1)) as invoker`, [signature])).rows[0];
+    if (!privileges?.present || privileges.anonymous_execute || privileges.user_execute || !privileges.server_execute || !privileges.invoker) failures.push(`Planning selection must remain invoker-only and server-executable: ${signature}`);
+  }
+  const publication = (await client.query(`select to_regprocedure('public.planning_board_publication_context()') is not null as present,
+    has_function_privilege('anon',to_regprocedure('public.planning_board_publication_context()'),'EXECUTE') as anonymous_execute,
+    has_function_privilege('authenticated',to_regprocedure('public.planning_board_publication_context()'),'EXECUTE') as user_execute,
+    has_function_privilege('service_role',to_regprocedure('public.planning_board_publication_context()'),'EXECUTE') as server_execute,
+    prosecdef as definer, proconfig from pg_proc where oid=to_regprocedure('public.planning_board_publication_context()')`)).rows[0];
+  if (!publication?.present || publication.anonymous_execute || !publication.user_execute || publication.server_execute
+    || !publication.definer || !publication.proconfig?.includes('search_path=""')) failures.push("Planning publication context must remain a fixed user-bound fence with an empty search path");
+  for (const [signature, userAllowed] of [
+    ["public.planning_detail_source(text,text)", false],
+    ["public.planning_detail_publication_context(text,text)", true],
+  ]) {
+    const detail = (await client.query(`select
+      has_function_privilege('anon', procedure.oid, 'EXECUTE') as anonymous_execute,
+      has_function_privilege('authenticated', procedure.oid, 'EXECUTE') as user_execute,
+      has_function_privilege('service_role', procedure.oid, 'EXECUTE') as server_execute,
+      procedure.prosecdef as definer, procedure.proconfig
+      from pg_proc as procedure where procedure.oid=to_regprocedure($1)`, [signature])).rows[0];
+    if (!detail || detail.anonymous_execute || detail.user_execute !== userAllowed
+      || detail.server_execute !== !userAllowed || !detail.definer
+      || !detail.proconfig?.includes('search_path=""')) failures.push(`Detail source publication privileges differ from their fixed boundary: ${signature}`);
+  }
+  const detailRevision = (await client.query(`select relation.relrowsecurity as rls,
+    exists(select 1 from pg_roles as role where role.rolname in ('anon','authenticated','service_role')
+      and has_table_privilege(role.oid, relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) as exposed
+    from pg_class as relation where relation.oid=to_regclass('workspace_private.planning_detail_area_revision')`)).rows[0];
+  if (!detailRevision?.rls || detailRevision.exposed) failures.push("Detail area revisions must remain private with RLS and no client or service table grants");
   const observationConfirmation = "public.apply_google_team_workweek_observations(uuid,integer,jsonb,timestamptz)";
   const confirmationPrivileges = await client.query(
     `select to_regprocedure($1) is not null as exists,

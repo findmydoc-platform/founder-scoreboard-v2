@@ -63,3 +63,39 @@ test("planning revision route preserves authorization, exact count, latest times
   assert.equal((await denied.GET()).status, 403);
   assert.deepEqual(denied.calls, []);
 });
+
+
+test("source-only observation returns its version without requesting a complete snapshot or aggregate", async () => {
+  const protocol = administratorProtocol({ role: "viewer", responses: { planning_source_version: "source-47" } });
+  const route = await importTestModule("src/app/api/planning-source-version/route.ts", { "server-only": {} });
+  const response = await route.GET(protocol.request());
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { version: "source-47" });
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(protocol.calls.map(call => call.name), ["planning_source_version"]);
+});
+
+test("source-only HTTP cancellation reaches the version RPC without a complete fallback", async () => {
+  const protocol = administratorProtocol({ role: "viewer" });
+  const fallback = globalThis.fetch;
+  const controller = new AbortController();
+  let receivedSignal, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  vi.stubGlobal("fetch", async (input, init) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname !== "/rest/v1/rpc/planning_source_version") return fallback(request);
+    receivedSignal = request.signal;
+    entered();
+    await new Promise(resolve => request.signal.addEventListener("abort", resolve, { once: true }));
+    throw new DOMException("Controlled version cancellation", "AbortError");
+  });
+  const { NextRequest } = await import("next/server");
+  const request = new NextRequest(protocol.request("/api/planning-source-version"), { signal: controller.signal });
+  const route = await importTestModule("src/app/api/planning-source-version/route.ts", { "server-only": {} });
+  const reading = route.GET(request);
+  await started;
+  controller.abort();
+  await vi.waitFor(() => assert.equal(receivedSignal?.aborted, true));
+  assert.equal((await reading).status, 503);
+  assert.equal(protocol.calls.some(call => call.name === "planning_workspace_snapshot"), false);
+});

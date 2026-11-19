@@ -11,7 +11,7 @@ import {
   Ellipsis,
   ExternalLink,
 } from "lucide-react";
-import { useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { memo, useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
 import { TaskAssigneeAvatar } from "@/features/tasks/atoms/task-assignee-avatar";
 import { TaskCardSubIssueNotice } from "@/features/tasks/atoms/task-card-sub-issue-notice";
@@ -125,26 +125,33 @@ function childStatusPresentation(status: TaskStatus) {
   };
 }
 
-function TaskCardChildItem({
-  child,
+const TaskCardChildItem = memo(function TaskCardChildItem({
+  id,
+  title,
+  status: childStatus,
   isViewerChild,
   onOpenTask,
+  prefetchTaskLinks,
   showDoneDivider,
 }: {
-  child: Task;
+  id: string;
+  title: string;
+  status: string;
   isViewerChild: boolean;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   showDoneDivider: boolean;
 }) {
-  const status = normalizeStatus(child.status);
+  const status = normalizeStatus(childStatus);
   const isDone = status === "Erledigt";
   const { Icon, iconClassName, labelClassName } = childStatusPresentation(status);
 
   return (
     <li className={showDoneDivider ? "mt-1 border-t border-slate-200 pt-1" : undefined}>
       <TaskReferenceLink
-        task={child}
+        task={{ id, title }}
         onOpenTask={onOpenTask}
+        prefetch={prefetchTaskLinks}
         showIcon={false}
         layout="flex"
         draggable={false}
@@ -152,7 +159,7 @@ function TaskCardChildItem({
           event.preventDefault();
           event.stopPropagation();
         }}
-        aria-label={`${child.title}, Status ${status}`}
+        aria-label={`${title}, Status ${status}`}
         className={`group/direct-child min-w-0 items-center gap-2 rounded-sm px-1 py-1.5 hover:no-underline ${
           isViewerChild
             ? "bg-yellow-50 text-slate-800 hover:bg-yellow-100 hover:text-slate-900"
@@ -162,7 +169,7 @@ function TaskCardChildItem({
         }`}
       >
         <Icon size={13} className={`shrink-0 ${iconClassName}`} aria-hidden="true" />
-        <span title={child.title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{child.title}</span>
+        <span title={title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{title}</span>
         {isViewerChild ? (
           <span className="shrink-0 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-800">
             Für dich
@@ -178,7 +185,7 @@ function TaskCardChildItem({
       </TaskReferenceLink>
     </li>
   );
-}
+});
 
 function TaskCardChildRollup({
   task,
@@ -186,13 +193,15 @@ function TaskCardChildRollup({
   childProgress,
   childList,
   onOpenTask,
+  prefetchTaskLinks,
   viewerOpenSubIssueIds,
 }: {
   task: Task;
   childItems: readonly Task[];
-  childProgress?: ReturnType<typeof taskChildProgress>;
+  childProgress?: ReturnType<typeof taskChildProgress> | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   viewerOpenSubIssueIds: string[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -200,6 +209,7 @@ function TaskCardChildRollup({
   const [retryRequested, setRetryRequested] = useState(false);
   const generatedId = useId().replaceAll(":", "");
   const listId = `task-card-children-${generatedId}`;
+  const progressKnown = childProgress !== null;
   const { completed, percentage, total, unfinished } = childProgress || taskChildProgress(childItems);
   const plural = directChildPluralLabel(task.taskType);
   const completedWithOpenChildren = normalizeStatus(task.status) === "Erledigt" && unfinished > 0;
@@ -217,12 +227,12 @@ function TaskCardChildRollup({
     : otherChildren.slice(0, collapsedOtherChildLimit);
   const hiddenOtherChildCount = otherChildren.length - visibleOtherChildren.length;
 
-  if (!total) return null;
+  if (progressKnown && !total) return null;
 
   return (
     <div className="mt-2.5">
-      <TaskChildProgress completed={completed} label={plural} percentage={percentage} total={total} />
-      {completedWithOpenChildren && (
+      {progressKnown ? <TaskChildProgress completed={completed} label={plural} percentage={percentage} total={total} /> : <p className="text-xs text-slate-500">Kindfortschritt unbekannt</p>}
+      {progressKnown && completedWithOpenChildren && (
         <p className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">
           <CircleAlert size={11} aria-hidden="true" />
           {unfinished === 1 ? "1 Kind noch offen" : `${unfinished} Kinder noch offen`}
@@ -233,7 +243,7 @@ function TaskCardChildRollup({
         draggable={false}
         aria-expanded={isExpanded}
         aria-controls={listId}
-        aria-label={`${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt`}
+        aria-label={progressKnown ? `${plural} ${isExpanded ? "einklappen" : "anzeigen"}: ${unfinished} offen, ${completed} erledigt` : `${plural} ${isExpanded ? "einklappen" : "anzeigen"}: Fortschritt unbekannt`}
         onClick={() => {
           setIsExpanded((current) => !current);
           if (!isExpanded && childList && childList.readStatus !== "current" && childList.readStatus !== "loading") childList.load();
@@ -245,13 +255,13 @@ function TaskCardChildRollup({
         }}
         className="coarse-touch-target mt-2 flex min-h-11 sm:min-h-6 w-full items-center justify-between gap-2 rounded-sm border border-transparent py-1 text-left font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
       >
-        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
+        {progressKnown ? <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px]">
           <Circle size={10} className="shrink-0 text-slate-300" aria-hidden="true" />
           <span className="tabular-nums">{unfinished} offen</span>
           <span aria-hidden="true">·</span>
           <CircleCheck size={10} className="shrink-0 text-emerald-500" aria-hidden="true" />
           <span className="tabular-nums">{completed} erledigt</span>
-        </span>
+        </span> : <span className="text-[11px]">{plural} {isExpanded ? "einklappen" : "anzeigen"}</span>}
         {isExpanded ? (
           <ChevronUp size={14} className="shrink-0 text-slate-400" aria-hidden="true" />
         ) : (
@@ -284,9 +294,12 @@ function TaskCardChildRollup({
             return (
               <TaskCardChildItem
                 key={child.id}
-                child={child}
+                id={child.id}
+                title={child.title}
+                status={child.status}
                 isViewerChild={isViewerChild}
                 onOpenTask={onOpenTask}
+                prefetchTaskLinks={prefetchTaskLinks}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
               />
             );
@@ -302,9 +315,12 @@ function TaskCardChildRollup({
             return (
               <TaskCardChildItem
                 key={child.id}
-                child={child}
+                id={child.id}
+                title={child.title}
+                status={child.status}
                 isViewerChild={false}
                 onOpenTask={onOpenTask}
+                prefetchTaskLinks={prefetchTaskLinks}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
               />
             );
@@ -433,7 +449,7 @@ function TaskCardRiskBadges({
   allTasks: Task[];
   blockers: TaskBlocker[];
   maxVisible?: number;
-  attentionSignals?: TaskAttentionSignal[];
+  attentionSignals?: TaskAttentionSignal[] | null;
 }) {
   const relationGroups = taskRelationsFor(task.id, relations);
   const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
@@ -444,6 +460,7 @@ function TaskCardRiskBadges({
     relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
   ].filter((signal): signal is CardRiskSignal => Boolean(signal));
 
+  if (attentionSignals === null) return <span className="text-[11px] text-slate-500">Signale unbekannt</span>;
   if (!signals.length) return null;
 
   const visibleSignals = signals.slice(0, maxVisible);
@@ -477,6 +494,7 @@ export function TaskCard({
   attentionSignals,
   childList,
   onOpenTask,
+  prefetchTaskLinks,
   onStatusChange,
   onStatusEditingStart,
   onDragStart,
@@ -494,10 +512,11 @@ export function TaskCard({
   blockers: TaskBlocker[];
   subIssues?: Task[];
   childItems?: Task[];
-  childProgress?: ReturnType<typeof taskChildProgress>;
-  attentionSignals?: TaskAttentionSignal[];
+  childProgress?: ReturnType<typeof taskChildProgress> | null;
+  attentionSignals?: TaskAttentionSignal[] | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   onStatusChange?: (status: TaskStatus) => void;
   onStatusEditingStart?: () => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -541,6 +560,7 @@ export function TaskCard({
       <TaskReferenceLink
         task={task}
         onOpenTask={onOpenTask}
+        prefetch={prefetchTaskLinks}
         showIcon={false}
         className="min-w-0 max-w-full text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
       >
@@ -570,6 +590,7 @@ export function TaskCard({
         childProgress={childProgress}
         childList={childList}
         onOpenTask={onOpenTask}
+        prefetchTaskLinks={prefetchTaskLinks}
         viewerOpenSubIssueIds={viewerOpenSubIssueIds}
       />
       <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-slate-500">

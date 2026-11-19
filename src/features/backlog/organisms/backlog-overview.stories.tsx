@@ -1,4 +1,6 @@
-import { useState, useSyncExternalStore } from "react";
+import { createBrowserPlanningLifetime } from "@/features/planning/model/internal/browser-planning-lifetime";
+import { buildBacklogTableViewModel, buildBacklogViewModel, DEFAULT_BACKLOG_FILTERS } from "../model/backlog-view-model";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { BacklogOverview } from "./backlog-overview";
@@ -8,7 +10,7 @@ import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { BrowserApiClient, BrowserApiJsonResult } from "@/lib/browser-api-client";
 import type { BacklogModel } from "../model/backlog-read-model";
-import type { AuthenticatedProfile, Sprint } from "@/lib/types";
+import type { AuthenticatedProfile, Sprint, Task } from "@/lib/types";
 const sprint: Sprint = { id: "sprint-1", name: "Sprint 1", status: "active", startDate: "2026-10-26", endDate: "2026-11-01", reviewDueAt: "2026-11-03", scoreLocked: false, updatedAt: "s1" };
 const tasks = [taskDetailStoryTask({ id: "a", title: "Deliverable Alpha", taskType: "deliverable", approvalStatus: "approved", parentTaskId: "initiative", parentApprovalStatus: "approved", assigneeId: "founder", ownerId: "founder", sprintId: "", updatedAt: "r1", order: 10 }), taskDetailStoryTask({ id: "b", title: "Deliverable Beta", taskType: "deliverable", approvalStatus: "approved", parentTaskId: "initiative", parentApprovalStatus: "approved", assigneeId: "founder", ownerId: "founder", sprintId: "", updatedAt: "r1", order: 20 }), taskDetailStoryTask({ id: "initiative", title: "Approved Initiative", taskType: "initiative", approvalStatus: "approved", parentTaskId: "", updatedAt: "i1" })];
 const model: BacklogModel = { revision: "initial", items: tasks, people: [], sprints: [sprint], commitments: [], coverage: { items: "complete", people: "complete", sprints: "complete", commitments: "complete", strategies: "complete", raci: "complete", links: "complete" } };
@@ -36,7 +38,7 @@ function Fixture({ scenario = "success" }: { scenario?: string }) {
  const [owner] = useState(() => { const value = createBrowserPlanningState({ initialData: { ...emptyPlanningShellState, tasks, sprints: [sprint] }, initialWorkspace: "backlog", initialUserId: "backlog-user", initialHeaderData: emptyPlanningHeaderData, initialCurrentProfile: { id: "founder", platformRole: "ceo", name: "CEO" } as AuthenticatedProfile }); value.runtime.session = {userId:value.runtime.userId,revision:"story-session",expiresAt:4102444800,user:{id:value.runtime.userId}}; value.runtime.apiClient = network.client; return value.owner; });
  useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
  const [showBacklog, setShowBacklog] = useState(true);
- return <main><button onClick={() => setShowBacklog(value => !value)}>Ansicht wechseln</button><h1>Backlog assignment</h1><button onClick={() => void owner.planning.refreshWorkspace("backlog")}>Start background read</button><p>Detail Alpha version: {owner.planning.taskDetail("a").task?.updatedAt}</p><p>Detail Alpha order: {owner.planning.taskDetail("a").task?.order}</p><p>Detail Beta order: {owner.planning.taskDetail("b").task?.order}</p><p>Detail Alpha: {owner.planning.taskDetail("a").task?.sprintId || "unscheduled"}</p>{showBacklog ? <BacklogOverview planningState={owner.planning} canManageBacklog onOpenTask={() => {}} onCreatePlanningItem={() => {}} onProposeDeliverable={() => {}} /> : <p>Andere Planning-Ansicht</p>}</main>;
+ return <main><button onClick={() => setShowBacklog(value => !value)}>Ansicht wechseln</button><h1>Backlog assignment</h1><button onClick={() => void owner.planning.refreshWorkspace("backlog")}>Start background read</button><p>Detail Alpha version: {owner.planning.taskDetail("a").task?.updatedAt}</p><p>Detail Alpha order: {owner.planning.taskDetail("a").task?.order}</p><p>Detail Beta order: {owner.planning.taskDetail("b").task?.order}</p><p>Detail Alpha: {owner.planning.taskDetail("a").task?.sprintId || "unscheduled"}</p>{showBacklog ? <BacklogOverview readMode="legacy" planningState={owner.planning} canManageBacklog onOpenTask={() => {}} onCreatePlanningItem={() => {}} onProposeDeliverable={() => {}} /> : <p>Andere Planning-Ansicht</p>}</main>;
 }
 const meta = { title: "Planning/Backlog/CoordinatedAssignment", component: Fixture } satisfies Meta<typeof Fixture>; export default meta; type Story = StoryObj<typeof meta>;
 export const OpenChooserKeepsDisplayedTaskBasis: Story = { args: { scenario: "chooser" }, play: async ({ canvasElement }) => {
@@ -128,3 +130,265 @@ export const RankDragKeepsDisplayedSourceAndTargetBasis: Story = { globals: { vi
  await waitFor(() => expect(canvas.getByText("Detail Alpha version: foreign-r2")).toBeVisible()); const rank = within(canvasElement.querySelector('[data-tour-id="backlog-rank-table"]') as HTMLElement); const target = rank.getAllByText("Deliverable Alpha").map(element => element.closest("tr")).find(Boolean)!; const bounds = target.getBoundingClientRect(); target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.top + 1 })); target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer, clientY: bounds.top + 1 })); source.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer }));
  await waitFor(() => expect(canvas.getAllByText(/Quelle oder Ziel wurde zwischenzeitlich geändert/)[0]).toBeVisible()); expect(controls.get("order-drag-basis")!.writes()).toBe(0);
 } };
+
+const childAreaParent = taskDetailStoryTask({ id:"selected-backlog-initiative",title:"Ausgewählte Backlog-Initiative",taskType:"initiative",parentTaskId:"",approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaPreview = taskDetailStoryTask({ id:"backlog-preview-deliverable",title:"Sichtbares Vorschau-Deliverable",parentTaskId:childAreaParent.id,approvalStatus:"approved",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaOffPage = taskDetailStoryTask({ id:"backlog-off-page-deliverable",title:"Vollständig geladenes Backlog-Kind",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Offen",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaCompleted = taskDetailStoryTask({ id:"backlog-completed-context",title:"Erledigtes Kind nur für Rollup",parentTaskId:childAreaParent.id,approvalStatus:"approved",status:"Erledigt",updatedAt:"2026-11-01T12:00:00Z" });
+const childAreaControls = new Map<string,{fail():void;resolve():void}>();
+function IndependentBacklogChildrenStory() {
+ const [requests,setRequests]=useState(0);
+ const [bundle]=useState(()=>{
+  const profile={id:"backlog-child-founder",name:"Synthetic Founder",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
+  const source=[childAreaParent,childAreaPreview],data={...emptyPlanningShellState,tasks:source,profiles:[profile]};
+  const initial:BacklogModel={revision:"backlog-selected-source",items:source,people:[profile],sprints:[],commitments:[],coverage:{items:"partial",people:"complete",sprints:"complete",commitments:"complete",strategies:"complete",raci:"complete",links:"complete"}};
+  const deadline=Date.now()+60_000,userId="backlog-child-user";
+  let fail=()=>{},resolve=()=>{};
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason","dependsOn","evidenceLink","assignee","owner","createdBy"];
+  const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
+  const childResponse=()=>({response:new Response(null),body:{readAuthority:{userId,deadline},taskDetail:{revision:childAreaParent.updatedAt,sourceRevision:JSON.stringify(["backlog-selected-source","0",null,null]),observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString(),authorityDeadline:deadline,readActor:{profileId:profile.id,platformRole:profile.platformRole},readArea:"children",supportingData:"omitted",taskOmittedFields:omitted,
+    item:compact(childAreaParent),ancestors:[],children:[childAreaPreview,childAreaOffPage,childAreaCompleted].map(compact),childProgress:{completed:1,total:3,unfinished:2,percentage:33},coverage:{children:"complete"},relatedItems:[],discussion:{comments:[],externalComments:[]},blockers:[],relationships:[],activity:[],reviews:[]}}});
+  let childReads=0;
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+    const url=new URL(String(input),"http://localhost:3000");
+    if(url.pathname==="/api/backlog-data")return{response:new Response(null),body:{model:initial} as T};
+    if(url.pathname===`/api/tasks/${childAreaParent.id}/detail-data`&&url.searchParams.get("area")==="children"){
+      setRequests(++childReads);
+      return new Promise<BrowserApiJsonResult<T>>(done=>{fail=()=>done({response:new Response(null,{status:503}),body:{error:"Synthetic child read unavailable"} as T});resolve=()=>done(childResponse() as BrowserApiJsonResult<T>);});
+    }
+    throw new Error("Unexpected Backlog child demand");
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const browser=createBrowserPlanningState({initialData:data,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile});
+  browser.runtime.session={userId,revision:"backlog-child-session",expiresAt:deadline/1000,user:{id:userId}};browser.runtime.apiClient=client;
+  return{browser,fail:()=>fail(),resolve:()=>resolve()};
+ });
+ useEffect(()=>()=>bundle.browser.owner.internal.dispose(),[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ childAreaControls.set("independent",bundle);
+ return <><output aria-label="Backlog child requests">{requests}</output><BacklogOverview readMode="legacy" planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></>;
+}
+export const OpenBacklogGroupLoadsChildrenIndependentlyAndRetriesWithoutLosingItsParent:Story={
+ render:()=> <IndependentBacklogChildrenStory/>,
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog child requests")).toHaveTextContent("1"));
+  const group=canvas.getByRole("region",{name:childAreaParent.title}),area=within(group);
+  await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await expect(area.getByText("Fortschritt noch nicht verfügbar.")).toBeVisible();
+  await expect(area.queryByRole("progressbar")).not.toBeInTheDocument();
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});await userEvent.click(search);
+  childAreaControls.get("independent")!.fail();
+  await expect(await area.findByText("Unteraufgaben konnten nicht geladen werden.")).toBeVisible();
+  await expect(search).toHaveFocus();await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await userEvent.click(area.getByRole("button",{name:"Erneut laden"}));
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog child requests")).toHaveTextContent("2"));
+  childAreaControls.get("independent")!.resolve();
+  await expect(await area.findByRole("link",{name:childAreaOffPage.title})).toBeVisible();
+  await expect(area.getByRole("progressbar",{name:"1 von 3 Deliverables erledigt"})).toBeVisible();
+  await expect(area.getByRole("link",{name:childAreaPreview.title})).toBeVisible();
+  await expect(area.queryByRole("link",{name:childAreaCompleted.title})).not.toBeInTheDocument();
+ },
+};
+
+const scopedBacklogChecks = new Map<string, { counts: ReturnType<typeof buildBacklogViewModel>["scopeCounts"]; matches: string[]; failSprint(): void; connectSession(): void }>();
+function SelectedBacklogScopeStory({ parentRollups = false, smallComplete = false }: { parentRollups?: boolean; smallComplete?: boolean } = {}) {
+ const [requests,setRequests]=useState({selected:0,controls:0,sprints:0,legacy:0,children:0});
+ const [bundle]=useState(()=>{
+  const profile={id:"scoped-backlog-ceo",name:"Synthetic CEO",platformRole:"ceo" as const,orgRole:"CEO",githubLogin:"",weeklyCapacity:40};
+  const parent=taskDetailStoryTask({id:"scoped-backlog-parent",title:"Vollständiger ausgewählter Kontext",taskType:"initiative",parentTaskId:"",updatedAt:"2026-11-01T12:00:00Z"});
+  const rows=Array.from({length:smallComplete?2:1008},(_,index)=>{const n=index+1;return taskDetailStoryTask({id:`scoped-candidate-${n}`,title:n===1008?"Nur über Beschreibung gefunden":`Backlog-Zeile ${n}`,
+    description:n===1008?"Verdeckter Suchtext":"Ordinary description",parentTaskId:parent.id,order:n*10,approvalStatus:n%3===1?"proposed":"approved",sprintId:n%3===2?sprint.id:"",
+    assigneeId:profile.id,ownerId:profile.id,assignee:profile.name,owner:profile.name,hours:1,updatedAt:"2026-11-01T12:00:00Z"});});
+  const done=taskDetailStoryTask({id:"scoped-completed",title:"Erledigter Kontext",parentTaskId:parent.id,status:"Erledigt"});
+  const fullModel:BacklogModel={revision:"scoped-source",items:[parent,...rows,done],people:[profile],sprints:[sprint],
+    commitments:[{id:1,sprintId:sprint.id,profileId:profile.id,commitmentLevel:"Standard",weeklyHours:13,note:"",updatedAt:"2026-11-01T12:00:00Z"}],
+    coverage:{items:"complete",people:"complete",sprints:"complete",commitments:"complete",strategies:"complete",raci:"complete",links:"complete"}};
+  const full=buildBacklogViewModel(fullModel,"all"),match=buildBacklogTableViewModel(fullModel,{...DEFAULT_BACKLOG_FILTERS,query:"Verdeckter Suchtext"});
+  const deadline=Date.now()+60_000,userId="scoped-backlog-user";
+  const receipt=(scope:string)=>({coverage:"complete" as const,scopeRevision:scope,sourceRevision:"scoped-source",observedAt:new Date().toISOString(),validUntil:new Date(deadline).toISOString()});
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason"];
+  const compact=(task:Task)=>{const value={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete value[field];});return value;};
+  const partial={items:"partial" as const,people:"partial" as const,sprints:"partial" as const,commitments:"partial" as const,strategies:"partial" as const,raci:"partial" as const,links:"partial" as const};
+  const empty:BacklogModel={revision:"scoped-source",items:[],people:[],sprints:[],commitments:[],coverage:partial};
+  let sprintAttempts=0,failSprint=()=>{};
+  const response=(model:BacklogModel)=>({response:new Response(null),body:{model,readAuthority:{userId,deadline},readActor:{profileId:profile.id,platformRole:profile.platformRole}}});
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+    const url=new URL(String(input),"http://localhost:3000"),raw=url.searchParams.get("scope");
+    if(url.pathname==="/api/backlog-data"){
+      const scope=raw?JSON.parse(raw) as {view:string;area?:string;day?:string;filters?:typeof DEFAULT_BACKLOG_FILTERS;limit?:number;continuation?:string}:null;
+      if(!scope){setRequests(value=>({...value,legacy:value.legacy+1}));return{response:new Response(null,{status:503}),body:{error:"Unscoped Backlog is not the selected read contract"} as T};}
+      if(scope.view==="backlog-support"&&scope.area==="controls"){
+        setRequests(value=>({...value,controls:value.controls+1}));
+        const controlData={...receipt("controls"),levelTotals:{epic:0,initiative:1,deliverable:1009},statuses:{epic:[],initiative:["Offen"],deliverable:["Offen","Erledigt"]},
+          epics:[],initiatives:[{value:parent.id,label:parent.title}],assignees:[{value:profile.id,label:profile.name}],scopeCounts:full.scopeCounts};
+        return response({...empty,controls:controlData}) as BrowserApiJsonResult<T>;
+      }
+      if(scope.view==="backlog-support"&&scope.area==="sprints"){
+        setRequests(value=>({...value,sprints:value.sprints+1}));
+        if(++sprintAttempts===1)return new Promise<BrowserApiJsonResult<T>>(resolve=>{failSprint=()=>resolve({response:new Response(null,{status:503}),body:{error:"Synthetic Sprint basis unavailable"} as T});});
+        return response({...empty,sprintBasis:{...receipt("sprints"),day:scope.day!,buckets:full.sprintBuckets}}) as BrowserApiJsonResult<T>;
+      }
+      if(scope.view==="backlog"&&scope.filters){
+        setRequests(value=>({...value,selected:value.selected+1}));
+        const query={view:"backlog" as const,filters:{...scope.filters,level:"deliverable" as const},limit:scope.limit||20,...(scope.continuation?{continuation:scope.continuation}:{})};
+        const selected=buildBacklogTableViewModel(fullModel,query.filters).visibleItems,chosen=selected.slice(0,query.limit);
+        return response({...empty,items:[...(chosen.length?[parent]:[]),...chosen.map(item=>item.task)].map(compact),people:[profile],sprints:[sprint],taskOmittedFields:omitted,
+          selection:{...receipt("selected"),query,itemIds:chosen.map(item=>item.task.id),contextIds:chosen.length?[parent.id]:[],rankById:Object.fromEntries(chosen.map(item=>[item.task.id,item.rank])),
+            ...(parentRollups?{parentProgressById:chosen.length?{[parent.id]:{total:rows.length+1,completed:1,unfinished:rows.length,percentage:Math.round(100/(rows.length+1))}}:{}}:{}),
+            total:selected.length,coverage:chosen.length===selected.length?"complete":"partial",continuation:chosen.length===selected.length?null:"selected-next"}}) as BrowserApiJsonResult<T>;
+      }
+    }
+    if(url.pathname===`/api/tasks/${parent.id}/detail-data`){setRequests(value=>({...value,children:value.children+1}));return{response:new Response(null,{status:503}),body:{error:"Synthetic independent child basis unavailable"} as T};}
+    throw new Error("Unexpected selected Backlog request");
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const session={userId,revision:"scoped-backlog-session",expiresAt:deadline/1000,user:{id:userId}};
+  let connectSession=()=>{};
+  const sessionReady=new Promise<typeof session>(resolve=>{connectSession=()=>resolve(session);});
+  const lifetime=createBrowserPlanningLifetime({current:()=>sessionReady,subscribe:()=>()=>{}});
+  const browser=lifetime.page({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile})!;
+  browser.runtime.apiClient=client;
+  return{browser,lifetime,counts:full.scopeCounts,matches:match.visibleItems.map(item=>item.task.id),failSprint:()=>failSprint(),connectSession:()=>connectSession()};
+ });
+ useEffect(()=>{const disconnect=bundle.lifetime.connect();return()=>{disconnect();bundle.browser.owner.internal.dispose();};},[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ scopedBacklogChecks.set("selected",bundle);
+ return <main><output aria-label="Ausgewählte Backlog-Abfragen">{requests.selected}</output><output aria-label="Backlog-Filterabfragen">{requests.controls}</output>
+  <output aria-label="Vollständige Parent-Kinderabfragen">{requests.children}</output><output aria-label="Sprintbasis-Abfragen">{requests.sprints}</output><output aria-label="Unbegrenzte Backlog-Abfragen">{requests.legacy}</output>
+  <BacklogOverview {...{readMode:"selected" as const}} planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></main>;
+}
+export const SelectedBacklogUsesScopedRowsAndFullControlCountsWhileSprintRetryStaysIndependent:Story={
+ name:"Selected Backlog retains full controls during independent Sprint retry",render:()=> <SelectedBacklogScopeStory/>,
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement),reference=scopedBacklogChecks.get("selected")!;
+  expect(reference.counts).toEqual({all:1008,proposals:336,ready:336,unscheduled:672});expect(reference.matches).toEqual(["scoped-candidate-1008"]);
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("0");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+  await expect(canvas.queryByRole("link",{name:"Nur über Beschreibung gefunden"})).not.toBeInTheDocument();
+  await userEvent.click(canvas.getByRole("button",{name:"Filter"}));
+  await expect(within(canvas.getByRole("group",{name:"Backlog-Scope"})).queryByRole("button",{name:/^Alle\s*0$/})).not.toBeInTheDocument();
+  reference.connectSession();
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1"));
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+  await waitFor(()=>expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1"));await waitFor(()=>expect(canvas.getByLabelText("Sprintbasis-Abfragen")).toHaveTextContent("1"));
+  const tabs=within(canvas.getByRole("group",{name:"Backlog-Scope"}));
+  await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Vorschläge\s*336$/})).toBeVisible();
+  await expect(tabs.getByRole("button",{name:/^Bereit\s*336$/})).toBeVisible();await expect(tabs.getByRole("button",{name:/^Ohne Sprint\s*672$/})).toBeVisible();
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});await userEvent.click(search);fireEvent.change(search,{target:{value:"Verdeckter Suchtext"}});
+  const selectedGroup=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  const link=await selectedGroup.findByRole("link",{name:"Nur über Beschreibung gefunden"});await expect(link).toHaveAttribute("href","/tasks/scoped-candidate-1008");
+  await expect(tabs.getByRole("button",{name:/^Alle\s*1008$/})).toBeVisible();await expect(search).toHaveFocus();
+  reference.failSprint();await expect(await canvas.findByText("Sprintplanung konnte nicht geladen werden.")).toBeVisible();await expect(link).toBeVisible();await expect(search).toHaveFocus();
+  await userEvent.click(canvas.getByRole("button",{name:"Sprintplanung erneut laden"}));await expect(await canvas.findByText("336h / 13h")).toBeVisible();await expect(link).toBeVisible();
+  await expect(canvas.getByLabelText("Backlog-Filterabfragen")).toHaveTextContent("1");await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+ },
+};
+
+
+function SelectedInitiativeBacklogStory({ stalePage = false }: { stalePage?: boolean }) {
+ const [counts,setCounts]=useState({selected:0,legacy:0});
+ const [bundle]=useState(()=>{
+  const userId="strategic-backlog-user",deadline=Date.now()+300_000;
+  const profile={id:"strategic-backlog-founder",name:"Synthetic founder",platformRole:"founder" as const,orgRole:"Founder",githubLogin:"",weeklyCapacity:40};
+  const parent=taskDetailStoryTask({id:"strategic-parent",title:"Ausgewähltes Epic",taskType:"epic",updatedAt:"2026-11-01T12:00:00Z"});
+  const rows=Array.from({length:21},(_,index)=>taskDetailStoryTask({id:`strategic-initiative-${index+1}`,title:index===20?"Erledigte Initiative jenseits der Seite":`Ausgewählte Initiative ${String(index+1).padStart(2,"0")}`,
+   taskType:"initiative",parentTaskId:parent.id,status:index===20?"Erledigt":"Offen",description:"Strategischer Suchtext",ownerId:profile.id,assigneeId:profile.id,owner:profile.name,assignee:profile.name,order:index+1,updatedAt:"2026-11-01T12:00:00Z"}));
+  const omitted:(keyof Task)[]=["description","problemStatement","intendedOutcome","scopeConstraints","acceptanceCriteria","evidenceRequired","definitionOfDone","note","strategy","raciAssignments","evidenceLinks","linkedPullRequests","reviewEvidenceExceptionNote","githubIssueSyncError","decisionNote","carryoverReason"];
+  const compact=(task:Task)=>{const row={...task,detailAvailability:"summary" as const};omitted.forEach(field=>{delete row[field];});return row;};
+  const empty:BacklogModel={revision:"strategic-source",items:[],people:[],sprints:[],commitments:[],coverage:{items:"partial",people:"partial",sprints:"partial",commitments:"partial",strategies:"partial",raci:"partial",links:"partial"}};
+  let invalidated = false;
+  const receipt=(scopeRevision:string)=>({scopeRevision,sourceRevision:invalidated ? "strategic-source-current" : "strategic-source",observedAt:"2026-11-01T12:00:00Z",validUntil:new Date(deadline).toISOString()});
+  const response=(model:BacklogModel)=>({response:new Response(null),body:{model,readAuthority:{userId,deadline},readActor:{profileId:profile.id,platformRole:profile.platformRole}}});
+  const client:BrowserApiClient={async requestJson<T>(input:Parameters<BrowserApiClient["requestJson"]>[0]){
+   const url=new URL(String(input),"http://localhost:3000"),raw=url.searchParams.get("scope");
+   if(url.pathname!=="/api/backlog-data")throw new Error("Unexpected strategic Backlog request");
+   if(!raw){setCounts(value=>({...value,legacy:value.legacy+1}));return{response:new Response(null,{status:503}),body:{error:"Legacy discovery is not a strategic selected scope"} as T};}
+   const query=JSON.parse(raw);
+   if(query.view==="backlog-support"&&query.area==="controls")return response({...empty,controls:{...receipt("controls"),coverage:"complete",levelTotals:{epic:1,initiative:21,deliverable:0},statuses:{epic:["Offen"],initiative:["Offen","Erledigt"],deliverable:[]},assignees:[{value:profile.id,label:profile.name}],epics:[{value:parent.id,label:parent.title}],initiatives:rows.map(row=>({value:row.id,label:row.title})),scopeCounts:{all:0,proposals:0,ready:0,unscheduled:0}}}) as BrowserApiJsonResult<T>;
+   if(query.view!=="backlog"||query.filters.level!=="initiative")throw new Error("Unexpected selected strategic class");
+   setCounts(value=>({...value,selected:value.selected+1}));
+   if(stalePage && query.continuation && !invalidated){invalidated=true;return {response:new Response(null,{status:409}),body:{error:"Changed selection source",code:"stale_continuation"} as T};}
+   const offset=query.continuation?20:0,chosen=rows.slice(offset,offset+query.limit);
+   return response({...empty,items:[parent,...chosen].map(compact),people:[profile],taskOmittedFields:omitted,selection:{...receipt("initiatives"),query,itemIds:chosen.map(row=>row.id),contextIds:[parent.id],rankById:Object.fromEntries(chosen.map(row=>[row.id,row.order])),total:21,coverage:offset+chosen.length===21?"complete":"partial",continuation:offset+chosen.length===21?null:invalidated?"strategic-next-current":"strategic-next"}}) as BrowserApiJsonResult<T>;
+  },requestForm:async()=>{throw new Error("Unexpected form");},requestBlob:async()=>{throw new Error("Unexpected blob");}};
+  const session={userId,revision:"strategic-session",expiresAt:deadline/1000,user:{id:userId}};
+  const lifetime=createBrowserPlanningLifetime({current:async()=>session,subscribe:()=>()=>{}});
+  const browser=lifetime.page({initialData:emptyPlanningShellState,initialWorkspace:"backlog",initialUserId:userId,initialHeaderData:emptyPlanningHeaderData,initialCurrentProfile:profile})!;
+  browser.runtime.apiClient=client;return{browser,lifetime};
+ });
+ useEffect(()=>{const disconnect=bundle.lifetime.connect();return()=>{disconnect();bundle.browser.owner.internal.dispose();};},[bundle]);
+ useSyncExternalStore(bundle.browser.owner.planning.subscribe,bundle.browser.owner.internal.getSnapshot,bundle.browser.owner.internal.getSnapshot);
+ return <main><output aria-label="Ausgewählte Initiative-Abfragen">{counts.selected}</output><output aria-label="Unbegrenzte Initiative-Abfragen">{counts.legacy}</output>
+  <BacklogOverview readMode="selected" planningState={bundle.browser.owner.planning} canManageBacklog={false} onOpenTask={()=>{}} onCreatePlanningItem={()=>{}} onProposeDeliverable={()=>{}}/></main>;
+}
+
+export const SelectedInitiativeBacklogTraversesCompactPagesWithoutLosingCompletedMembership:Story={
+ name:"Selected Initiative Backlog traverses compact pages including completed membership",render:()=> <SelectedInitiativeBacklogStory/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.level":"initiative","backlog.query":"Strategischer Suchtext"}}}},
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);url.searchParams.set("backlog.level","initiative");url.searchParams.set("backlog.query","Strategischer Suchtext");window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("1"));
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");
+  const group=within(await canvas.findByRole("region",{name:"Ausgewähltes Epic"}));
+  const first=await group.findByRole("link",{name:"Ausgewählte Initiative 01"});await expect(first).toHaveAttribute("href","/tasks/strategic-initiative-1");
+  await expect(group.queryByRole("link",{name:"Erledigte Initiative jenseits der Seite"})).not.toBeInTheDocument();
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  const completed=await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"});await expect(completed).toHaveAttribute("href","/tasks/strategic-initiative-21");
+  await expect(first).toBeVisible();await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("2");
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");await expect(canvas.getByRole("searchbox",{name:"Backlog durchsuchen"})).toHaveValue("Strategischer Suchtext");
+ },
+};
+
+export const TypedStalePageRestartsOnlyTheSelectedQueryAndPreservesSearchFocus: Story = {
+ render:()=> <SelectedInitiativeBacklogStory stalePage/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.level":"initiative","backlog.query":"Strategischer Suchtext"}}}},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("1"));
+  const search=canvas.getByRole("searchbox",{name:"Backlog durchsuchen"});
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  await userEvent.click(search);
+  await waitFor(()=>expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("3"));
+  await expect(search).toHaveValue("Strategischer Suchtext");await expect(search).toHaveFocus();
+  await expect(canvas.getByLabelText("Unbegrenzte Initiative-Abfragen")).toHaveTextContent("0");
+  const group=within(await canvas.findByRole("region",{name:"Ausgewähltes Epic"}));
+  await expect(await group.findByRole("link",{name:"Ausgewählte Initiative 01"})).toHaveAttribute("href","/tasks/strategic-initiative-1");
+  await userEvent.click(canvas.getByRole("button",{name:"Weitere Initiativen laden"}));
+  await expect(await group.findByRole("link",{name:"Erledigte Initiative jenseits der Seite"})).toHaveAttribute("href","/tasks/strategic-initiative-21");
+  await expect(canvas.getByLabelText("Ausgewählte Initiative-Abfragen")).toHaveTextContent("4");
+ },
+};
+
+export const FilteredParentProgressDoesNotEnumerateUnusedChildren:Story={
+ name:"Filtered Parent progress avoids unused complete Children reads",render:()=> <SelectedBacklogScopeStory parentRollups/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{"backlog.query":"Verdeckter Suchtext"}}}},
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);url.searchParams.set("backlog.query","Verdeckter Suchtext");window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);scopedBacklogChecks.get("selected")!.connectSession();
+  const group=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  await expect(await group.findByRole("link",{name:"Nur über Beschreibung gefunden"})).toBeVisible();
+  await expect(canvas.getByLabelText("Vollständige Parent-Kinderabfragen")).toHaveTextContent("0");
+  await expect(group.getByRole("progressbar",{name:"1 von 1009 Deliverables erledigt"})).toBeVisible();
+  await expect(group.queryByRole("link",{name:"Erledigter Kontext"})).not.toBeInTheDocument();
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+ },
+};
+
+export const CompleteSmallParentMembershipDoesNotReloadChildren:Story={
+ name:"Complete small Parent membership avoids a redundant Children read",render:()=> <SelectedBacklogScopeStory parentRollups smallComplete/>,
+ parameters:{nextjs:{appDirectory:true,navigation:{pathname:"/backlog",query:{}}}},
+ beforeEach:()=>{const previous=window.location.href,url=new URL(previous);for(const key of [...url.searchParams.keys()])if(key.startsWith("backlog."))url.searchParams.delete(key);window.history.replaceState(null,"",url);return()=>window.history.replaceState(null,"",previous);},
+ play:async({canvasElement})=>{
+  const canvas=within(canvasElement);scopedBacklogChecks.get("selected")!.connectSession();
+  const group=within(await canvas.findByRole("region",{name:"Vollständiger ausgewählter Kontext"}));
+  await expect(await group.findByRole("link",{name:"Backlog-Zeile 1"})).toBeVisible();
+  await expect(group.getByRole("link",{name:"Backlog-Zeile 2"})).toBeVisible();
+  await expect(group.queryByRole("link",{name:"Erledigter Kontext"})).not.toBeInTheDocument();
+  await expect(group.getByRole("progressbar",{name:"1 von 3 Deliverables erledigt"})).toBeVisible();
+  await expect(canvas.getByLabelText("Vollständige Parent-Kinderabfragen")).toHaveTextContent("0");
+  await expect(canvas.getByLabelText("Ausgewählte Backlog-Abfragen")).toHaveTextContent("1");
+  await expect(canvas.getByLabelText("Unbegrenzte Backlog-Abfragen")).toHaveTextContent("0");
+ },
+};

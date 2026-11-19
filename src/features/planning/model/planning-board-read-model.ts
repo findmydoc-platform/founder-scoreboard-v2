@@ -3,3 +3,8 @@ import type { PlanningWorkspaceLoadContext, PlanningWorkspaceLoadResult } from "
 export interface PlanningBoardReadModel {
   load(context: PlanningWorkspaceLoadContext): Promise<PlanningWorkspaceLoadResult>;
 }
+
+export interface PlanningProgressiveBoardReadModel extends PlanningBoardReadModel {
+  startQuery(context: PlanningWorkspaceLoadContext): Promise<import("./planning-board-delivery").PlanningBoardQueryLoadResult>;
+  loadSummaries(context: PlanningWorkspaceLoadContext, token: string): Promise<import("./planning-board-summaries").PlanningBoardSummaryLoadResult>;
+}

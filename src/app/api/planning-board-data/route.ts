@@ -1,31 +1,127 @@
+import { normalizePlanningStructureQuery } from "@/features/planning/model/planning-structure-query";
+import { normalizePlanningGanttQuery } from "@/features/planning/model/planning-gantt-query";
 import { observeRuntimeHandler, observeRuntimePhase, observeRuntimePreparation } from "@/lib/runtime-logging";
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeCredentialAction } from "@/lib/credentials";
-import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
+import { normalizePlanningBoardQuery, type PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { apiError, authzError } from "@/lib/api-response";
+import { normalizePlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 
 async function handleGET(request: NextRequest) {
   const permission = await observeRuntimePhase("board.authorization", () => authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.board.read" }));
   if (!permission.ok) return authzError(permission);
+  const summaryToken = request.nextUrl.searchParams.get("summaries");
+  if (summaryToken !== null) {
+    if (!summaryToken || summaryToken.length > 90000 || request.nextUrl.searchParams.has("scope")) return apiError("Ungültiger Zusammenfassungsbereich.", 400);
+    const result = await permission.planning.loadBoardSummaries(summaryToken, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Fortschritt und Signale konnten nicht geladen werden.", 503);
+    if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+    return NextResponse.json({ summaries: result.summaries, readAuthority: result.readAuthority }, { headers: { "cache-control": "no-store" } });
+  }
   let query: PlanningBoardQueryInput | undefined;
+  let ganttQuery: ReturnType<typeof normalizePlanningGanttQuery> = null;
+  let candidateQuery: ReturnType<typeof normalizePlanningItemCandidateQuery> = null;
+  let structureControls = false;
+  let structureQuery: ReturnType<typeof normalizePlanningStructureQuery> = null;
   const rawQuery = request.nextUrl.searchParams.get("scope");
   if (rawQuery) {
     try {
       const parsed = JSON.parse(rawQuery);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || rawQuery.length > 16000 || (parsed.continuation && (typeof parsed.continuation !== "string" || parsed.continuation.length > 4096))) throw new Error("Invalid scope");
-      query = parsed;
+      if (parsed.view === "gantt") {
+        ganttQuery = normalizePlanningGanttQuery(parsed);
+        if (!ganttQuery) return apiError("Ungültiger Gantt-Bereich.", 400);
+      } else if (parsed.view === "structure") {
+        if (parsed.area === "controls") {
+          if (Object.keys(parsed).some(key => key !== "view" && key !== "area")) return apiError("Ungültiger Strukturbereich.", 400);
+          structureControls = true;
+        } else {
+          structureQuery = normalizePlanningStructureQuery(parsed);
+          if (!structureQuery) return apiError("Ungültiger Strukturbereich.", 400);
+        }
+      } else if (parsed.view === "candidates") {
+        candidateQuery = normalizePlanningItemCandidateQuery(parsed);
+        if (!candidateQuery) return apiError("Ungültiger Auswahlbereich.", 400);
+      } else query = parsed;
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
   }
+  if (ganttQuery) {
+    const result = await permission.planning.loadGantt(ganttQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Gantt darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Gantt-Grundlage hat sich geändert.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Gantt konnte nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Gantt darf nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority, currentProfile: permission.profile }, { headers: { "cache-control": "no-store" } });
+  }
+  if (structureControls) {
+    const result = await permission.planning.loadStructureControls({ signal: request.signal });
+    if (result.status === "forbidden") return apiError("Strukturfilter dürfen nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Strukturfilter haben sich geändert.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Strukturfilter konnten nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Strukturfilter dürfen nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority, readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
+  }
+  if (structureQuery) {
+    const result = await permission.planning.loadStructure(structureQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Struktur darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Struktur hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Struktur konnte nicht geladen werden.", 503);
+    if (!("readAuthority" in result) || !result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Struktur darf nicht geladen werden.", 403);
+    return NextResponse.json({ model: result.model, readAuthority: result.readAuthority,
+      readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
+  }
+  if (candidateQuery) {
+    const result = await permission.planning.loadCandidates(candidateQuery, { signal: request.signal });
+    if (result.status === "forbidden") return apiError("Auswahl darf nicht geladen werden.", 403);
+    if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Auswahl hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
+    if (result.status !== "ready") return apiError("Auswahl konnte nicht geladen werden.", 503);
+    if (!result.readAuthority || result.readAuthority.deadline <= Date.now()) return apiError("Auswahl darf nicht geladen werden.", 403);
+    return NextResponse.json({ candidates: result.candidates, readAuthority: result.readAuthority,
+      readActor: { profileId: permission.profile!.id, platformRole: permission.profile!.platformRole } }, { headers: { "cache-control": "no-store" } });
+  }
   const currentProfile = permission.profile;
-  const [result, header] = await Promise.all([
-    observeRuntimePhase("board.load", () => permission.planning.loadBoard(query)),
-    observeRuntimePhase("board.header", () => permission.planning.loadHeader(currentProfile ? ["quickLinks", "calendarEvents"] : undefined)),
-  ]);
-  if (!header.ok) return authzError(header);
+  const normalized = query && normalizePlanningBoardQuery(query);
+  if (request.headers.get("accept")?.includes("application/x-ndjson") && query && !query.column && !query.continuation && normalized?.view === "board") {
+    const authority = permission.readAuthority;
+    if (!authority || authority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+    const started = await permission.planning.startBoardQuery(query, { signal: request.signal });
+    if (started.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
+    if (started.status !== "ready") return apiError("Planung konnte nicht geladen werden.", 503);
+    if (!started.delivery) return NextResponse.json({ model: started.model, readAuthority: authority, headerData: emptyPlanningHeaderData, currentProfile });
+    const delivery = started.delivery, encoder = new TextEncoder();
+    let cancelled = false, terminal = false;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const emit = (frame: import("@/features/planning/model/planning-board-delivery").PlanningBoardStreamFrame) => {
+          if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`));
+        };
+        emit({ kind: "basis", readId: delivery.id, model: started.model, readAuthority: authority, currentProfile });
+        const outcomes: Array<Promise<import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>> = Object.values(delivery.columns).filter(outcome => outcome !== undefined);
+        if (delivery.summaries) outcomes.push(delivery.summaries);
+        await Promise.allSettled(outcomes.map(async outcome => {
+          let frame = await delivery.checkPublication(await outcome!);
+          if (cancelled || terminal) return;
+          if (authority.deadline <= Date.now()) frame = { kind: "failure", readId: delivery.id, status: 403, error: "Planung darf nicht geladen werden." };
+          else if (frame.kind === "column" && frame.validUntil && Date.parse(frame.validUntil) <= Date.now()) frame = { kind: "failure", readId: delivery.id, status: 409, code: "stale_continuation", error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden." };
+          if (frame.kind === "failure" && frame.status !== 503) { terminal = true; delivery.abort(); }
+          emit(frame);
+        }));
+        if (!cancelled) { emit({ kind: "end", readId: delivery.id }); controller.close(); }
+      },
+      cancel() { cancelled = true; delivery.abort(); },
+    });
+    return new Response(stream, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", vary: "Accept", "x-content-type-options": "nosniff" } });
+  }
+  const result = await observeRuntimePhase("board.load", () => permission.planning.loadBoard(query, { signal: request.signal }));
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
-  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile }));
+  const readAuthority = "readAuthority" in result ? result.readAuthority : permission.readAuthority;
+  if (readAuthority && readAuthority.deadline <= Date.now()) return apiError("Planung darf nicht geladen werden.", 403);
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, readAuthority, headerData: emptyPlanningHeaderData, currentProfile }));
 }
 
 export const GET = observeRuntimeHandler("planning.board", handleGET);

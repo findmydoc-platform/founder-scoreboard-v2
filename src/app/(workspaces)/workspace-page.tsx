@@ -1,5 +1,12 @@
+import { headers } from "next/headers";
+import { readBacklogUrlFilters } from "@/features/backlog/model/backlog-url-filters";
+import { normalizeBacklogSelection } from "@/features/backlog/model/backlog-selection";
+import { backlogSelectionRead, type PlanningBacklogHydration } from "@/features/planning/model/planning-backlog-hydration";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
+import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
+import type { PlanningServerHeaderRead, PlanningServerHeaderResult, PlanningServerHeaderSlot } from "@/features/planning/model/planning-server-header-read";
+import { PlanningServerBoardColumns, preparePlanningServerBoardColumns } from "@/features/planning/server/planning-server-board-columns";
 import { PlanningApp } from "@/features/planning/PlanningApp";
 import { WorkspaceDataUnavailablePage } from "@/features/planning/templates/workspace-data-unavailable-page";
 import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
@@ -13,16 +20,44 @@ import { loadNotionDecisionLog } from "@/lib/notion-decision-log";
 import { requiresSupabaseAuth } from "@/lib/supabase-configuration";
 import type { AuthenticatedProfile } from "@/lib/types";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { redirectForWorkspaceGate } from "@/lib/workspace-gate-redirect";
 import { createSupabaseAdministrationReadModel } from "@/features/administration/server/administration-read-model-supabase";
-import { planningWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
+import { planningWorkspaceHydration, teamWorkspaceHydration } from "@/features/planning/model/planning-workspace-hydration";
 
-async function loadBacklogPageData(profile?: AuthenticatedProfile | null) {
+function hasSupportingHeaderDelivery(value: unknown): value is {
+  serverHeaderRead: PlanningServerHeaderRead;
+  headerSlots: Record<PlanningServerHeaderSlot, Promise<PlanningServerHeaderResult>>;
+} {
+  if (!value || typeof value !== "object" || !("serverHeaderRead" in value) || !("headerSlots" in value)) return false;
+  const read = value.serverHeaderRead, slots = value.headerSlots;
+  return Boolean(read && typeof read === "object" && "id" in read && typeof read.id === "string" && read.id
+    && "userId" in read && typeof read.userId === "string" && read.userId
+    && "sessionRevision" in read && typeof read.sessionRevision === "string" && read.sessionRevision
+    && "deadline" in read && typeof read.deadline === "number" && Number.isFinite(read.deadline)
+    && "timeoutAt" in read && typeof read.timeoutAt === "number" && Number.isFinite(read.timeoutAt)
+    && slots && typeof slots === "object" && "quickLinks" in slots && slots.quickLinks instanceof Promise
+    && "calendarEvents" in slots && slots.calendarEvents instanceof Promise);
+}
+
+async function loadBacklogPageData(profile?: AuthenticatedProfile | null, params = new URLSearchParams()) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.backlog.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  const [backlog, header] = await Promise.all([permission.planning.loadBacklog(), permission.planning.loadHeader()]);
+  const requestHeaders = await headers();
+  // Fetch Metadata limits this optimization to a document request, never authorization.
+  const documentRequest = requestHeaders.get("sec-fetch-dest") === "document" && requestHeaders.get("sec-fetch-mode") === "navigate"
+    && requestHeaders.get("purpose") !== "prefetch" && !requestHeaders.get("sec-purpose")?.includes("prefetch");
+  const query = normalizeBacklogSelection({ view: "backlog", filters: readBacklogUrlFilters(params), limit: 20 });
+  const [backlog, header, selected] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader(),
+    documentRequest && query && permission.readSession ? permission.planning.loadBacklog(query) : undefined]);
+  let initialBacklogRead: PlanningBacklogHydration | undefined;
+  if (selected?.status === "ready" && selected.model.selection && "readAuthority" in selected && selected.readAuthority && permission.readSession && permission.profile && query) {
+    const readActor = { profileId: permission.profile.id, platformRole: permission.profile.platformRole };
+    initialBacklogRead = { query, session: permission.readSession,
+      read: { ...backlogSelectionRead(selected.model, selected.readAuthority, readActor), backlogSelection: selected.model.selection, readActor } };
+  }
   return backlog.status === "ready" && header.ok
-    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData }
+    ? { status: "ready" as const, model: backlog.model, headerData: header.headerData, initialBacklogRead }
     : { status: "unavailable" as const };
 }
 
@@ -34,12 +69,16 @@ async function loadPlanningWorkspacePageData(
   if (workspace === "planning") {
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.board.read" });
     if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-    const [planningWorkspace, header] = await Promise.all([
-      permission.planning.loadBoard(query), permission.planning.loadHeader(permission.profile ? ["quickLinks", "calendarEvents"] : undefined),
-    ]);
-    return planningWorkspace.status === "ready" && header.ok
-      ? { status: "ready" as const, model: planningWorkspace.model, headerData: header.headerData }
-      : { status: "unavailable" as const };
+    const controller = permission.readAuthority ? new AbortController() : undefined;
+    if (controller) after(() => controller.abort());
+    const boardRead = controller ? permission.planning.startBoardQuery(query, { signal: controller.signal }) : permission.planning.loadBoard(query);
+    const headerSlots = permission.serverHeaderRead ? permission.planning.startServerHeaderSlots() : undefined;
+    const planningWorkspace = await boardRead;
+    if (planningWorkspace.status !== "ready") return { status: "unavailable" as const };
+    const board = await preparePlanningServerBoardColumns(planningWorkspace);
+    if (board.status !== "ready") return { status: "unavailable" as const };
+    return { status: "ready" as const, model: board.model, boardDelivery: board.delivery, readAuthority: permission.readAuthority, readSession: permission.readSession, serverHeaderRead: permission.serverHeaderRead, headerSlots, headerData: permission.profile ? emptyPlanningHeaderData : { ...emptyPlanningHeaderData, notifications: { state: "ready" as const, data: { unreadCount: 0, items: [] } } } };
+
   }
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "strategic.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
@@ -59,6 +98,7 @@ async function loadSupportingWorkspacePageData(
   const action = workspace === "events" ? "events.read" : workspace === "tools" ? "tools.read" : workspace === "team" ? "team.read" : "notifications.read";
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
+  if (workspace === "team") return permission.resource.loadTeamPeoplePage();
   return permission.resource.loadWorkspace();
 }
 
@@ -83,7 +123,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
   } catch { return { status: "unavailable" as const }; }
 }
 
-export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput) {
+export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput, backlogParams?: URLSearchParams) {
   if (requiresSupabaseAuth()) {
     const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
@@ -128,7 +168,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
     }
 
     if (initialWorkspace === "backlog") {
-      const backlog = await loadBacklogPageData(auth.profile);
+      const backlog = await loadBacklogPageData(auth.profile, backlogParams);
       if (backlog.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
       }
@@ -137,6 +177,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialData={backlogModelToPlanningShellState(backlog.model)}
           initialHeaderData={backlog.headerData}
           initialWorkspace="backlog"
+          initialBacklogRead={backlog.initialBacklogRead}
           initialBacklogModel={backlog.model}
           source="supabase"
           authRequired
@@ -156,7 +197,8 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
       return (
         <PlanningApp
           initialData={planningWorkspaceModelToPlanningShellState(planningWorkspace.model)}
-          initialWorkspaceRead={planningWorkspaceHydration(initialWorkspace, planningWorkspace.model, auth.session)}
+          initialWorkspaceRead={planningWorkspaceHydration(initialWorkspace, planningWorkspace.model, "readSession" in planningWorkspace ? planningWorkspace.readSession || auth.session : auth.session, "readAuthority" in planningWorkspace ? planningWorkspace.readAuthority : undefined)}
+          initialServerHeaderRead={"serverHeaderRead" in planningWorkspace ? planningWorkspace.serverHeaderRead : undefined}
           initialHeaderData={planningWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"
@@ -165,7 +207,10 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialCurrentProfile={auth.profile}
           initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
-        />
+        >
+          {"serverHeaderRead" in planningWorkspace && planningWorkspace.serverHeaderRead && planningWorkspace.headerSlots ? <PlanningServerHeaderSlots read={planningWorkspace.serverHeaderRead} results={planningWorkspace.headerSlots} /> : null}
+          {"boardDelivery" in planningWorkspace && planningWorkspace.boardDelivery ? <PlanningServerBoardColumns delivery={planningWorkspace.boardDelivery} /> : null}
+        </PlanningApp>
       );
     }
 
@@ -174,9 +219,16 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
       if (supportingWorkspace.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;
       }
+      const headerDelivery = hasSupportingHeaderDelivery(supportingWorkspace) ? supportingWorkspace : undefined;
+      const teamRead = initialWorkspace === "team" && "readSession" in supportingWorkspace && "readAuthority" in supportingWorkspace
+        ? teamWorkspaceHydration(supportingWorkspace.model as import("@/features/team/model/team-read-model").TeamWorkspaceModel, supportingWorkspace.readSession as import("@/lib/credentials/session-types").ServerSessionView | undefined, supportingWorkspace.readAuthority as import("@/features/planning/model/planning-server-header-read").PlanningReadAuthority | undefined)
+        : undefined;
+      if (initialWorkspace === "team" && (!teamRead || !headerDelivery)) return <WorkspaceDataUnavailablePage workspace="team" authUserEmail={auth.user?.email || ""} />;
       return (
         <PlanningApp
           initialData={supportingWorkspaceModelToPlanningShellState(initialWorkspace, supportingWorkspace.model)}
+          initialWorkspaceRead={teamRead}
+          initialServerHeaderRead={headerDelivery?.serverHeaderRead}
           initialHeaderData={supportingWorkspace.headerData}
           initialWorkspace={initialWorkspace}
           source="supabase"
@@ -185,7 +237,9 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialCurrentProfile={auth.profile}
           initialAdministratorAccess={auth.authority?.administratorAccess}
           initialProtectedDataLoaded
-        />
+        >
+          {headerDelivery ? <PlanningServerHeaderSlots read={headerDelivery.serverHeaderRead} results={headerDelivery.headerSlots} /> : null}
+        </PlanningApp>
       );
     }
 
@@ -231,13 +285,14 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
   if (initialWorkspace === "administration") redirect("/planning");
 
   if (initialWorkspace === "backlog") {
-    const backlog = await loadBacklogPageData();
+    const backlog = await loadBacklogPageData(undefined, backlogParams);
     if (backlog.status !== "ready") return <WorkspaceDataUnavailablePage workspace="backlog" />;
     return (
       <PlanningApp
         initialData={backlogModelToPlanningShellState(backlog.model)}
         initialHeaderData={backlog.headerData}
         initialWorkspace="backlog"
+        initialBacklogRead={backlog.initialBacklogRead}
         initialBacklogModel={backlog.model}
         source="supabase"
         authRequired={false}

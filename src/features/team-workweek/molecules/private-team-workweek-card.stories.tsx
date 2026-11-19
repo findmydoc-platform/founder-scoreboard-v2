@@ -16,6 +16,7 @@ import { addCalendarDays, berlinCivilInstant } from "../model/team-workweek-cale
 import { nextMondayIso } from "../model/team-workweek-draft";
 import { PrivateTeamWorkweekCard as SharedPrivateTeamWorkweekCard } from "./private-team-workweek-card";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
+import { setAdvancingStoryDate } from "../../../../tests/helpers/story-date";
 
 const profile = {
   id: "sebastian",
@@ -914,6 +915,7 @@ export const WorkweekGuidePreview: Story = {
 };
 
 export const StartsTheWorkweekGuideFromTheProductGallery: Story = {
+  beforeEach: () => setAdvancingStoryDate("2026-11-13T12:00:00Z"),
   args: { profile, apiClient: client({ immediateAllowed: true }) },
   render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
   play: async ({ canvasElement }) => {

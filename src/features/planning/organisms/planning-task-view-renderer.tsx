@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { RefreshCw } from "lucide-react";
 import type { PlanningAppController } from "@/features/planning/hooks/use-planning-app-controller";
 import { isTaskPlanningActive } from "@/features/planning/model/approval-domain";
 import { initiativePlanningItems, statusOptionsForRole } from "@/features/planning/model/planning-app-model";
@@ -15,6 +16,9 @@ import { UiButton, UiNotice } from "@/shared/atoms/ui-primitives";
 
 function TaskViewLoading({ label }: { label: string }) {
   return <UiNotice role="status" tone="info">{label} wird geladen …</UiNotice>;
+}
+function isCardInteraction(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest("article, tbody"));
 }
 
 const TaskStructureView = dynamic(
@@ -41,11 +45,11 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     dropTaskOnStatus,
     endTaskDrag,
     expandedInitiatives,
-    filters,
+    filters: requestedFilters,
     filtersAvailable,
-    openTaskPanel,
-    planningLevel,
-    planningParentFilterId,
+    startTaskPanel: openTaskPanel,
+    planningLevel: requestedLevel,
+    planningParentFilterId: requestedParentId,
     selectedTaskId,
     setAllInitiativeCollapse,
     setDragOverStatus,
@@ -59,12 +63,80 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     boardTaskEditConflict,
     resaveBoardTask,
     reloadBoardTaskConflict,
-    view,
+    view: requestedView,
     viewerOpenSubIssueIdsByDeliverableId,
     visibleTasks,
   } = controller;
+  const filters = controller.displayedPlanningQuery?.filters || requestedFilters;
+  const planningLevel = controller.displayedPlanningQuery?.level || requestedLevel;
+  const planningParentFilterId = controller.displayedPlanningQuery?.parentId || requestedParentId;
+  const view = controller.displayedPlanningQuery && controller.displayedPlanningQuery.view !== "complete" ? controller.displayedPlanningQuery.view : requestedView;
+  const resultsRef = useRef<HTMLElement>(null);
+  const focusInteraction = useRef<(() => void) | undefined>(undefined);
+  const pointerInteraction = useRef<(() => void) | undefined>(undefined);
+  const focusedResult = useRef<HTMLElement | null>(null);
+  const acceptedQuery = JSON.stringify(controller.planningBoard?.query) || controller.planningBoard?.queryKey;
+  const planningState = controller.planningState;
+  const visibleColumnDemand = controller.workspace === "planning" && view === "board" && controller.planningQueryReady !== false
+    ? (planningLevel === "deliverable" ? taskStatuses : strategicPlanningStatuses).filter(status => controller.planningBoard?.result?.columns[status]?.availability === "not-loaded" && controller.planningBoard.columnReadStatus?.[status] === "not-loaded").join("|")
+    : "";
+  useEffect(() => {
+    if (!visibleColumnDemand) return;
+    for (const status of visibleColumnDemand.split("|")) void planningState.loadBoardColumn(status as (typeof taskStatuses)[number]);
+  }, [planningState, visibleColumnDemand]);
+  const previousQuery = useRef(acceptedQuery);
+  const positionQuery = useRef(acceptedQuery || "planning");
+  useLayoutEffect(() => {
+    const saved = controller.planningState.planningInteraction().position;
+    if (saved?.queryKey === positionQuery.current) {
+      resultsRef.current?.querySelector('[aria-label="Board nach Status"]')?.scrollTo({ left: saved.left });
+      window.scrollTo({ top: saved.top });
+    }
+    const remember = () => {
+      const board = resultsRef.current?.querySelector('[aria-label="Board nach Status"]');
+      controller.planningState.rememberPlanningInteraction({ position: { queryKey: positionQuery.current, top: window.scrollY, left: board?.scrollLeft || 0 } });
+    };
+    window.addEventListener("scroll", remember, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", remember, true);
+  }, [controller.planningState]);
+  useEffect(() => {
+    const finishPointer = () => { pointerInteraction.current?.(); pointerInteraction.current = undefined; };
+    window.addEventListener("pointerup", finishPointer);
+    window.addEventListener("pointercancel", finishPointer);
+    window.addEventListener("dragend", finishPointer);
+    return () => {
+      focusInteraction.current?.(); finishPointer();
+      window.removeEventListener("pointerup", finishPointer);
+      window.removeEventListener("pointercancel", finishPointer);
+      window.removeEventListener("dragend", finishPointer);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (previousQuery.current && acceptedQuery && previousQuery.current !== acceptedQuery) {
+      resultsRef.current?.querySelector('[aria-label="Board nach Status"]')?.scrollTo({ left: 0 });
+      window.scrollTo({ top: 0 });
+    }
+    previousQuery.current = acceptedQuery;
+    positionQuery.current = acceptedQuery || "planning";
+    if (focusedResult.current && !focusedResult.current.isConnected && document.activeElement === document.body) resultsRef.current?.focus({ preventScroll: true });
+  });
 
   const deniedChildListIds = controller.planningBoard?.deniedChildListIds || [];
+  const summaryRequests = controller.planningBoard?.result?.summaryRequests;
+  const summariesStale = controller.planningBoard?.freshness === "stale";
+  const summaryStatus = summaryRequests?.some(request => request.status === "unavailable") ? "unavailable"
+    : summaryRequests?.some(request => request.status === "loading") ? "loading" : "current";
+  const summaryLabel = summariesStale ? "Fortschritt und Signale veraltet."
+    : summaryStatus === "loading" ? "Fortschritt und Signale werden geladen …"
+    : summaryStatus === "unavailable" ? "Fortschritt und Signale unbekannt."
+      : controller.planningBoard?.result?.cardIds.every(id => controller.planningBoard.result!.attentionById?.[id] != null)
+        ? "Fortschritt und Signale aktuell." : "Kindfortschritt aktuell. Signale unbekannt.";
+
+  const tableRiskRequests = controller.planningBoard?.table?.summaryRequests;
+  const tableRiskStatus = tableRiskRequests?.some(request => request.status === "unavailable") ? "unavailable"
+    : tableRiskRequests?.some(request => request.status === "loading") ? "loading" : "current";
+  const tableRiskLabel = summariesStale ? "Risiken veraltet." : tableRiskStatus === "loading" ? "Risiken werden geladen …"
+    : tableRiskStatus === "unavailable" ? "Risiken unbekannt." : "Risiken aktuell.";
 
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
@@ -91,27 +163,61 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     return strategicPlanningStatuses.filter((status) => status !== "Erledigt");
   };
 
-  if (!filtersAvailable) return null;
-  if (controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
-  if (controller.planningBoard?.requiresQueryRead && deniedChildListIds.length) return <UiNotice role="alert" tone="danger">
+  const usesBoardRead = view !== "structure" && view !== "gantt";
+  if (!filtersAvailable && usesBoardRead) return null;
+  if (usesBoardRead && controller.workspace === "planning" && controller.planningBoard?.readStatus === "forbidden") return <UiNotice role="alert" tone="danger">Planung darf nicht geladen werden.</UiNotice>;
+  if (usesBoardRead && controller.planningBoard?.requiresQueryRead && deniedChildListIds.length) return <UiNotice role="alert" tone="danger">
     Kinder dürfen nicht geladen werden.
     <UiButton type="button" aria-disabled={deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")} onClick={() => {
       if (deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")) return;
-      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
+      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id, { area: "children" }))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
     }}>Kinder erneut laden</UiButton>
   </UiNotice>;
-  if (controller.planningQueryReady === false) return <UiNotice role="status" tone="info">
+  if (usesBoardRead && controller.planningQueryReady === false && !controller.planningBoard.query) return <UiNotice role="status" tone="info">
     {controller.planningBoard.readStatus === "unavailable" ? "Diese Ansicht konnte nicht geladen werden." : "Planung wird geladen …"}
     {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}
   </UiNotice>;
 
   return (
-    <>
-      {deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
-        Kinder dürfen nicht geladen werden.
-        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId); }}>Kinder erneut laden</UiButton>
+    <section ref={resultsRef} aria-label="Planungsergebnisse" tabIndex={-1}
+      onFocusCapture={event => {
+        focusedResult.current = event.target as HTMLElement;
+        if (!isCardInteraction(event.target)) return;
+        focusInteraction.current ||= controller.planningState.beginBoardInteraction();
+      }}
+      onBlurCapture={event => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget) && isCardInteraction(event.relatedTarget)) return;
+        focusInteraction.current?.(); focusInteraction.current = undefined;
+      }}
+      onPointerDownCapture={event => { if (isCardInteraction(event.target)) pointerInteraction.current ||= controller.planningState.beginBoardInteraction(); }}
+      onPointerUpCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
+      onPointerCancelCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
+      onDragEndCapture={() => { pointerInteraction.current?.(); pointerInteraction.current = undefined; }}
+    >
+      {view === "board" && summaryRequests?.length ? <div role="status" aria-label={summaryLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
+        <span className="min-w-0 flex-1">{summaryLabel}</span>
+        <UiButton type="button" aria-label="Fortschritt und Signale erneut laden" disabled={summariesStale || summaryStatus === "current"}
+          className={summariesStale || summaryStatus === "current" ? "invisible min-h-11" : "min-h-11"}
+          onClick={() => { void controller.planningState.refreshBoardSummaries(); }}>Erneut laden</UiButton>
+      </div> : null}
+      {view === "table" && tableRiskRequests?.length ? <div role="status" aria-label={tableRiskLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
+        <span className="min-w-0 flex-1">{tableRiskLabel}</span>
+        <UiButton type="button" aria-label="Risiken erneut laden" disabled={summariesStale || tableRiskStatus !== "unavailable"}
+          className={summariesStale || tableRiskStatus !== "unavailable" ? "invisible min-h-11" : "min-h-11"}
+          onClick={() => { void controller.planningState.refreshTableRisks(); }}>Erneut laden</UiButton>
+      </div> : null}
+      {usesBoardRead && (controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading") ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
+        <RefreshCw size={14} aria-hidden="true" className={controller.planningBoard.readStatus === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} />
+      </span> : null}
+      {controller.planningQueryReady === false ? <UiNotice role="status" aria-label="Vorherige Suchergebnisse" tone="info">
+        {`Vorherige Suche: ${controller.planningBoard.query?.filters.query || "ohne Suchtext"}. ${controller.planningBoard.readStatus === "unavailable" ? "Neue Ergebnisse konnten nicht geladen werden." : "Neue Ergebnisse werden geladen …"}`}
+        {controller.planningBoard.readStatus === "unavailable" ? <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton> : null}
       </UiNotice> : null}
-      {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
+      {usesBoardRead && deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
+        Kinder dürfen nicht geladen werden.
+        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId, { area: "children" }); }}>Kinder erneut laden</UiButton>
+      </UiNotice> : null}
+      {usesBoardRead && controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
         Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
         <UiButton type="button" onClick={() => void controller.planningState.refreshWorkspace("planning")}>Planung erneut laden</UiButton>
       </UiNotice> : null}
@@ -130,11 +236,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       {view === "board" && (
         <div className="grid gap-4">
           <TaskBoardView
+            key={acceptedQuery}
             childProgressById={controller.planningBoard?.result?.childProgressById}
             attentionById={controller.planningBoard?.result?.attentionById}
             childListForTask={taskId => {
               const detail = controller.planningState.taskDetail(taskId);
-              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
+              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId, { area: "children" }); } };
             }}
             columns={controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],
@@ -172,6 +279,9 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
         <PlanningViewLoadBoundary key={view} onReturnToBoard={() => setView("board")}>
           {view === "structure" && (
             <TaskStructureView
+              readMode="selected"
+              planningState={controller.planningState}
+              filters={filters}
               initiatives={initiativePlanningItems(data.tasks)}
               visibleTasks={planningBoardTasks}
               relations={data.taskRelations}
@@ -187,6 +297,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              availableStatuses={controller.planningBoard?.table?.statusOptions}
+              risksById={controller.planningBoard?.table?.risksById}
+              page={controller.planningBoard?.table?.page}
+              pageStatus={controller.planningBoard?.pageStatus}
+              onLoadMore={() => { void controller.planningState.loadTablePage(); }}
+              onRefresh={() => { void controller.planningState.refreshTablePage(); }}
               planningState={controller.planningState}
               visibleTasks={planningBoardTasks}
               profiles={data.profiles}
@@ -205,10 +321,19 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           )}
 
           {view === "gantt" && (
-            <GanttView tasks={planningBoardTasks} items={data.tasks} sprints={data.sprints} relations={data.taskRelations} onOpenTask={openTaskPanel} />
+            controller.selectedGantt?.readStatus === "forbidden" ? (
+              <UiNotice role="alert" tone="danger">Gantt darf nicht geladen werden.</UiNotice>
+            ) : controller.selectedGantt && controller.ganttReady ? (
+              <GanttView tasks={controller.selectedGantt.tasks} items={controller.selectedGantt.items} sprints={controller.selectedGantt.sprints} relations={[...controller.selectedGantt.relationships]} onOpenTask={openTaskPanel} />
+            ) : controller.selectedGantt?.readStatus === "unavailable" || controller.selectedGantt?.readStatus === "stale" ? (
+              <UiNotice role="alert" tone="info">
+                Diese Ansicht konnte nicht geladen werden.
+                <UiButton type="button" onClick={() => void controller.retryPlanningQuery()}>Ansicht erneut laden</UiButton>
+              </UiNotice>
+            ) : <TaskViewLoading label="Gantt" />
           )}
         </PlanningViewLoadBoundary>
       )}
-    </>
+    </section>
   );
 }

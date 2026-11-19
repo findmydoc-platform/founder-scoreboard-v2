@@ -1,5 +1,6 @@
+import { useCallback, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 import { TaskCard } from "./task-card";
 import { taskDetailStoryTask } from "./task-detail-story-fixtures";
 
@@ -85,6 +86,18 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const CurrentChildPageDoesNotInventUnknownProgress: Story = {
+  args: { childProgress: null, attentionSignals: null, childList: { items: subIssues, readStatus: "current", load: fn() } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+    await expect(canvas.getByText("Signale unbekannt")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Sub-Issues anzeigen: Fortschritt unbekannt" }));
+    await expect(canvas.getByRole("link", { name: new RegExp(subIssues[0].title) })).toBeVisible();
+    await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+  },
+};
 
 export const ForeignDeliverableWithAssignedSubIssue: Story = {
   play: async ({ canvasElement }) => {
@@ -196,5 +209,73 @@ export const DeliverableWithoutPersonalNotice: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.queryByText(/für dich/)).not.toBeInTheDocument();
     await expect(canvas.getByText(deliverable.title)).toBeVisible();
+  },
+};
+
+
+const liveChildren = [
+  taskDetailStoryTask({ id: "live-child-a", title: "Erstes aktuelles Kind", taskType: "sub_issue", parentTaskId: deliverable.id, status: "Offen", order: 1 }),
+  taskDetailStoryTask({ id: "live-child-b", title: "Zweites aktuelles Kind", taskType: "sub_issue", parentTaskId: deliverable.id, status: "In Arbeit", order: 2 }),
+  taskDetailStoryTask({ id: "live-child-c", title: "Drittes aktuelles Kind", taskType: "sub_issue", parentTaskId: deliverable.id, status: "Erledigt", order: 3 }),
+];
+
+function CurrentChildPresentationFlow() {
+  const [unrelated, setUnrelated] = useState(0);
+  const [updated, setUpdated] = useState(false);
+  const [callbackVersion, setCallbackVersion] = useState(0);
+  const [opened, setOpened] = useState("");
+  const [removed, setRemoved] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
+  const onOpenTask = useCallback((id: string) => setOpened(`${callbackVersion}:${id}`), [callbackVersion]);
+  const children = liveChildren.filter(child => !removed || child.id !== "live-child-a").map(child => updated && child.id === "live-child-a"
+    ? taskDetailStoryTask({ ...child, title: "Erstes Kind aktualisiert", status: "Erledigt", order: 2 })
+    : updated && child.id === "live-child-b" ? taskDetailStoryTask({ ...child, status: "Offen", order: 1 }) : child);
+  const completed = children.filter(child => child.status === "Erledigt").length;
+  return <>
+    <button type="button" onClick={() => setUnrelated(value => value + 1)}>Unabhängigen Stand aktualisieren</button>
+    <button type="button" onClick={() => setUpdated(true)}>Kindstand aktualisieren</button>
+    <button type="button" onClick={() => setCallbackVersion(value => value + 1)}>Öffnen-Aktion wechseln</button>
+    <button type="button" onClick={() => setRemoved(true)}>Erstes Kind entfernen</button>
+    <button type="button" onClick={() => setForbidden(true)}>Kinderzugriff entziehen</button>
+    <output aria-label="Unabhängiger Stand">{unrelated}</output>
+    <output aria-label="Aktuelle Öffnen-Aktion">{opened}</output>
+    <TaskCard task={deliverable} allTasks={[deliverable, ...children]} blockers={[]} relations={[]}
+      childList={{ items: children, readStatus: forbidden ? "forbidden" : "current", load: () => undefined }}
+      childProgress={forbidden ? null : { completed, total: children.length, unfinished: children.length - completed, percentage: Math.round(completed / children.length * 100) }}
+      viewerOpenSubIssueIds={[updated ? "live-child-b" : "live-child-a"]} onOpenTask={onOpenTask} />
+  </>;
+}
+
+export const CurrentChildRowsKeepUpdatesAndCallbacks: Story = {
+  render: () => <CurrentChildPresentationFlow />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Sub-Issues anzeigen: 2 offen, 1 erledigt" }));
+    const original = canvas.getByRole("link", { name: "Erstes aktuelles Kind, Status Offen" });
+    original.focus();
+    fireEvent.click(canvas.getByRole("button", { name: "Unabhängigen Stand aktualisieren" }));
+    await expect(canvas.getByLabelText("Unabhängiger Stand")).toHaveTextContent("1");
+    await expect(original).toHaveFocus();
+    await userEvent.click(canvas.getByRole("button", { name: "Kindstand aktualisieren" }));
+    const updated = canvas.getByRole("link", { name: "Erstes Kind aktualisiert, Status Erledigt" });
+    const personal = canvas.getByRole("link", { name: "Zweites aktuelles Kind, Status Offen" });
+    await expect(canvas.queryByRole("link", { name: "Erstes aktuelles Kind, Status Offen" })).not.toBeInTheDocument();
+    await expect(within(personal.closest("li")!).getByText("Für dich", { exact: true })).toBeVisible();
+    await expect(within(updated.closest("li")!).queryByText("Für dich", { exact: true })).not.toBeInTheDocument();
+    await expect(within(updated.closest("ul")!).getAllByRole("link").map(link => link.textContent)).toEqual([
+      "Zweites aktuelles KindFür dich", "Erstes Kind aktualisiertErledigt", "Drittes aktuelles KindErledigt",
+    ]);
+    await expect(canvas.getByRole("progressbar", { name: "2 von 3 Sub-Issues erledigt" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Öffnen-Aktion wechseln" }));
+    await userEvent.click(canvas.getByRole("link", { name: "Erstes Kind aktualisiert, Status Erledigt" }));
+    await expect(canvas.getByLabelText("Aktuelle Öffnen-Aktion")).toHaveTextContent("1:live-child-a");
+    await userEvent.click(canvas.getByRole("button", { name: "Erstes Kind entfernen" }));
+    await expect(canvas.queryByRole("link", { name: "Erstes Kind aktualisiert, Status Erledigt" })).not.toBeInTheDocument();
+    await expect(canvas.getByRole("progressbar", { name: "1 von 2 Sub-Issues erledigt" })).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Kinderzugriff entziehen" }));
+    await expect(canvas.queryByRole("link", { name: "Zweites aktuelles Kind, Status Offen" })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("link", { name: "Drittes aktuelles Kind, Status Erledigt" })).not.toBeInTheDocument();
+    await expect(canvas.getByText("Kinder dürfen nicht geladen werden.")).toBeVisible();
+    await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
   },
 };

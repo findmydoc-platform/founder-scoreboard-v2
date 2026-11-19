@@ -43,18 +43,27 @@ const planningBoardUrlSchema: TableUrlSchema<PlanningBoardUrlState> = {
 };
 
 type UsePlanningViewStateOptions = {
+  planningState: import("../model/planning-state").PlanningState;
+  workspace: import("../model/workspace-routes").AppWorkspace;
   initialData: PlanningShellState;
   initialView?: ViewMode;
   initialQuery?: import("../model/planning-board-query").PlanningBoardQuery;
 };
 
 export function usePlanningViewState({
+  planningState,
+  workspace,
   initialData,
   initialQuery,
   initialView,
 }: UsePlanningViewStateOptions) {
-  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "complete" ? initialView || "table" : "board");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "table" ? "table" : initialQuery?.view === "complete" ? initialView || "table" : !initialQuery && initialView === "gantt" ? "gantt" : "board");
+  const [localSelectedTaskId, setLocalSelectedTaskId] = useState<string | null>(null);
+  const selectedTaskId = workspace === "planning" ? planningState.planningInteraction().selectedTaskId : localSelectedTaskId;
+  const setSelectedTaskId = useCallback((taskId: string | null) => {
+    if (workspace === "planning") planningState.rememberPlanningInteraction({ selectedTaskId: taskId });
+    else setLocalSelectedTaskId(taskId);
+  }, [planningState, workspace]);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [epicDialogDefaults, setEpicDialogDefaults] = useState<Partial<EpicDraft> | null>(null);
@@ -69,7 +78,7 @@ export function usePlanningViewState({
     targetSprintNumber: 0,
   });
   const initialBoardState = useMemo(() => initialQuery ? { level: initialQuery.level, parentId: initialQuery.parentId } : undefined, [initialQuery]);
-  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema, initialState: initialQuery?.filters });
+  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema, initialState: initialQuery?.filters || (!initialQuery && initialView === "gantt" ? initialData.profileUiPreferences.find(preference => preference.defaultTaskView === "gantt")?.planningFilters : undefined) });
   const {
     state: planningBoardUrlState,
     updateState: updatePlanningBoardUrlState,

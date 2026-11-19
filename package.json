@@ -27,7 +27,8 @@
     "local:seed": "node scripts/local-development.mjs seed",
     "local:stop": "node scripts/local-development.mjs stop",
     "deploy:supabase-migrations": "node scripts/deploy-production-migrations.mjs",
-    "verify:credentials": "node --test tests/architecture/*.test.mjs && node scripts/verify-credential-boundary.mjs"
+    "verify:credentials": "node --test tests/architecture/*.test.mjs && node scripts/verify-credential-boundary.mjs",
+    "verify:planning-reads": "node --test tests/architecture/planning-read-boundary.test.mjs && node scripts/verify-planning-reads.mjs"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "13.13.0",

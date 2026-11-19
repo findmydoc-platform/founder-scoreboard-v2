@@ -21,7 +21,7 @@ const roleActions: Partial<Record<SessionPolicyAction, readonly PlatformRole[]>>
 };
 
 export function rolePermitsAction(action: SessionPolicyAction, role: PlatformRole) {
-  return roleActions[(action === "planning.revision.read" || action === "planning.board.read") ? "team.read" : action]?.includes(role) === true;
+  return roleActions[(action === "planning.revision.read" || action === "planning.board.read" || action === "planning.backlog.read") ? "team.read" : action]?.includes(role) === true;
 }
 
 export function currentAdministratorAccess(value: AdministratorAccessSnapshot | null): AdministratorAccessSnapshot {
@@ -65,7 +65,7 @@ export async function authorizeSessionPolicy(request: NextRequest, action: Sessi
   const roleAllowed = rolePermitsAction(action, profile.platformRole);
   if (!administratorCapability && (!correction || request.headers.has("x-fmd-dev-profile-id"))) {
     if (!roleAllowed) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
-    return { ...context, profile };
+    return { ...context, profile, localProfileOverride: profile.id !== context.profile.id };
   }
   const result = await context.data.rpc("administrator_access_snapshot");
   if (result.error) return roleAllowed && correction ? { ...context, profile }

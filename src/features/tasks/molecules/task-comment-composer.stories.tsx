@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { flushSync } from "react-dom";
+import { expect, fireEvent, fn, userEvent, within } from "storybook/test";
 import type { Profile } from "@/lib/types";
 import { TaskCommentComposer } from "./task-comment-composer";
 
@@ -126,5 +127,24 @@ export const MentionPopoverFollowsCaret: Story = {
     await expect(listboxRect.left).toBeGreaterThan(firstLeft + 20);
     await expect(listboxRect.left).toBeGreaterThanOrEqual(textboxRect.left);
     await expect(listboxRect.right).toBeLessThanOrEqual(textboxRect.right);
+  },
+};
+
+export const MentionReplacementKeepsCaretBeforeFollowingText: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole("textbox", { name: "Kommentar oder Update" }) as HTMLTextAreaElement;
+    await userEvent.type(textbox, "@seb Ende");
+    await userEvent.keyboard("{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}");
+    const option = canvas.getByRole("option", { name: "Sebastian Schütze, @SebastianSchuetze" });
+    // Inspect the committed selection before a browser frame can restore an old caret.
+    flushSync(() => fireEvent.click(option));
+    const { selectionStart, selectionEnd } = textbox;
+    await expect(textbox).toHaveValue("@SebastianSchuetze Ende");
+    await expect(selectionStart).toBe("@SebastianSchuetze".length);
+    await expect(selectionEnd).toBe("@SebastianSchuetze".length);
+    await userEvent.keyboard(" und @seb");
+    await expect(textbox).toHaveValue("@SebastianSchuetze und @seb Ende");
+    await expect(canvas.getByRole("status")).toHaveTextContent("Diese Erwähnung steht bereits im Text.");
   },
 };

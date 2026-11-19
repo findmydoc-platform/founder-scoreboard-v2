@@ -25,6 +25,7 @@ type DropTarget = {
 
 type BacklogRankTableProps = {
   allItems: BacklogItem[];
+  totalItems?: number;
   assigneeOptions: CustomSelectOption[];
   buckets: BacklogSprintBucket[];
   canManageBacklog: boolean;
@@ -127,14 +128,14 @@ function RowActions({
 }: {
   item: BacklogItem;
   index: number;
-  props: Pick<BacklogRankTableProps, "buckets" | "canManageBacklog" | "canReorder" | "isReordering" | "items" | "orderedTasks" | "onAssignTaskToSprint" | "onDragTaskEnd" | "onDragTaskStart" | "onMoveTask" | "sprintById">;
+  props: Pick<BacklogRankTableProps, "buckets" | "canManageBacklog" | "canReorder" | "isReordering" | "items" | "orderedTasks" | "onAssignTaskToSprint" | "onDragTaskEnd" | "onDragTaskStart" | "onMoveTask" | "sprintById" | "totalItems">;
 }) {
   return (
     <BacklogTaskActions
       buckets={props.buckets}
       canManageBacklog={props.canManageBacklog}
       canReorder={props.canReorder}
-      index={index}
+      index={props.totalItems === undefined ? index : item.rank - 1}
       isReordering={props.isReordering}
       orderedTasks={props.orderedTasks}
       item={item}
@@ -151,13 +152,14 @@ function RowActions({
       }}
       onMoveTask={props.onMoveTask}
       sprintById={props.sprintById}
-      total={props.items.length}
+      total={props.totalItems ?? props.items.length}
     />
   );
 }
 
 export function BacklogRankTable({
   allItems,
+  totalItems,
   assigneeOptions,
   buckets,
   canManageBacklog,
@@ -231,6 +233,7 @@ export function BacklogRankTable({
     onMoveTask,
     orderedTasks,
     sprintById,
+    totalItems,
   };
   const toggleSort = (sort: BacklogSort) => onFiltersChange({ sort, direction: filters.sort === sort && filters.direction === "asc" ? "desc" : "asc" });
   const directionFor = (sort: BacklogSort): SortDirection => filters.sort === sort ? filters.direction : null;
@@ -270,7 +273,7 @@ export function BacklogRankTable({
         title="Backlog-Rangfolge"
         description="Rang steuert die nächste Planung; Priorität bleibt die fachliche Dringlichkeit."
         caption="Priorisierte Backlog-Aufgaben"
-        results={[{ id: "backlog", visibleCount: items.length, totalCount: allItems.length }]}
+        results={[{ id: "backlog", visibleCount: items.length, totalCount: totalItems ?? allItems.length }]}
         filtering={{ mode: "external", labelledBy: "backlog-data-filters" }}
         actions={canManageBacklog ? <UiButton variant="blue" size="sm" onClick={onProposeDeliverable}><Plus size={15} /> Deliverable vorschlagen</UiButton> : undefined}
         minWidth={backlogTableMinWidth}
@@ -295,7 +298,7 @@ export function BacklogRankTable({
                       <UiBadge tone={priorityBadgeTone(item.task.priority)} shape="rectangular">{item.task.priority}</UiBadge>
                       <BacklogReadiness item={item} />
                     </div>
-                    <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="line-clamp-2 text-left font-semibold text-slate-950">
+                    <TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={false} className="line-clamp-2 text-left font-semibold text-slate-950">
                       {item.task.title}
                     </TaskReferenceLink>
                     </div>
@@ -380,7 +383,7 @@ export function BacklogRankTable({
                   </div>
                 </DataCell>
                 <DataCell className={classNames("font-semibold text-slate-600", dropClass)}>#{item.rank}</DataCell>
-                <DataCell className={classNames("max-w-sm", dropClass)}><TaskReferenceLink task={item.task} onOpenTask={onOpenTask} className="text-left font-semibold text-slate-950">{item.task.title}</TaskReferenceLink></DataCell>
+                <DataCell className={classNames("max-w-sm", dropClass)}><TaskReferenceLink task={item.task} onOpenTask={onOpenTask} prefetch={false} className="text-left font-semibold text-slate-950">{item.task.title}</TaskReferenceLink></DataCell>
                 <DataCell className={dropClass}><UiBadge tone={approvalTone(item.task)} shape="rectangular">{approvalLabel(item.task)}</UiBadge></DataCell>
                 <DataCell className={classNames("max-w-40 text-xs text-slate-600", dropClass)}>{item.initiative?.title || "Nicht gesetzt"}</DataCell>
                 <DataCell className={classNames("text-xs text-slate-600", dropClass)}>{taskAssigneeLabel(item.task)}</DataCell>

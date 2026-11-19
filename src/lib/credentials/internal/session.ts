@@ -214,6 +214,7 @@ type SessionAction = SessionPolicyAction | "calendar.read" | "workweek.private.r
 type SessionDataResult = Extract<CalendarCredentialResult, { ok: false }> | {
   ok: true; profile: Extract<CalendarCredentialResult, { ok: true }>["profile"]; user: User;
   assertCurrent(): void;
+  readonly readDeadline: number;
   constrainedData(assertDispatch: () => void): SupabaseClient;
   data: SupabaseClient; readOwnerConflict(versionId: string): Promise<{ data: { resolution_version_id: string } | null; error: { message: string } | null }>;
 };
@@ -298,7 +299,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     }
     if (!workspace) recordWorkspaceMembership({ result: "bypass", reason: "not_required", cacheOwnerId, evidenceAgeMs: null, remainingLifetimeMs: null, expired: false });
     const binding: SessionBinding = { token, userId: claims.sub, sessionId: claims.session_id,
-      profileId: context.profileId, deadline, workspace, groupedDispatch: action === "calendar.read" || action === "planning.revision.read" || action === "planning.board.read", url: environment.url, service: environment.service, auth: environment.auth,
+      profileId: context.profileId, deadline, workspace, groupedDispatch: action === "calendar.read" || action === "planning.revision.read" || action === "planning.board.read" || action === "planning.backlog.read", url: environment.url, service: environment.service, auth: environment.auth,
       mode: context.mode, linkingEnforced: context.linkingEnforced, subject, email };
     const constrainedData = (assertDispatch: () => void) => createClient(environment.url, environment.key, { ...environment.options,
       global: { headers: { Authorization: `Bearer ${token}` }, fetch: boundDataFetch(binding, assertDispatch) },
@@ -312,7 +313,7 @@ export async function authorizeSessionData(request: NextRequest, action: Session
     if (!profile.data || profile.data.id !== binding.profileId
       || !["ceo", "founder", "deputy", "viewer"].includes(profile.data.platform_role)) throw denied();
     if (Date.now() >= deadline) throw unavailable();
-    return { constrainedData, assertCurrent: () => { if (Date.now() >= binding.deadline) throw unavailable(); }, ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
+    return { readDeadline: binding.deadline, constrainedData, assertCurrent: () => { if (Date.now() >= binding.deadline) throw unavailable(); }, ok: true, profile: { id: profile.data.id, name: profile.data.name, platformRole: profile.data.platform_role, githubLogin: "" }, user: user.data.user, data,
       readOwnerConflict: async (versionId: string) => {
         if (action !== "workweek.private.read") return { data: null, error: { message: "Keine Berechtigung für diesen Konfliktstatus." } };
         // Service-backed conflict state has its own live authorization and owner restriction.

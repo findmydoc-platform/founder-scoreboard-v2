@@ -1,5 +1,6 @@
 import "server-only";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
+import { projectSessionView } from "./session-view";
 import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import type { ResourceCredentialInput } from "../resource-types";
@@ -16,6 +17,7 @@ export async function resourceAuthority(input: ResourceCredentialInput, startedA
   const configuration = accountServiceConfiguration(false);
   if (!configuration.url || !configuration.key) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
   let request: NextRequest;
+  let cookieSession: Session | undefined;
   if (input.credential.kind === "server-cookies") {
     const requestHeaders = new Headers(await headers());
     if (requiresSupabaseAuth()) {
@@ -23,6 +25,7 @@ export async function resourceAuthority(input: ResourceCredentialInput, startedA
       const result = client ? await client.auth.getSession() : null;
       if (result?.error && (isAuthRetryableFetchError(result.error) || (result.error.status || 0) >= 500)) return { ok: false as const, status: 503, error: "Anmeldung konnte nicht geprüft werden." };
       if (result?.error || !result?.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
+      cookieSession = result.data.session;
       requestHeaders.set("authorization", `Bearer ${result.data.session.access_token}`);
     }
     request = { headers: requestHeaders, method: "GET" } as NextRequest;
@@ -65,5 +68,7 @@ export async function resourceAuthority(input: ResourceCredentialInput, startedA
   const service = planningService(false, reassert, assertCurrent)!;
   const strictService = planningService(true, reassert, assertCurrent);
   const userData = "constrainedData" in permission ? permission.constrainedData(assertCurrent) : permission.data;
-  return { ok: true as const, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
+  const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
+  const readSession = action === "team.read" && cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
+  return { ok: true as const, readAuthority, readSession, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
 }

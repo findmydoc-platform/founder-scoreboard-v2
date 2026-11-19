@@ -1,3 +1,4 @@
+import type { PlanningCandidateAccess } from "@/features/planning-items/model/planning-item-candidates";
 import type { PlanningHierarchy } from "@/features/projects/model/hierarchy-state";
 import type { PlanningMeetingAttendance } from "@/features/sprint/model/meeting-attendance-state";
 import type { PlanningTaskRelationships } from "@/features/tasks/model/task-relationship-change";
@@ -42,12 +43,18 @@ export type PlanningTaskSaveCheck = {
   readStatus: PlanningReadStatus | "not-needed";
 };
 export type PlanningTaskSaveStatus = "saved" | "saving" | "rejected" | "unconfirmed";
-export type PlanningBoardView = { requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
+export type PlanningSourceStatus = "current" | "checking" | "changed" | "unverified";
+export type PlanningSourceObservation = "unchanged" | "changed" | "unverified" | "session-ended" | "content-read";
+export type PlanningBoardView = { table?: import("./planning-table-result").PlanningTableResult; query?: import("./planning-board-query").PlanningBoardQuery; sourceStatus?: PlanningSourceStatus; requiresQueryRead?: boolean; scopeRevision?: string; deniedChildListIds?: readonly string[]; tasks: readonly Task[]; freshness: "current" | "stale"; result?: import("./planning-board-query").PlanningBoardResult; queryKey?: string; pageStatus?: PlanningReadStatus; columnReadStatus?: Partial<Record<import("@/lib/types").TaskStatus, PlanningReadStatus>>; readStatus?: PlanningReadStatus };
 export type PlanningReadStatus = "not-loaded" | "loading" | "current" | "stale" | "unavailable" | "forbidden";
 export type PlanningTaskDetailView = {
   removed: boolean;
   children: readonly Task[];
   childrenReadStatus: PlanningReadStatus;
+  childrenCoverage: "not-loaded" | "loading" | "partial" | "complete" | "complete-empty" | "stale" | "failed" | "forbidden";
+  childProgress: ReturnType<typeof import("@/features/tasks/model/task-card-presentation").taskChildProgress> | null;
+  scopedRead?: boolean;
+  areaReadStatus?: Record<"discussion" | "timeline" | "relationships", PlanningReadStatus>;
   task: Task | null;
   saveStatus: PlanningTaskSaveStatus;
   readStatus: PlanningReadStatus;
@@ -65,6 +72,10 @@ export type PlanningWorkspaceView = {
   readStatus: PlanningReadStatus;
   completeness: "complete" | "partial" | "none";
 };
+export type PlanningInteraction = {
+  selectedTaskId: string | null;
+  position?: { queryKey: string; top: number; left: number };
+};
 import type { PlanningToolsState } from "@/features/tools/model/tool-state";
 import type { PlanningEventsState } from "@/features/events/model/event-state";
 import type { PlanningNotificationsState } from "./planning-notifications-state";
@@ -72,17 +83,35 @@ import type { PlanningNotificationsState } from "./planning-notifications-state"
 export type PlanningConfirmedSnapshot = { readonly [Key in "tasks" | "profiles" | "sprints" | "notificationPreferences" | "profileUiPreferences" | "profileFeatureTourAcknowledgements"]: import("@/lib/types").PlanningShellState[Key] extends readonly (infer Item)[] ? readonly Readonly<Item>[] : Readonly<import("@/lib/types").PlanningShellState[Key]> };
 
 import type { AdministrationPeopleState } from "@/features/administration/model/administration-state";
-export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
+export interface PlanningState extends PlanningCandidateAccess, PlanningHierarchy, PlanningTaskGitHubSync, PlanningMeetingAttendance, PlanningTaskRelationships, PlanningTaskReviews, GoogleWorkspacePlanningState, PlanningTaskAttachments, PlanningTaskGitHubImports, AdministrationPeopleState, PlanningTaskComments, PlanningTaskCommentDrafts, PlanningTaskBlockerReports, PrivateWorkweekPlanningState, PublishedWorkweekCalendars, PlanningNotificationsState, PlanningEventsState, PlanningToolsState {
   decisionLog(): import("./planning-decision-log").PlanningDecisionLogView;
   loadDecisionLog(): Promise<boolean>;
+  checkPlanningSource(workspace?: "planning" | "backlog"): Promise<PlanningSourceObservation>;
+  activatePlanningView(workspace?: "planning" | "backlog"): () => void;
+  beginBoardInteraction(): () => void;
+  planningInteraction(): Readonly<PlanningInteraction>;
+  rememberPlanningInteraction(patch: Partial<PlanningInteraction>): void;
   currentProfile(): import("@/lib/types").AuthenticatedProfile | null;
-  beginBacklogOrder(tasks: readonly Task[]): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
+  beginBacklogOrder(tasks: readonly Task[], options?: { complete?: boolean }): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor;
   backlogOrders(): readonly import("@/features/backlog/model/backlog-ordering").BacklogOrderView[];
   resumeBacklogOrder(id: string): import("@/features/backlog/model/backlog-ordering").BacklogOrderEditor | null;
   beginBacklogAssignment(tasks: readonly Task[], sprints: readonly import("@/lib/types").Sprint[], bulk: boolean): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor;
   backlogAssignments(): readonly import("@/features/backlog/model/backlog-assignment").BacklogAssignmentView[];
   resumeBacklogAssignment(id: string): import("@/features/backlog/model/backlog-assignment").BacklogAssignmentEditor | null;
-  backlog(): { model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
+  moveBacklogRelative(source: Task, action: import("@/features/backlog/model/backlog-ordering").BacklogMoveAction, options?: { signal?: AbortSignal }): Promise<import("@/features/backlog/model/backlog-ordering").BacklogOrderResult | null>;
+  activateGantt(): () => void;
+  loadGantt(query: import("./planning-gantt-query").PlanningGanttQuery, options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  gantt(): { readStatus: PlanningReadStatus; selection?: import("./planning-gantt-result").PlanningGanttResult; tasks: readonly Task[]; items: readonly Task[]; sprints: readonly import("@/lib/types").Sprint[]; relationships: readonly import("@/lib/types").TaskRelation[] };
+  activateStructureControls(): () => void;
+  loadStructureControls(options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  structureControls(): { readStatus: PlanningReadStatus; controls?: import("./planning-structure-controls").PlanningStructureControls };
+  activateStructure(query: import("./planning-structure-query").PlanningStructureQuery): () => void;
+  loadStructure(query: import("./planning-structure-query").PlanningStructureQuery, options?: { signal?: AbortSignal; append?: boolean; refresh?: boolean }): Promise<boolean>;
+  structure(query: import("./planning-structure-query").PlanningStructureQuery): { readStatus: PlanningReadStatus; selection?: import("./planning-structure-query").PlanningStructureSelection };
+  loadLegacyBacklog(): Promise<boolean>;
+  loadBacklogSupport(query: import("@/features/backlog/model/backlog-support").BacklogSupportQuery, options?: { signal?: AbortSignal }): Promise<boolean>;
+  loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean }): Promise<boolean>;
+  backlog(): { parentMembershipCompleteIds: readonly string[]; invalidationEpoch: number; orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
   resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
   scoreObjectionScore(sprintId: string, profileId: string): { score: import("@/lib/types").FounderSprintScore | null; complete: boolean };
@@ -116,6 +145,10 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   beginOwnProfileEdit(shown: import("@/features/profile/model/profile-settings-contract").OwnProfileEditingSnapshot): import("@/features/profile/model/profile-settings-contract").OwnProfileEditor;
   beginTeamProfileEdit(shown: import("@/lib/types").Profile): import("./planning-team-state").TeamProfileEditor;
   team(): import("./planning-team-state").PlanningTeamView;
+  teamMetrics(): { enabled: boolean; readStatus: PlanningReadStatus; metricsByProfileId: Readonly<Record<string, Readonly<import("@/features/team/model/team-profile-view-model").TeamMemberStats>>> };
+  loadTeamMetrics(): Promise<boolean>;
+  activateTeamMetrics(): () => void;
+  checkTeamMetricsSource(): Promise<void>;
   saveTeamProfile(profileId: string, patch: import("./planning-team-state").TeamProfilePatch): Promise<import("./planning-team-state").TeamProfileResult>;
   checkTeamProfile(profileId: string): Promise<boolean>;
   profileApiTokens(): import("@/features/profile/model/profile-api-token-state").ProfileApiTokensView;
@@ -128,6 +161,13 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   saveOwnProfileSettings(profileId: string, patch: import("@/features/profile/model/profile-settings-contract").OwnProfileSettingsPatch): Promise<import("@/features/profile/model/profile-settings-contract").ProfileSettingsResult>;
   board(): PlanningBoardView;
   ensureBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput): Promise<boolean>;
+  scheduleBoardQuery(query: import("./planning-board-query").PlanningBoardQueryInput, options?: { immediate?: boolean }): Promise<boolean>;
+  acceptServerBoardColumn(readId: string, outcome: import("./planning-board-delivery").PlanningBoardColumnOutcome): Promise<boolean>;
+  acceptServerBoardSummary(readId: string, outcome: import("./planning-board-delivery").PlanningBoardSummaryOutcome): Promise<boolean>;
+  refreshTableRisks(): Promise<boolean>;
+  refreshBoardSummaries(): Promise<boolean>;
+  loadTablePage(): Promise<boolean>;
+  refreshTablePage(): Promise<boolean>;
   loadCompletedHistory(): Promise<boolean>;
   loadBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;
   refreshBoardColumn(status: import("@/lib/types").TaskStatus): Promise<boolean>;
@@ -140,7 +180,7 @@ export interface PlanningState extends PlanningHierarchy, PlanningTaskGitHubSync
   taskEdits(taskId: string): readonly PlanningTaskEditorView[];
   beginTaskEdit(task: Task | string): PlanningTaskEditor;
   saveTask(task: Task, patch: Partial<Task>): Promise<TaskUpdateResult>;
-  loadTaskDetail(taskId: string): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
+  loadTaskDetail(taskId: string, options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea; signal?: AbortSignal; refresh?: boolean }): Promise<{ ok: boolean; error?: string; unavailable?: import("@/features/tasks/model/task-detail-read-model").TaskDetailUnavailableArea[] }>;
   refreshWorkspace(workspace: AppWorkspace): Promise<boolean>;
   prepareWorkspaceHydration(workspace: AppWorkspace): void;
 }

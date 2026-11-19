@@ -8,6 +8,8 @@ export type PlanningWorkspaceModel = Readonly<{
   queryRevision?: string;
   scopeRevision?: string;
   board?: import("@/features/planning/model/planning-board-query").PlanningBoardResult;
+  table?: import("@/features/planning/model/planning-table-result").PlanningTableResult;
+  gantt?: import("@/features/planning/model/planning-gantt-result").PlanningGanttResult;
   coverage?: PlanningWorkspaceReadCoverage;
   taskOmittedFields?: readonly (keyof Task)[];
   project: Project;
@@ -22,12 +24,19 @@ export type PlanningWorkspaceModel = Readonly<{
 export type PlanningWorkspaceLoadContext = Readonly<{
   authorized: boolean;
   actorProfileId: string | null;
+  actorUserId?: string;
+  structureParentId?: string;
   authorityKey?: string;
+  authorityDeadline?: number;
+  signal?: AbortSignal;
+  publicationSource?: Readonly<{
+    read(signal?: AbortSignal): Promise<{ status: "ready"; revision: string } | { status: "forbidden" | "unavailable" }>;
+  }>;
   query?: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput;
 }>;
 
 export type PlanningWorkspaceLoadResult =
-  | { status: "ready"; model: PlanningWorkspaceModel }
+  | { status: "ready"; model: PlanningWorkspaceModel; authorityDeadline?: number }
   | { status: "forbidden" }
   | { status: "unavailable" }
   | { status: "staleContinuation" };

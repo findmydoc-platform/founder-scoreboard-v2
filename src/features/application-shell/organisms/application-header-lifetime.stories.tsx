@@ -53,16 +53,22 @@ const meta = {
     const previous = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let teamReads = 0;
+    const teamReadAuthority = { userId: user.id, deadline: Date.now() + 60_000 };
+    const teamObservedAt = new Date().toISOString();
     const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: user.email }, input => {
-      const path = new URL(String(input), "http://localhost").pathname;
+      const url = new URL(String(input), "http://localhost");
+      const path = url.pathname;
       if (path === "/api/auth/session") return Response.json({ session: { user, userId: user.id, revision: "parity-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
       if (path === "/api/administrator-access") return Response.json({ administratorAccess: inactiveAdministratorAccess });
-      if (path === "/api/planning-header-data") return Response.json({ headerData });
+      if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
       if (path === "/api/planning-revision") return Response.json({ revision: planningTaskRevision([]) });
       if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true }, waitingCommentCount: 0 });
       if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });
       // A new response must not repair profile fields overwritten during the Release visit.
-      if (path === "/api/team-data" && teamReads++ === 0) return Response.json({ model: { revision: "accepted-team", people: [profile], items: [], readCoverage: { people: "complete" } } });
+      if (path === "/api/team-data" && url.searchParams.get("area") === "people" && teamReads++ === 0) return Response.json({
+        readAuthority: teamReadAuthority, currentProfile: { id: profile.id, name: profile.name, platformRole: profile.platformRole, githubLogin: profile.githubLogin },
+        model: { revision: "accepted-team", scopeRevision: "accepted-team", observedAt: teamObservedAt, people: [profile], items: [], readCoverage: { people: "complete", items: "partial" } },
+      });
       if (path === "/api/team-data" || path === "/api/profile-data") return new Promise<Response>(() => {});
       if (path === "/api/team-workweek/team") {
         const schedule = { id: "parity-publication", ownerProfileId: profile.id, effectiveFrom: "2020-01-01", effectiveTo: null, timezone: "Europe/Berlin", publicationRevision: 2, lastSyncAt: "2026-11-01T09:00:00Z", windows: Object.fromEntries(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map(day => [day, [{ start: "09:00", end: "17:00" }]])) };

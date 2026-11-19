@@ -17,6 +17,9 @@ import { useAdministratorAccessController } from "@/features/administrator-acces
 import { createBrowserApiClient } from "@/lib/browser-api-client";
 
 type Props = {
+  children?: import("react").ReactNode;
+  initialServerHeaderRead?: import("./model/planning-server-header-read").PlanningServerHeaderRead;
+  initialBacklogRead?: import("./model/planning-backlog-hydration").PlanningBacklogHydration;
   initialWorkspaceRead?: import("./model/planning-workspace-hydration").PlanningWorkspaceHydration;
   initialData: PlanningShellState;
   initialHeaderData: PlanningHeaderData;
@@ -35,6 +38,9 @@ type Props = {
 };
 
 export function PlanningApp({
+  children,
+  initialServerHeaderRead,
+  initialBacklogRead,
   initialWorkspaceRead,
   initialData,
   initialHeaderData,
@@ -58,6 +64,8 @@ export function PlanningApp({
     platformRole: initialCurrentProfile?.platformRole || null,
   });
   const controller = usePlanningAppController({
+    initialServerHeaderRead,
+    initialBacklogRead,
     initialWorkspaceRead,
     initialDecisionLogResult,
     initialData,
@@ -79,5 +87,5 @@ export function PlanningApp({
     setWorkspace("planning");
   }, [revalidateAdministratorAccess, setWorkspace]);
 
-  return <PlanningBusinessStateContext.Provider value={controller.planningState}><PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} /></PlanningBusinessStateContext.Provider>;
+  return <PlanningBusinessStateContext.Provider value={controller.planningState}>{children}<PlanningAppShell authRequired={authRequired} controller={controller} administratorAccessController={administratorAccessController} initialAdministrationModel={initialAdministrationModel} onAdministratorAccessInvalid={handleAdministratorAccessInvalid} source={source} initialBacklogModel={initialBacklogModel} initialSprintModel={initialSprintModel} /></PlanningBusinessStateContext.Provider>;
 }

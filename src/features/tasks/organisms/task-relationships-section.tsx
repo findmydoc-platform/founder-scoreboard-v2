@@ -247,6 +247,7 @@ export function TaskRelationshipsSection({
       {canAdd && relationshipDataReady && formOpen ? (
         <div id="task-relationship-form" className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <TaskRelationshipForm
+            sourceTaskId={(relationshipBasis || task).id}
             profiles={profiles}
             relationDraft={relationDraft}
             relationTargetOptions={relationTargetOptions}

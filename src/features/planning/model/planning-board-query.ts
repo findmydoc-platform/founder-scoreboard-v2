@@ -6,11 +6,11 @@ export const DEFAULT_PLANNING_FILTERS: PlanningFilterPreferences = {
   sprintId: "Alle", workstream: "Alle", risk: "Alle", targetFrom: "", targetTo: "", sort: "priority", direction: "asc",
 };
 export type PlanningBoardQuery = Readonly<{
-  view: "board" | "complete";
+  view: "board" | "table" | "complete";
   level: PlanningLevel;
   parentId: string;
   filters: PlanningFilterPreferences;
-  ordering: "priority-order-id-and-completed-updated-desc-order-id";
+  ordering: "priority-order-id-and-completed-updated-desc-order-id" | "table-sort-direction-order-priority-id";
 }>;
 export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters" | "ordering">> & {
   filters?: Partial<PlanningFilterPreferences>;
@@ -18,20 +18,25 @@ export type PlanningBoardQueryInput = Partial<Omit<PlanningBoardQuery, "filters"
   continuation?: string;
   column?: TaskStatus;
 };
-export type PlanningBoardColumn = Readonly<{ total: number; loaded: number; completeness: "complete" | "partial"; continuation: string | null }>;
+export type PlanningBoardColumn = Readonly<{ total: number | null; loaded: number; availability?: "ready" | "not-loaded"; completeness: "complete" | "partial"; continuation: string | null }>;
 export type PlanningBoardResult = Readonly<{
   query: PlanningBoardQuery;
   column?: TaskStatus;
+  delivery?: Readonly<{ id: string; columns: readonly TaskStatus[] }>;
+  summaryRequests?: readonly import("./planning-board-summaries").PlanningBoardSummaryRequest[];
   queryKey: string;
   revision: string;
   observedAt: string;
+  validUntil?: string | null;
   cardIds: readonly string[];
   workstreams?: readonly string[];
+  initiativeOptions?: readonly Pick<import("@/lib/types").Task, "id" | "title">[];
+  epicOptions?: readonly Pick<import("@/lib/types").Task, "id" | "title">[];
   levelTotals?: Record<PlanningLevel, number>;
-  attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[]>;
-  childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number }>;
+  attentionById?: Record<string, import("@/features/tasks/model/task-attention-signals").TaskAttentionSignal[] | null>;
+  childProgressById: Record<string, { completed: number; total: number; unfinished: number; percentage: number } | null>;
   columns: Record<TaskStatus, PlanningBoardColumn>;
-  metrics: { total: number; open: number; blocked: number; done: number };
+  metrics: { total: number; open: number; blocked: number | null; done: number };
   viewerOpenSubIssueIdsByDeliverableId: Record<string, string[]>;
   workspaceRevision: { activeTaskCount: number; latestUpdatedAt: string };
 }>;
@@ -54,7 +59,8 @@ export function normalizePlanningBoardQuery(input: PlanningBoardQueryInput = {})
   }
   filters.quick = Array.isArray(candidate.quick) ? [...new Set(candidate.quick.filter(value => ["mine", "my-reviews", "open", "critical", "blocked", "week", "high", "evidence"].includes(value)))].sort() : [];
   filters.direction = candidate.direction === "desc" ? "desc" : "asc";
-  return { view: input.view === "complete" ? "complete" : "board", level: input.level === "epic" || input.level === "initiative" ? input.level : "deliverable", parentId: typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: "priority-order-id-and-completed-updated-desc-order-id" };
+  const view = input.view === "complete" ? "complete" : input.view === "table" ? "table" : "board";
+  return { view, level: view !== "table" && (input.level === "epic" || input.level === "initiative") ? input.level : "deliverable", parentId: view !== "table" && typeof input.parentId === "string" ? input.parentId.slice(0, 512) : "all", filters, ordering: view === "table" ? "table-sort-direction-order-priority-id" : "priority-order-id-and-completed-updated-desc-order-id" };
 }
 export function planningBoardQueryKey(query: PlanningBoardQueryInput = {}) {
   const normalized = normalizePlanningBoardQuery(query);

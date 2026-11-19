@@ -6,17 +6,40 @@ import { DEFAULT_PLANNING_FILTERS } from "@/features/planning/hooks/use-planning
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
 import type { ViewMode } from "@/lib/types";
 import { createPlanningState } from "../model/internal/planning-state-owner";
+import { normalizePlanningGanttQuery, planningGanttQueryKey } from "../model/planning-gantt-query";
 import { emptyPlanningShellState } from "../model/planning-shell-state";
 import { PlanningTaskViewRenderer } from "./planning-task-view-renderer";
 
 const initiative = taskDetailStoryTask({ id: "initiative-1", title: "Lazy view initiative", taskType: "initiative" });
 const deliverable = taskDetailStoryTask({ id: "deliverable-1", title: "Lazy view deliverable", parentTaskId: initiative.id });
 const tasks = [initiative, deliverable];
+const ganttQuery = normalizePlanningGanttQuery({ view: "gantt", filters: DEFAULT_PLANNING_FILTERS })!;
+const emptyGantt = {
+  readStatus: "current",
+  selection: {
+    query: ganttQuery,
+    queryKey: planningGanttQueryKey(ganttQuery),
+    itemIds: [],
+    contextIds: [],
+    total: 0,
+    toolbarCounts: { filtered: 0, unfiltered: 0 },
+    sourceRevision: "1",
+    observedAt: "2026-11-18T00:00:00Z",
+    temporalKey: "fixed",
+    validUntil: null,
+    coverage: { items: "complete", hierarchy: "complete", schedule: "complete", relationships: "complete" },
+  },
+  tasks: [],
+  items: [],
+  sprints: [],
+  relationships: [],
+} satisfies ReturnType<PlanningAppController["planningState"]["gantt"]>;
 
 function StoryRenderer() {
   const [owner] = useState(() => createPlanningState({ userId: "deferred-views", initialData: { ...emptyPlanningShellState, tasks }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null } }));
   const data = useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
   const [view, setView] = useState<ViewMode>("board");
+  const openTaskPanel = () => undefined;
   const controller = {
     canChangeTaskStatus: () => false,
     canManageFinalTaskStatus: false,
@@ -28,7 +51,8 @@ function StoryRenderer() {
     expandedInitiatives: {},
     filters: DEFAULT_PLANNING_FILTERS,
     filtersAvailable: true,
-    openTaskPanel: () => undefined,
+    openTaskPanel,
+    startTaskPanel: openTaskPanel,
     planningLevel: "deliverable",
     planningParentFilterId: "all",
     selectedTaskId: null,
@@ -39,6 +63,8 @@ function StoryRenderer() {
     toggleInitiativeCollapse: () => undefined,
     updateTask: () => undefined,
     view,
+    selectedGantt: view === "gantt" ? emptyGantt : undefined,
+    ganttReady: view === "gantt",
     viewerOpenSubIssueIdsByDeliverableId: {},
     visibleTasks: view === "gantt" ? [] : tasks,
   } as unknown as PlanningAppController;

@@ -346,3 +346,25 @@ test.each(["provider failure", "lost response"])("Planning board header retains 
   expect(dispatched).toHaveLength(1);
   expect(attempts.filter(path => path === "/rest/v1/fmd_tools" || path === "/rest/v1/founder_events")).toHaveLength(0);
 });
+
+for (const response of [null, {}, "true", false, "lost"]) test(`Planning Backlog denies uncertain preparation ${JSON.stringify(response)} without reading metadata`, async () => {
+  const authorized = await authorize(token(), "planning.backlog.read");
+  expect(authorized.ok).toBe(true);
+  preparedResponse = () => {
+    if (response === "lost") throw new TypeError("Synthetic lost preparation response");
+    return Response.json(response);
+  };
+  expect(await authorized.planning.loadBacklog({view:"backlog-support",area:"controls",day:"2026-10-21"})).toEqual({status:"forbidden"});
+  expect(preparations).toHaveLength(2);expect(releases).toHaveLength(2);
+  expect(attempts.filter(path=>path==="/rest/v1/rpc/planning_backlog_support")).toHaveLength(0);
+});
+
+test.each(["profile","user","role","deadline"])("Planning Backlog denies changed %s before its metadata read",async change=>{
+  const authorized=await authorize(token(),"planning.backlog.read");expect(authorized.ok).toBe(true);
+  if(change==="profile")profileFailure=true;
+  if(change==="user")liveUser=()=>Response.json({id:"replaced-user"});
+  if(change==="role")profileRole="ceo";
+  if(change==="deadline")vi.setSystemTime(Date.now()+900000);
+  expect(await authorized.planning.loadBacklog({view:"backlog-support",area:"controls",day:"2026-10-21"})).toEqual({status:"forbidden"});
+  expect(attempts.filter(path=>path==="/rest/v1/rpc/planning_backlog_support")).toHaveLength(0);
+});
