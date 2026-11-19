@@ -82,6 +82,18 @@ begin
   v_result := public.mutate_planning_approval_command_transaction(
     p_item_id, v_task.task_type, p_expected_revision, 'approve', p_profile_id, null
   ) || jsonb_build_object('replayed', false);
+  if v_task.task_type = 'initiative' then
+    v_result := jsonb_set(v_result, '{task}', (v_result->'task')
+      || coalesce((select jsonb_build_object(
+        'goal', strategy.goal,
+        'success_criteria', strategy.success_criteria,
+        'scope_constraints', strategy.scope_constraints
+      ) from public.planning_item_strategy strategy where strategy.task_id = p_item_id), '{}'::jsonb)
+      || jsonb_build_object('raci_assignments', coalesce((
+        select jsonb_agg(to_jsonb(raci) order by raci.sort_order, raci.profile_id)
+        from public.planning_item_raci_assignments raci where raci.task_id = p_item_id
+      ), '[]'::jsonb)));
+  end if;
   insert into public.team_planning_item_approval_requests
     (token_id, profile_id, idempotency_key, item_id, expected_revision, response)
   values (p_token_id, p_profile_id, p_idempotency_key, p_item_id, p_expected_revision, v_result);

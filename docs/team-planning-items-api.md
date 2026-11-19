@@ -95,9 +95,9 @@ Content-Type: application/json
 {"expectedApprovalRevision": 1}
 ```
 
-The body accepts only `expectedApprovalRevision`, a positive integer. The response contains `ok`, `replayed`, `itemType`, `item`, `itemLink`, and `lifecycle` for a Deliverable. A `lifecycle.completed` value of `false` means GitHub lifecycle work remains outstanding or could not be checked. `_meta.operation` is `planningItems.approve`; `requiredScopes` and `missingScopes` are empty. Scope access does not grant approval authority.
+The body accepts only `expectedApprovalRevision`, an integer from 1 through 2147483647. The response contains `ok`, `replayed`, `itemType`, `item`, `itemLink`, and `lifecycle` for a Deliverable. A `lifecycle.completed` value of `false` means GitHub lifecycle work remains outstanding or could not be checked. `_meta.operation` is `planningItems.approve`; `requiredScopes` and `missingScopes` are empty. Scope access does not grant approval authority.
 
-The item must be proposed and meet the existing parent, RACI, and review-lock rules. A stale revision, ineligible item, or a reused key with different input returns `409`; an invalid request returns `400`, an unauthorized role returns `403`, and a missing or unsupported item returns `404`. Retrying the same item and revision with the same key returns its stored approval result without repeating the decision. A Deliverable retry also attempts to process outstanding durable lifecycle work. Different items are separate requests and may succeed or fail independently. Creating, updating, or syncing an item does not approve it.
+The item must be proposed and meet the existing parent, RACI, and review-lock rules. A stale revision, ineligible item, or a reused key with different input returns `409`; an invalid request returns `400`, an unauthorized role returns `403`, and a missing or unsupported item returns `404`. Retrying the same item and revision with the same key returns its stored approval result without repeating the decision. The stored Initiative result includes its strategy and RACI assignments at approval, even if they later change. A Deliverable retry also attempts to process outstanding durable lifecycle work. Different items are separate requests and may succeed or fail independently. Creating, updating, or syncing an item does not approve it.
 
 ## Context and canonical references
 

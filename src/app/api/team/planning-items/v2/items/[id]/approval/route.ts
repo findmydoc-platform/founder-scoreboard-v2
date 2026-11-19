@@ -16,7 +16,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       const body: unknown = await request.json().catch(() => null);
       if (!body || typeof body !== "object" || Array.isArray(body)
         || Object.keys(body).length !== 1 || !("expectedApprovalRevision" in body)
-        || !Number.isSafeInteger(body.expectedApprovalRevision) || Number(body.expectedApprovalRevision) < 1) {
+        || !Number.isSafeInteger(body.expectedApprovalRevision) || Number(body.expectedApprovalRevision) < 1
+        || Number(body.expectedApprovalRevision) > 2147483647) {
         return planningItemsError("Aktuelle Freigabe-Revision ist erforderlich; weitere Felder sind nicht zulässig.", 400);
       }
       const result = await permission.planningItems.approve(Number(body.expectedApprovalRevision), key);

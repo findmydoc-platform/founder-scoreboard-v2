@@ -32,19 +32,29 @@ it("personal approval honors current authority, revisions and safe retries", asy
       };
       const epic = `${fixture.prefix}-epic`;
       const id = await create("approval-initiative", "initiative", epic);
+      await fixture.db.query("insert into public.planning_item_strategy(task_id,goal,success_criteria,scope_constraints) values($1,'Original goal','Original success','Original scope')", [id]);
+      await fixture.db.query("insert into public.planning_item_raci_assignments(task_id,profile_id,role) values($1,$2,'consulted'),($1,$3,'informed')", [id, fixture.actors.founder.profileId, fixture.actors.other.profileId]);
       const forbidden = await call(founder.token, id);
       expect(forbidden.status).toBe(403);
       expect((await forbidden.json())._meta.access.requiredScopes).toEqual([]);
       expect((await call(ceo.token, id, { expectedApprovalRevision: 1, action: "reject" })).status).toBe(400);
       expect((await call(ceo.token, id, { expectedApprovalRevision: 2 })).status).toBe(409);
+      expect((await call(ceo.token, id, { expectedApprovalRevision: 2147483647 })).status).toBe(409);
+      expect((await call(ceo.token, id, { expectedApprovalRevision: 2147483648 })).status).toBe(400);
       const key = randomUUID();
       const first = await call(ceo.token, id, undefined, key);
       expect(first.status).toBe(200);
       const result = await first.json();
-      expect(result).toMatchObject({ ok: true, replayed: false, itemType: "initiative", item: { id, approvalStatus: "approved" }, _meta: { access: { requiredScopes: [], missingScopes: [] } } });
+      expect(result).toMatchObject({ ok: true, replayed: false, itemType: "initiative", item: {
+        id, approvalStatus: "approved", intendedOutcome: "Original goal", acceptanceCriteria: "Original success", scopeConstraints: "Original scope",
+        accountableProfileId: fixture.actors.ceo.profileId, responsibleProfileIds: [fixture.actors.deputy.profileId],
+        consultedProfileIds: [fixture.actors.founder.profileId], informedProfileIds: [fixture.actors.other.profileId],
+      }, _meta: { access: { requiredScopes: [], missingScopes: [] } } });
       expect(JSON.stringify(result).includes(ceo.token)).toBe(false);
+      await fixture.db.query("update public.planning_item_strategy set goal='Changed goal',success_criteria='Changed success',scope_constraints='Changed scope' where task_id=$1", [id]);
+      await fixture.db.query("delete from public.planning_item_raci_assignments where task_id=$1 and role in ('consulted','informed')", [id]);
       const replay = await call(ceo.token, id, undefined, key);
-      expect(await replay.json()).toMatchObject({ ok: true, replayed: true, item: { id, approvalStatus: "approved" } });
+      expect(await replay.json()).toMatchObject({ ok: true, replayed: true, item: result.item });
       expect((await call(ceo.token, id, { expectedApprovalRevision: 2 }, key)).status).toBe(409);
       expect((await call(ceo.token, id)).status).toBe(409);
       expect((await fixture.db.query("select count(*)::int as count from public.task_activity where task_id=$1", [id])).rows[0].count).toBe(1);
