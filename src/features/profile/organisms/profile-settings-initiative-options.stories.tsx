@@ -10,7 +10,7 @@ import type { OwnProfileSettingsPatch } from "../hooks/use-own-profile-settings-
 import type { PlanningItemCandidateReceipt } from "@/features/planning-items/model/planning-item-candidates";
 import type { Profile, ProfileUiPreference } from "@/lib/types";
 
-const profile: Profile = { id: "profile-options-owner", name: "Ada", focus: "Saved focus", color: "#64748b", platformRole: "founder", notificationsEnabled: true, weeklyCapacity: 37 };
+const profile: Profile = { id: "profile-options-owner", name: "Ada", focus: "Saved focus", color: "#64748b", platformRole: "founder", orgRole: "Founder", githubLogin: "", notificationsEnabled: true, weeklyCapacity: 37 };
 const preference: ProfileUiPreference = { profileId: profile.id, defaultWorkspace: "planning", defaultTaskView: "board",
   planningFilters: { ...defaultFilters(), initiativeId: "saved-filter-outside-page" }, expandedInitiativeIds: ["saved-expanded-outside-page"], createdAt: "before", updatedAt: "before" };
 const initial = { ...emptyPlanningShellState, profiles: [profile], profileUiPreferences: [preference] };
@@ -65,22 +65,22 @@ export const SavesFocusWithoutLosingOffPageInitiativePreferences: Story = {
     const focus = canvas.getByRole("textbox");
     await userEvent.clear(focus);
     await userEvent.type(focus, "Independent focus draft");
-    await userEvent.click(canvas.getByRole("button", { name: "Speichern", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: /^Speichern$/ }));
     await expect(canvas.getByText("Gespeichert.")).toBeVisible();
     await expect(focus).toHaveValue("Independent focus draft");
     await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^saved-filter-outside-page$/);
     await expect(canvas.getByLabelText("Saved expanded Initiatives")).toHaveTextContent(/^saved-expanded-outside-page$/);
     await userEvent.click(canvas.getByRole("button", { name: /Planung.*Start und Standardansicht/ }));
-    await userEvent.click(canvas.getByRole("button", { name: "Öffnen", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: /^Öffnen$/ }));
     await waitFor(() => expect(canvas.getByLabelText("Initiative discovery reads")).toHaveTextContent(/^1$/));
     await expect(canvas.queryByText("Keine Initiativen vorhanden.")).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Erste Initiativenseite freigeben" }));
-    await expect(await canvas.findByRole("button", { name: "Discovered initiative 0", exact: true })).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: /^Discovered initiative 0$/ })).toBeVisible();
     await userEvent.click(canvas.getByRole("button", { name: /Profil.*Identität, Fokus und Farbe/ }));
     const refreshedFocus = canvas.getByRole("textbox");
     await userEvent.clear(refreshedFocus);
     await userEvent.type(refreshedFocus, "Focus after partial options");
-    await userEvent.click(canvas.getByRole("button", { name: "Speichern", exact: true }));
+    await userEvent.click(canvas.getByRole("button", { name: /^Speichern$/ }));
     await expect(canvas.getByText("Gespeichert.")).toBeVisible();
     await expect(refreshedFocus).toHaveValue("Focus after partial options");
     await expect(canvas.getByLabelText("Saved Initiative filter")).toHaveTextContent(/^saved-filter-outside-page$/);
