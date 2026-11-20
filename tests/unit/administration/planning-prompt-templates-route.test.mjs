@@ -21,10 +21,10 @@ async function fixture() {
   const route = await importTestModule("src/app/api/administration/prompt-templates/route.ts", { "server-only": {} });
   return {
     ...protocol,
-    get: () => route.GET(protocol.request(path, "GET")),
-    patch: payload => route.PATCH(protocol.request(path, "PATCH", payload)),
-    put: (payload = { kind: "general", text: revised.text, expectedVersion: 1 }) =>
-      route.PUT(protocol.request(path, "PUT", payload)),
+    get: (headers) => route.GET(protocol.request(path, "GET", undefined, headers)),
+    patch: (payload, headers) => route.PATCH(protocol.request(path, "PATCH", payload, headers)),
+    put: (payload = { kind: "general", text: revised.text, expectedVersion: 1 }, headers) =>
+      route.PUT(protocol.request(path, "PUT", payload, headers)),
   };
 }
 
@@ -100,3 +100,48 @@ test.each([{}, { mode: "everyone" }, { mode: "all", profileIds: [] }, { profileI
     expect(current.calls).toEqual([]);
   },
 );
+
+test("unauthenticated requests cannot read, publish, or save the audience", async () => {
+  const current = await fixture();
+  const anonymous = { authorization: "" };
+
+  for (const response of [
+    await current.get(anonymous),
+    await current.put(undefined, anonymous),
+    await current.patch({ mode: "all" }, anonymous),
+  ]) {
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Anmeldung erforderlich." });
+  }
+  expect(current.calls).toEqual([]);
+});
+
+test("an unavailable authentication provider stops all prompt-template operations", async () => {
+  const current = await fixture();
+  current.state.authError = 500;
+
+  for (const response of [
+    await current.get(),
+    await current.put(),
+    await current.patch({ mode: "all" }),
+  ]) {
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "Anmeldung konnte vorübergehend nicht geprüft werden." });
+  }
+  expect(current.calls).toEqual([]);
+});
+
+test.each([
+  ["administrator_planning_prompt_templates", "get", "Prompt-Vorlagen konnten nicht geladen werden."],
+  ["administrator_planning_prompt_template_audience", "get", "Prompt-Vorlagen konnten nicht geladen werden."],
+  ["publish_planning_prompt_template", "put", "Prompt-Vorlage konnte nicht veröffentlicht werden."],
+  ["save_planning_prompt_template_audience", "patch", "Die Zielgruppe konnte nicht gespeichert werden."],
+])("an unexpected %s failure returns a safe 503 response", async (operation, method, error) => {
+  const current = await fixture();
+  current.state.responses[operation] = () =>
+    Response.json({ code: "XX000", message: "Private database detail" }, { status: 500 });
+
+  const response = method === "patch" ? await current.patch({ mode: "all" }) : await current[method]();
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error });
+});

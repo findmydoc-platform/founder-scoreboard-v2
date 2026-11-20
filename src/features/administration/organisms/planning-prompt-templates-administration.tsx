@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlanningPromptTemplate, PlanningPromptTemplateAudience, PlanningPromptTemplateAudienceDirectory, PlanningPromptTemplateAudienceEdit, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { UiButton, UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
@@ -18,9 +18,11 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [error, setError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const writeRevision = useRef(0);
 
   useEffect(() => {
     const abort = new AbortController();
+    const revisionAtLoad = writeRevision.current;
     async function load() {
       try {
         const { response, body } = await apiClient.requestJson<Workspace & ApiError>(endpoint, {
@@ -30,6 +32,11 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
         if (abort.signal.aborted) return;
         if (response.status === 403) onAdministratorAccessInvalid();
         if (!response.ok || !body?.templates || !body.profileId || !body.audience || !body.profiles) throw new Error(body?.error);
+        if (writeRevision.current !== revisionAtLoad) {
+          // Reload after the write so the other templates and the audience can still refresh.
+          setLoadAttempt(attempt => attempt + 1);
+          return;
+        }
         setWorkspace(body);
       } catch (failure) {
         if (!abort.signal.aborted) {
@@ -55,6 +62,7 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
     if (response.status === 403) onAdministratorAccessInvalid();
     const audience = body?.audience;
     if (!response.ok || !audience) throw new Error(body?.error);
+    writeRevision.current += 1;
     setWorkspace(current => current && { ...current, audience });
   }
 
@@ -69,6 +77,7 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
     if (!response.ok || published?.kind !== edit.kind) {
       return { error: body?.error, conflict: response.status === 409 };
     }
+    writeRevision.current += 1;
     setWorkspace(current => current && ({
       ...current,
       templates: current.templates.map(template => template.kind === published.kind ? published : template),

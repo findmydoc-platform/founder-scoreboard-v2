@@ -89,11 +89,14 @@ const promptTemplates: PlanningPromptTemplate[] = [
   { kind: "sub_issue", text: "Beschreibe einen konkreten Arbeitsschritt.", version: 1 },
 ];
 
-function promptTemplatesClient() {
+function promptTemplatesClient({ delayedReload, profiles = [
+  { id: "alex", name: "Alex Beispiel" },
+  { id: "kim", name: "Kim Beispiel" },
+] }: { delayedReload?: Promise<void>; profiles?: { id: string; name: string }[] } = {}) {
   let templates = promptTemplates;
   let audience: PlanningPromptTemplateAudience = { mode: "selected", profileIds: [] };
-  const profiles = [{ id: "alex", name: "Alex Beispiel" }, { id: "kim", name: "Kim Beispiel" }];
   let rejectNextPublish = true;
+  let readCount = 0;
   const result = (body: unknown, status = 200) => ({ response: Response.json(body, { status }), body });
   return {
     requestJson: fn(async (path: string, options?: { method?: string; json?: PlanningPromptTemplateEdit | PlanningPromptTemplateAudienceEdit }) => {
@@ -102,9 +105,17 @@ function promptTemplatesClient() {
         audience = { ...audience, ...options.json };
         return result({ audience });
       }
-      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates, audience, profiles });
+      if (options?.method !== "PUT") {
+        const snapshot = { profileId: "prompt-templates-story", templates, audience, profiles };
+        if (++readCount === 2) await delayedReload;
+        return result(snapshot);
+      }
       if (rejectNextPublish) {
         rejectNextPublish = false;
+        if (delayedReload) {
+          templates = templates.map(template => template.kind === "general" ? { ...template, version: 2 } : template);
+          return result({ error: "Die aktive Fassung hat sich geändert." }, 409);
+        }
         return result({ error: "Prompt-Vorlage konnte nicht veröffentlicht werden." }, 503);
       }
       const edit = options.json as PlanningPromptTemplateEdit;
@@ -216,5 +227,82 @@ export const PromptTemplateAudience: Story = {
     audience = await reloadAudience();
     await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).not.toBeChecked();
     await expect(canvas.getAllByText("Aktive Fassung 1")).toHaveLength(4);
+  },
+};
+
+export const PromptTemplateConcurrentReload: Story = {
+  render: function ConcurrentReload(args) {
+    const [reload] = useState(() => Promise.withResolvers<void>());
+    const [client] = useState(() => promptTemplatesClient({ delayedReload: reload.promise }));
+    return (
+      <>
+        <HostWithOwner {...args} apiClient={client} />
+        <button onClick={() => reload.resolve()}>Serverantwort freigeben</button>
+      </>
+    );
+  },
+  play: async ({ canvasElement, userEvent }) => {
+    const canvas = within(canvasElement);
+    const generalLabel = "Allgemeine Prompt-Vorlage";
+    const deliverableLabel = "Prompt-Vorlage für Deliverables";
+    const publishedText = "Beschreibe das Ergebnis.";
+    try {
+      await userEvent.click(await canvas.findByRole("tab", { name: "Prompt-Vorlagen" }));
+      const general = within(await canvas.findByRole("region", { name: generalLabel }));
+      const deliverable = within(await canvas.findByRole("region", { name: deliverableLabel }));
+      const audience = within(await canvas.findByRole("region", { name: "Zielgruppe" }));
+
+      await userEvent.type(general.getByRole("textbox"), " Neue Fassung.");
+      await userEvent.click(general.getByRole("button", { name: "Veröffentlichen" }));
+      await userEvent.click(await general.findByRole("button", { name: "Aktive Fassung neu laden" }));
+
+      await userEvent.clear(deliverable.getByRole("textbox"));
+      await userEvent.type(deliverable.getByRole("textbox"), publishedText);
+      await userEvent.click(deliverable.getByRole("button", { name: "Veröffentlichen" }));
+      await expect(await deliverable.findByText("Aktive Fassung 2")).toBeInTheDocument();
+      await userEvent.click(audience.getByRole("radio", { name: /^Alle$/ }));
+      await userEvent.click(audience.getByRole("button", { name: "Zielgruppe speichern" }));
+      await expect(await audience.findByText("Zielgruppe gespeichert.")).toBeInTheDocument();
+
+      await userEvent.click(canvas.getByRole("button", { name: "Serverantwort freigeben" }));
+      await expect(await general.findByText("Aktive Fassung 2")).toBeInTheDocument();
+      await expect(deliverable.getByRole("textbox")).toHaveValue(publishedText);
+      await expect(deliverable.getByText("Aktive Fassung 2")).toBeInTheDocument();
+      await expect(audience.getByRole("radio", { name: /^Alle$/ })).toBeChecked();
+    } finally {
+      for (const template of promptTemplates) window.localStorage.removeItem(`founderops:planning-prompt-draft:prompt-templates-story:${template.kind}`);
+    }
+  },
+};
+
+export const PromptTemplateAudienceDuplicateNames: Story = {
+  render: function DuplicateNames(args) {
+    const [client] = useState(() => promptTemplatesClient({
+      profiles: [
+        { id: "alex-example-operations", name: "Alex Beispiel" },
+        { id: "alex-example-product", name: "Alex Beispiel" },
+        { id: "kim", name: "Kim Beispiel" },
+      ],
+    }));
+    return <HostWithOwner {...args} apiClient={client} />;
+  },
+  play: async ({ canvasElement, userEvent }) => {
+    const canvas = within(canvasElement);
+    async function openAudience() {
+      await userEvent.click(await canvas.findByRole("tab", { name: "Prompt-Vorlagen" }));
+      return within(await canvas.findByRole("region", { name: "Zielgruppe" }));
+    }
+
+    const audience = await openAudience();
+    const operations = audience.getByRole("checkbox", { name: "Alex Beispiel (alex-example-operations)" });
+    await userEvent.click(operations);
+    await userEvent.click(audience.getByRole("button", { name: "Zielgruppe speichern" }));
+    await expect(await audience.findByText("Zielgruppe gespeichert.")).toBeInTheDocument();
+
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    const savedAudience = await openAudience();
+    await expect(savedAudience.getByRole("checkbox", { name: "Alex Beispiel (alex-example-operations)" })).toBeChecked();
+    await expect(savedAudience.getByRole("checkbox", { name: "Alex Beispiel (alex-example-product)" })).not.toBeChecked();
+    await expect(savedAudience.getByRole("checkbox", { name: "Kim Beispiel" })).toBeInTheDocument();
   },
 };

@@ -18,6 +18,10 @@ export function PlanningPromptTemplateAudienceEditor({ audience, profiles, onSav
   const mode = draft.mode ?? audience.mode;
   const profileIds = draft.profileIds ?? audience.profileIds;
   const isSelected = mode === "selected";
+  const nameCounts = new Map<string, number>();
+  for (const { name } of profiles) {
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
   const edit: PlanningPromptTemplateAudienceEdit = {};
 
   if (mode !== audience.mode) edit.mode = mode;
@@ -74,12 +78,15 @@ export function PlanningPromptTemplateAudienceEditor({ audience, profiles, onSav
             <div className="grid max-h-48 overflow-y-auto rounded-md border border-slate-200 px-3 sm:grid-cols-2">
               {profiles.map(profile => {
                 const checked = profileIds.includes(profile.id);
+                const label = (nameCounts.get(profile.name) ?? 0) > 1
+                  ? `${profile.name} (${profile.id})`
+                  : profile.name;
                 return (
                   <label key={profile.id} className="flex min-h-11 min-w-0 items-center gap-2 pr-2 text-sm text-slate-800 has-disabled:text-slate-600">
                     <input type="checkbox" checked={checked} onChange={() => change({
                       profileIds: checked ? profileIds.filter(id => id !== profile.id) : [...profileIds, profile.id],
                     })} />
-                    <span className="min-w-0 break-words">{profile.name}</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
                   </label>
                 );
               })}
