@@ -7,6 +7,8 @@ import { inactiveAdministratorAccess, sessionAuthority, type AdministratorAccess
 import type { AdministrationDataAccess, AdministrationDirectorySnapshot, AdministrationProjectRow } from "@/features/administration/server/administration-read-model-supabase";
 import type { DbNotificationDelivery, DbNotificationEvent } from "../../planning-row-types";
 
+import type { PlanningPromptTemplate, PlanningPromptTemplateAudience, PlanningPromptTemplateAudienceDirectory, PlanningPromptTemplateAudienceEdit, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
+
 function forbidden() { return { code: "42501", message: "Adminzugang ist nicht mehr gültig." }; }
 
 export async function authorizeAdministrator(input: AdministratorCredentialInput) {
@@ -20,7 +22,7 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
     if (current?.error || !current?.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
     request = { headers: new Headers({ authorization: `Bearer ${current.data.session.access_token}` }), method: "GET" } as NextRequest;
   } else request = input.credential.request;
-  const policyAction = action === "administration.technical.update" ? "administration.technical"
+  const policyAction = (action === "administration.technical.update" || action === "administration.prompt-templates.read" || action === "administration.prompt-templates.publish" || action === "administration.prompt-templates.audience.save") ? "administration.technical"
     : action === "administration.eligibility.manage" || action === "administration.directory.read" ? "administration.eligibility" : "team.read";
   const permission = await authorizeSessionPolicy(request, policyAction, startedAt);
   if (!permission.ok) return permission;
@@ -93,6 +95,26 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
     async updateTechnicalIdentity(patch: { github_login?: string | null; google_chat_user_id?: string | null; google_chat_dm_space?: string | null }, metadata: { requestIp?: string | null; userAgent?: string | null }, expected?: import("@/features/administration/model/administration-read-model").TechnicalIdentityBasis) {
       if (action !== "administration.technical.update" || !data) return { data: null, error: forbidden() };
       return await data.rpc("update_profile_technical_identity_transaction", { p_profile_id: target, p_profile_patch: { ...patch, ...(expected ? { __expected_technical_identity: { github_login: expected.githubLogin, google_chat_user_id: expected.googleChatUserId, google_chat_dm_space: expected.googleChatDmSpace } } : {}) }, p_request_ip: metadata.requestIp, p_user_agent: metadata.userAgent });
+    },
+    async readPromptTemplates() {
+      if (action !== "administration.prompt-templates.read" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("administrator_planning_prompt_templates").returns<PlanningPromptTemplate[]>();
+    },
+    async readPromptTemplateAudience() {
+      if (action !== "administration.prompt-templates.read" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("administrator_planning_prompt_template_audience").returns<PlanningPromptTemplateAudienceDirectory>();
+    },
+    async savePromptTemplateAudience(edit: PlanningPromptTemplateAudienceEdit) {
+      if (action !== "administration.prompt-templates.audience.save" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("save_planning_prompt_template_audience", {
+        p_mode: edit.mode ?? null, p_profile_ids: edit.profileIds ?? null,
+      }).returns<PlanningPromptTemplateAudience>();
+    },
+    async publishPromptTemplate(edit: PlanningPromptTemplateEdit) {
+      if (action !== "administration.prompt-templates.publish" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("publish_planning_prompt_template", {
+        p_kind: edit.kind, p_text: edit.text, p_expected_version: edit.expectedVersion,
+      }).returns<PlanningPromptTemplate>();
     },
     directory,
     failure,

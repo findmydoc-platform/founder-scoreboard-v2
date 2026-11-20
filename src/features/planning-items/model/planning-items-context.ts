@@ -1,3 +1,4 @@
+import type { PlanningPromptTemplate } from "./planning-prompt-templates";
 import { normalizeStatus, normalizeSubIssueStatus } from "@/lib/status";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthenticatedProfile } from "@/lib/types";
@@ -132,8 +133,16 @@ function raciFor(rows: RaciRow[] = []) {
     .map((row) => ({ profileId: row.profile_id, role: row.role, sortOrder: row.sort_order }));
 }
 
+async function readPromptTemplates(supabase: SupabaseServer, profileId: string) {
+  const { data, error } = await supabase.rpc("planning_prompt_templates_for_profile", {
+    p_profile_id: profileId,
+  }).returns<PlanningPromptTemplate[]>();
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
-  const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments, evidenceLinks] = await Promise.all([
+  const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments, evidenceLinks, promptTemplates] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
     loadAllSupabaseRows((from, to) => supabase.from("sprints").select("id,name,status,start_date,end_date").order("start_date").order("id").range(from, to)),
     loadAllSupabaseRows<TaskContextRow>((from, to) => supabase
@@ -165,6 +174,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       .order("task_id")
       .order("id")
       .range(from, to)),
+    readPromptTemplates(supabase, actor.id),
   ]);
 
   const blockersByTaskId = groupByTask(blockers);
@@ -267,6 +277,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
     },
     profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
     dependencies,
+    promptTemplates,
     items,
     epics,
     initiatives,

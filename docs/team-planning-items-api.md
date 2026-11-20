@@ -81,6 +81,12 @@ A valid token without all required scopes receives `403 Forbidden`, `code: "INSU
 
 Token management is session-authorized; bearer-token planning operations use the same v2 contract.
 
+## Planning prompt templates
+
+`GET /api/team/planning-items/v2/context` includes the active templates under `context.promptTemplates`. Each entry contains its `kind`, `text`, and `version`. The four kinds are `general`, `initiative`, `deliverable`, and `sub_issue`. Clients use the general template and the template for the requested item type before drafting.
+
+FounderOps evaluates the audience using the personal token's verified profile. The array is empty for profiles outside the audience. The remaining context and its access checks are the same for everyone authorized to read it. The context never includes the configured audience or its member list.
+
 ## Approve an item
 
 Existing and newly issued personal tokens can request approval without an additional scope or token rotation. This expands the actions available to existing tokens. FounderOps checks the token owner's current role on every request; only a CEO or Deputy can approve. A token cannot approve an Epic or Sub-Issue, reject an item, or return it for revision.

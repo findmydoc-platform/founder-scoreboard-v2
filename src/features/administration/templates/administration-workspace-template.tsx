@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { useRef } from "react";
 import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
 
-export type AdministrationTab = "overview" | "people" | "integrations";
+export type AdministrationTab = "overview" | "people" | "integrations" | "prompt-templates";
 
 export const administrationTabs = [
   { id: "overview", label: "Übersicht" },
   { id: "people", label: "Personen & Zugänge" },
   { id: "integrations", label: "Integrationen & Zustellung" },
+  { id: "prompt-templates", label: "Prompt-Vorlagen" },
 ] as const;
 
 export function AdministrationWorkspaceTemplate({

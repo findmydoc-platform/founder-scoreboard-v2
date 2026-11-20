@@ -146,6 +146,14 @@ test("context returns only canonical blocking dependencies between visible plann
     ],
   };
   const supabase = {
+    rpc(name, payload) {
+      assert.equal(name, "planning_prompt_templates_for_profile");
+      assert.deepEqual(payload, { p_profile_id: "ceo" });
+      return { returns: async () => ({
+        data: [{ kind: "general", text: "Schreibe kurze Absätze.", version: 2 }],
+        error: null,
+      }) };
+    },
     from(table) {
       const query = {
         select() { return query; },
@@ -172,6 +180,7 @@ test("context returns only canonical blocking dependencies between visible plann
     name: "CEO",
     platformRole: "ceo",
   });
+  assert.deepEqual(context.promptTemplates, [{ kind: "general", text: "Schreibe kurze Absätze.", version: 2 }]);
   assert.deepEqual(context.dependencies, [{
     relationshipId: 41,
     blockedItemId: "blocked",

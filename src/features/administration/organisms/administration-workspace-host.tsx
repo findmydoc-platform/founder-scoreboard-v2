@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AdministrationOverview } from "@/features/administration/organisms/administration-overview";
 import { IntegrationsDeliveryAdministration } from "@/features/administration/organisms/integrations-delivery-administration";
+import { PlanningPromptTemplatesAdministration } from "./planning-prompt-templates-administration";
 import { PeopleAccessAdministration } from "@/features/administration/organisms/people-access-administration";
 import { AdministrationWorkspaceTemplate, type AdministrationTab } from "@/features/administration/templates/administration-workspace-template";
 import { useAdministrationWorkspaceController } from "@/features/administration/hooks/use-administration-workspace-controller";
@@ -28,7 +29,7 @@ export function AdministrationWorkspaceHost({ apiClient, planningState, capabili
   const technical = Boolean(controller.model && planningState.administration().coverage.technical && controller.capabilities.technicalAdministration);
   const [activeTab, setActiveTab] = useState<AdministrationTab>(capabilities.technicalAdministration ? "overview" : "people");
   const visibleTab = technical ? activeTab : "people";
-  const visibleTabs: AdministrationTab[] = technical ? ["overview", "people", "integrations"] : ["people"];
+  const visibleTabs: AdministrationTab[] = technical ? ["overview", "people", "integrations", "prompt-templates"] : ["people"];
   const { model } = controller;
 
   if (!controller.capabilities.manageAdministratorEligibility) {
@@ -50,6 +51,9 @@ export function AdministrationWorkspaceHost({ apiClient, planningState, capabili
           showTechnicalIdentity={technical}
           planningState={planningState}
         />
+      )}
+      {visibleTab === "prompt-templates" && technical && (
+        <PlanningPromptTemplatesAdministration apiClient={apiClient} onAdministratorAccessInvalid={onAdministratorAccessInvalid} />
       )}
       {visibleTab === "integrations" && technical && (
         <IntegrationsDeliveryAdministration
