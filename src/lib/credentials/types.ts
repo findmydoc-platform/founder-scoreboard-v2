@@ -142,7 +142,7 @@ export type GoogleCalendarInput =
 export type GoogleCalendarConnectionInput = {credential:{kind:"google-calendar-oauth-request";request:NextRequest};action:"google-calendar.connection.start" | "google-calendar.connection.complete"};
 export type AdministratorCredentialInput =
   | { credential: { kind: "server-cookies" }; action: "administration.directory.read" }
-  | { credential: { kind: "session-request"; request: NextRequest }; action: "administrator-access.read" | "administrator-access.activate" | "administrator-access.end" | "administration.directory.read" | "administration.prompt-templates.read" | "administration.prompt-templates.publish" }
+  | { credential: { kind: "session-request"; request: NextRequest }; action: "administrator-access.read" | "administrator-access.activate" | "administrator-access.end" | "administration.directory.read" | "administration.prompt-templates.read" | "administration.prompt-templates.publish" | "administration.prompt-templates.audience.save" }
   | { credential: { kind: "session-request"; request: NextRequest }; action: "administration.eligibility.manage" | "administration.technical.update"; targetProfileId: string };
 export type AdministratorCredentialResult = Awaited<ReturnType<typeof import("./internal/administrator").authorizeAdministrator>>;
 

@@ -7,7 +7,7 @@ import { inactiveAdministratorAccess, sessionAuthority, type AdministratorAccess
 import type { AdministrationDataAccess, AdministrationDirectorySnapshot, AdministrationProjectRow } from "@/features/administration/server/administration-read-model-supabase";
 import type { DbNotificationDelivery, DbNotificationEvent } from "../../planning-row-types";
 
-import type { PlanningPromptTemplate, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
+import type { PlanningPromptTemplate, PlanningPromptTemplateAudience, PlanningPromptTemplateAudienceDirectory, PlanningPromptTemplateAudienceEdit, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
 
 function forbidden() { return { code: "42501", message: "Adminzugang ist nicht mehr gültig." }; }
 
@@ -22,7 +22,7 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
     if (current?.error || !current?.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung erforderlich." };
     request = { headers: new Headers({ authorization: `Bearer ${current.data.session.access_token}` }), method: "GET" } as NextRequest;
   } else request = input.credential.request;
-  const policyAction = (action === "administration.technical.update" || action === "administration.prompt-templates.read" || action === "administration.prompt-templates.publish") ? "administration.technical"
+  const policyAction = (action === "administration.technical.update" || action === "administration.prompt-templates.read" || action === "administration.prompt-templates.publish" || action === "administration.prompt-templates.audience.save") ? "administration.technical"
     : action === "administration.eligibility.manage" || action === "administration.directory.read" ? "administration.eligibility" : "team.read";
   const permission = await authorizeSessionPolicy(request, policyAction, startedAt);
   if (!permission.ok) return permission;
@@ -99,6 +99,16 @@ export async function authorizeAdministrator(input: AdministratorCredentialInput
     async readPromptTemplates() {
       if (action !== "administration.prompt-templates.read" || !data) return { data: null, error: forbidden() };
       return await data.rpc("administrator_planning_prompt_templates").returns<PlanningPromptTemplate[]>();
+    },
+    async readPromptTemplateAudience() {
+      if (action !== "administration.prompt-templates.read" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("administrator_planning_prompt_template_audience").returns<PlanningPromptTemplateAudienceDirectory>();
+    },
+    async savePromptTemplateAudience(edit: PlanningPromptTemplateAudienceEdit) {
+      if (action !== "administration.prompt-templates.audience.save" || !data) return { data: null, error: forbidden() };
+      return await data.rpc("save_planning_prompt_template_audience", {
+        p_mode: edit.mode ?? null, p_profile_ids: edit.profileIds ?? null,
+      }).returns<PlanningPromptTemplateAudience>();
     },
     async publishPromptTemplate(edit: PlanningPromptTemplateEdit) {
       if (action !== "administration.prompt-templates.publish" || !data) return { data: null, error: forbidden() };

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PlanningPromptTemplate, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
+import type { PlanningPromptTemplate, PlanningPromptTemplateAudience, PlanningPromptTemplateAudienceDirectory, PlanningPromptTemplateAudienceEdit, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 import { UiButton, UiEmptyState, UiNotice } from "@/shared/atoms/ui-primitives";
+import { PlanningPromptTemplateAudienceEditor } from "../molecules/planning-prompt-template-audience-editor";
 import { PlanningPromptTemplateEditor } from "../molecules/planning-prompt-template-editor";
 
 const endpoint = "/api/administration/prompt-templates";
-type Workspace = { templates: PlanningPromptTemplate[]; profileId: string };
+type Workspace = PlanningPromptTemplateAudienceDirectory & { templates: PlanningPromptTemplate[]; profileId: string };
 type ApiError = { error?: string };
 
 export function PlanningPromptTemplatesAdministration({ apiClient, onAdministratorAccessInvalid }: {
@@ -28,7 +29,7 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
         });
         if (abort.signal.aborted) return;
         if (response.status === 403) onAdministratorAccessInvalid();
-        if (!response.ok || !body?.templates || !body.profileId) throw new Error(body?.error);
+        if (!response.ok || !body?.templates || !body.profileId || !body.audience || !body.profiles) throw new Error(body?.error);
         setWorkspace(body);
       } catch (failure) {
         if (!abort.signal.aborted) {
@@ -43,6 +44,18 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
   function reload() {
     setError("");
     setLoadAttempt(attempt => attempt + 1);
+  }
+
+  async function saveAudience(edit: PlanningPromptTemplateAudienceEdit) {
+    const { response, body } = await apiClient.requestJson<{ audience?: PlanningPromptTemplateAudience } & ApiError>(endpoint, {
+      method: "PATCH",
+      json: edit,
+      useDevProfileOverride: false,
+    });
+    if (response.status === 403) onAdministratorAccessInvalid();
+    const audience = body?.audience;
+    if (!response.ok || !audience) throw new Error(body?.error);
+    setWorkspace(current => current && { ...current, audience });
   }
 
   async function publish(edit: PlanningPromptTemplateEdit) {
@@ -72,6 +85,14 @@ export function PlanningPromptTemplatesAdministration({ apiClient, onAdministrat
         </UiNotice>
       )}
       {!workspace && !error && <UiEmptyState minHeight="md">Prompt-Vorlagen werden geladen.</UiEmptyState>}
+      {workspace && (
+        <PlanningPromptTemplateAudienceEditor
+          key={workspace.profileId}
+          audience={workspace.audience}
+          profiles={workspace.profiles}
+          onSave={saveAudience}
+        />
+      )}
       {workspace?.templates.map(template => (
         <PlanningPromptTemplateEditor
           key={`${workspace.profileId}:${template.kind}`}

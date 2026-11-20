@@ -133,6 +133,14 @@ function raciFor(rows: RaciRow[] = []) {
     .map((row) => ({ profileId: row.profile_id, role: row.role, sortOrder: row.sort_order }));
 }
 
+async function readPromptTemplates(supabase: SupabaseServer, profileId: string) {
+  const { data, error } = await supabase.rpc("planning_prompt_templates_for_profile", {
+    p_profile_id: profileId,
+  }).returns<PlanningPromptTemplate[]>();
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function buildPlanningItemsContext(supabase: SupabaseServer, actor: AuthenticatedProfile) {
   const [profiles, sprints, tasks, strategies, raciAssignments, blockers, relations, comments, externalComments, evidenceLinks, promptTemplates] = await Promise.all([
     loadAllSupabaseRows((from, to) => supabase.from("profiles").select("id,name").order("name").order("id").range(from, to)),
@@ -166,8 +174,7 @@ export async function buildPlanningItemsContext(supabase: SupabaseServer, actor:
       .order("task_id")
       .order("id")
       .range(from, to)),
-    loadAllSupabaseRows<PlanningPromptTemplate>((from, to) => supabase.from("planning_prompt_templates")
-      .select("kind,text,version").order("kind").range(from, to)),
+    readPromptTemplates(supabase, actor.id),
   ]);
 
   const blockersByTaskId = groupByTask(blockers);

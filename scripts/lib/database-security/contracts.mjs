@@ -8,6 +8,7 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.administrator_access_snapshot()",
   "public.administrator_directory_snapshot()",
   "public.administrator_planning_prompt_templates()",
+  "public.administrator_planning_prompt_template_audience()",
   "public.publish_planning_prompt_template(p_kind text, p_text text, p_expected_version integer)",
   "public.claim_notification_delivery(p_event_ids bigint[], p_limit integer, p_test_delivery text, p_recipient_profile_id text)",
   "public.create_private_monday_team_workweek_version(p_effective_from date, p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
@@ -23,6 +24,7 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.mutate_administrator_planning_relationship_transaction(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_request_ip text, p_user_agent text)",
   "public.mutate_administrator_planning_relationship_transaction_v2(p_operation text, p_task_id text, p_related_task_id text, p_relation_type text, p_relation_id bigint, p_note text, p_expected_updated_at timestamp with time zone, p_actor_profile_id text, p_mention_recipient_profile_ids text[], p_request_ip text, p_user_agent text)",
   "public.prepare_team_workweek_publication(p_version_id uuid, p_write_journal_version integer)",
+  "public.save_planning_prompt_template_audience(p_mode text, p_profile_ids text[])",
   "public.set_administrator_eligibility(p_profile_id text, p_eligible boolean)",
   "public.set_administrator_eligibility_if_current(p_profile_id text, p_expected_eligible boolean, p_eligible boolean)",
   "public.update_administration_github_project_transaction(p_project_id text, p_expected_owner text, p_expected_number integer, p_github_project_owner text, p_github_project_number integer, p_request_ip text, p_user_agent text)",
@@ -73,7 +75,9 @@ export const serviceRoleOnlyTablePrivileges = Object.freeze([
   ["github_planning_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["task_comment_submissions", tablePrivileges],
-  ["planning_prompt_templates", Object.freeze(["SELECT"])],
+  ["planning_prompt_templates", Object.freeze([])],
+  ["planning_prompt_template_audience", Object.freeze([])],
+  ["planning_prompt_template_audience_profiles", Object.freeze([])],
   ["team_planning_item_approval_requests", tablePrivileges],
 ]);
 

@@ -1,5 +1,5 @@
 import { useState, type ComponentProps } from "react";
-import type { PlanningPromptTemplate, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
+import type { PlanningPromptTemplate, PlanningPromptTemplateAudience, PlanningPromptTemplateAudienceEdit, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
@@ -91,17 +91,23 @@ const promptTemplates: PlanningPromptTemplate[] = [
 
 function promptTemplatesClient() {
   let templates = promptTemplates;
+  let audience: PlanningPromptTemplateAudience = { mode: "selected", profileIds: [] };
+  const profiles = [{ id: "alex", name: "Alex Beispiel" }, { id: "kim", name: "Kim Beispiel" }];
   let rejectNextPublish = true;
   const result = (body: unknown, status = 200) => ({ response: Response.json(body, { status }), body });
   return {
-    requestJson: fn(async (path: string, options?: { method?: string; json?: PlanningPromptTemplateEdit }) => {
+    requestJson: fn(async (path: string, options?: { method?: string; json?: PlanningPromptTemplateEdit | PlanningPromptTemplateAudienceEdit }) => {
       if (path === "/api/administration-data") return result({ administration: administrationStoryModel });
-      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates });
+      if (options?.method === "PATCH") {
+        audience = { ...audience, ...options.json };
+        return result({ audience });
+      }
+      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates, audience, profiles });
       if (rejectNextPublish) {
         rejectNextPublish = false;
         return result({ error: "Prompt-Vorlage konnte nicht veröffentlicht werden." }, 503);
       }
-      const edit = options.json!;
+      const edit = options.json as PlanningPromptTemplateEdit;
       const template = { kind: edit.kind, text: edit.text, version: edit.expectedVersion + 1 };
       templates = templates.map(current => current.kind === template.kind ? template : current);
       return result({ template });
@@ -167,5 +173,48 @@ export const PromptTemplateDraftAndPublish: Story = {
     } finally {
       for (const template of promptTemplates) window.localStorage.removeItem(`founderops:planning-prompt-draft:prompt-templates-story:${template.kind}`);
     }
+  },
+};
+
+
+export const PromptTemplateAudience: Story = {
+  render: args => <HostWithOwner {...args} apiClient={promptTemplatesClient()} />,
+  play: async ({ canvasElement, userEvent }) => {
+    const canvas = within(canvasElement);
+    const openAudience = async () => {
+      await userEvent.click(await canvas.findByRole("tab", { name: "Prompt-Vorlagen" }));
+      return within(await canvas.findByRole("region", { name: "Zielgruppe" }));
+    };
+    const reloadAudience = async () => {
+      await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+      return openAudience();
+    };
+    const save = async (region: ReturnType<typeof within>) => {
+      await userEvent.click(region.getByRole("button", { name: "Zielgruppe speichern" }));
+      await expect(await region.findByText("Zielgruppe gespeichert.")).toBeInTheDocument();
+    };
+
+    let audience = await openAudience();
+    await expect(audience.getByRole("radio", { name: "Ausgewählte Personen" })).toBeChecked();
+    await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).not.toBeChecked();
+    await userEvent.click(audience.getByRole("checkbox", { name: "Alex Beispiel" }));
+    await save(audience);
+    await userEvent.click(audience.getByRole("radio", { name: /^Alle$/ }));
+    await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).toBeDisabled();
+    await save(audience);
+
+    audience = await reloadAudience();
+    await expect(audience.getByRole("radio", { name: /^Alle$/ })).toBeChecked();
+    await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).toBeDisabled();
+    await userEvent.click(audience.getByRole("radio", { name: "Ausgewählte Personen" }));
+    await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).toBeChecked();
+    await expect(audience.getByRole("checkbox", { name: "Kim Beispiel" })).not.toBeChecked();
+    await save(audience);
+    await userEvent.click(audience.getByRole("checkbox", { name: "Alex Beispiel" }));
+    await save(audience);
+
+    audience = await reloadAudience();
+    await expect(audience.getByRole("checkbox", { name: "Alex Beispiel" })).not.toBeChecked();
+    await expect(canvas.getAllByText("Aktive Fassung 1")).toHaveLength(4);
   },
 };
