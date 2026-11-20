@@ -117,7 +117,7 @@ export function authorizeCredentialAction(input: PublicResourceInput | Notificat
     if (input.action === "google-chat.status" && input.credential.kind === "google-chat-configuration") return Promise.resolve(googleChatStatus());
     if (input.action.startsWith("google-chat.")) return authorizeGoogleChat(input as GoogleChatDeliveryInput);
     if (input.action.startsWith("account.") || input.action === "releases.read" || input.action === "releases.seen") return authorizeAccount(input as AccountCredentialInput);
-    if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
+    if (["administrator-access.read", "administrator-access.activate", "administrator-access.end", "administration.directory.read", "administration.eligibility.manage", "administration.technical.update", "administration.prompt-templates.read", "administration.prompt-templates.publish"].includes(input.action)) return authorizeAdministrator(input as AdministratorCredentialInput);
     if (input.credential.kind === "server-cookies") {
       if (input.action === "session.planning") return serverPlanningAuth();
       if (input.action === "session.home") return serverHomeWorkspace();

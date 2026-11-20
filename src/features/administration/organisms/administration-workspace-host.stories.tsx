@@ -80,3 +80,55 @@ export const ClearsOnAuthorityLoss: Story = {
     await expect(args.onAdministratorAccessInvalid).toHaveBeenCalled();
   },
 };
+
+const initialPromptTemplate = { kind: "general", text: "Verwende kurze Absätze.", version: 1 };
+
+function promptTemplatesClient() {
+  let template = initialPromptTemplate;
+  let rejectNextPublish = true;
+  const result = (body: unknown, status = 200) => ({ response: Response.json(body, { status }), body });
+  return {
+    requestJson: fn(async (path: string, options?: { method?: string; json?: { text: string } }) => {
+      if (path === "/api/administration-data") return result({ administration: administrationStoryModel });
+      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates: [template] });
+      if (rejectNextPublish) {
+        rejectNextPublish = false;
+        return result({ error: "Prompt-Vorlage konnte nicht veröffentlicht werden." }, 503);
+      }
+      template = { ...template, text: options.json!.text, version: 2 };
+      return result({ template });
+    }),
+    requestForm: fn(),
+    requestBlob: fn(),
+  } as unknown as BrowserApiClient;
+}
+
+export const PromptTemplateDraftAndPublish: Story = {
+  render: args => <HostWithOwner {...args} apiClient={promptTemplatesClient()} />,
+  play: async ({ canvasElement, userEvent }) => {
+    const canvas = within(canvasElement);
+    const openTemplates = async () => {
+      await userEvent.click(await canvas.findByRole("tab", { name: "Prompt-Vorlagen" }));
+      return await canvas.findByRole("textbox", { name: "Allgemeine Prompt-Vorlage" });
+    };
+    const draft = "Beschreibe das überprüfbare Ergebnis.";
+    const editor = await openTemplates();
+    await expect(editor).toHaveValue(initialPromptTemplate.text);
+    await userEvent.clear(editor);
+    await userEvent.type(editor, draft);
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await expect(await openTemplates()).toHaveValue(draft);
+
+    await userEvent.click(canvas.getByRole("button", { name: "Veröffentlichen" }));
+    await expect(await canvas.findByText("Prompt-Vorlage konnte nicht veröffentlicht werden.")).toBeInTheDocument();
+    await expect(canvas.getByText("Aktive Fassung 1")).toBeInTheDocument();
+    await expect(canvas.getByRole("textbox", { name: "Allgemeine Prompt-Vorlage" })).toHaveValue(draft);
+
+    await userEvent.click(canvas.getByRole("button", { name: "Veröffentlichen" }));
+    await expect(await canvas.findByText("Aktive Fassung 2")).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+    await expect(await openTemplates()).toHaveValue(draft);
+    await expect(canvas.getByRole("button", { name: "Veröffentlichen" })).toBeDisabled();
+    await expect(canvas.queryByText("Entwurf auf diesem Gerät gespeichert.")).not.toBeInTheDocument();
+  },
+};

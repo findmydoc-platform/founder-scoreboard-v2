@@ -7,6 +7,8 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.activate_administrator_access()",
   "public.administrator_access_snapshot()",
   "public.administrator_directory_snapshot()",
+  "public.administrator_planning_prompt_templates()",
+  "public.publish_planning_prompt_template(p_kind text, p_text text, p_expected_version integer)",
   "public.claim_notification_delivery(p_event_ids bigint[], p_limit integer, p_test_delivery text, p_recipient_profile_id text)",
   "public.create_private_monday_team_workweek_version(p_effective_from date, p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
   "public.create_private_current_team_workweek_version(p_windows jsonb, p_base_publication_id uuid, p_base_publication_revision integer)",
@@ -71,6 +73,7 @@ export const serviceRoleOnlyTablePrivileges = Object.freeze([
   ["github_planning_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["github_webhook_deliveries", Object.freeze(["SELECT", "INSERT"])],
   ["task_comment_submissions", tablePrivileges],
+  ["planning_prompt_templates", Object.freeze(["SELECT"])],
 ]);
 
 export const sequencePrivileges = Object.freeze(["USAGE", "SELECT", "UPDATE"]);

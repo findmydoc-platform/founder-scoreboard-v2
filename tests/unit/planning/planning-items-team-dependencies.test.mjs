@@ -121,6 +121,7 @@ test("context returns only canonical blocking dependencies between visible plann
   const rows = {
     profiles: [{ id: "ceo", name: "CEO" }],
     sprints: [],
+    planning_prompt_templates: [{ kind: "general", text: "Schreibe kurze Absätze.", version: 2 }],
     active_tasks: [
       { id: "blocked", title: "Blocked", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", evidence_link: "https://example.com/legacy" },
       { id: "blocker", title: "Blocker", task_type: "deliverable", project_id: "findmydoc-founder-execution", status: "Offen", priority: "P2", github_issue_url: "https://github.com/findmydoc-platform/management/issues/1" },
@@ -172,6 +173,7 @@ test("context returns only canonical blocking dependencies between visible plann
     name: "CEO",
     platformRole: "ceo",
   });
+  assert.deepEqual(context.promptTemplates, [{ kind: "general", text: "Schreibe kurze Absätze.", version: 2 }]);
   assert.deepEqual(context.dependencies, [{
     relationshipId: 41,
     blockedItemId: "blocked",
