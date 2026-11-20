@@ -114,7 +114,7 @@ export type GitHubAppOperationalStatus = Readonly<{
 export type PersonalPlanningCredentialInput = {
   credential: { kind: "personal-planning-token"; request: NextRequest };
   action: "planning-items.access";
-  operation: "planningContext.read" | "planningItems.create" | "planningItems.update" | "planningItems.deleteEmpty" | "planningItems.githubSync";
+  operation: "planningContext.read" | "planningItems.create" | "planningItems.update" | "planningItems.deleteEmpty" | "planningItems.githubSync" | "planningItems.approve";
   mode: "read" | "preview" | "commit";
   itemId?: string;
 };

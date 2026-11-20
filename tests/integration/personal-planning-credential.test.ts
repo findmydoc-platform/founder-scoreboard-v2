@@ -48,6 +48,7 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     const revokeRoute = await importTestModule("src/app/api/team/planning-items/v2/tokens/[id]/route.ts", { "server-only": {} });
     const updatePreviewRoute = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/preview/route.ts", { "server-only": {} });
     const previewRoute = await importTestModule("src/app/api/team/planning-items/v2/items/preview/route.ts", { "server-only": {} });
+    const approvalRoute = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/approval/route.ts", { "server-only": {} });
     const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
     const sessionRequest = (body?: unknown) => new NextRequest("https://app.example.test/api/team/planning-items/v2/tokens", {
       method: body ? "POST" : "GET", headers: { authorization: `Bearer ${sessionToken}`, "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}),
@@ -61,12 +62,18 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
       return body as { token: string; tokenRecord: { id: string } };
     };
     const first = await issue();
+    const approval = (token = first.token, body: unknown = { expectedApprovalRevision: 1 }) => approvalRoute.POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/synthetic/approval", {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "idempotency-key": randomUUID() }, body: JSON.stringify(body),
+    }), { params: Promise.resolve({ id: "synthetic-item" }) });
     const preview = (token = first.token) => previewRoute.POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/preview", {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}",
     }));
     const list = async () => (await (await routes.GET(sessionRequest())).json()).tokens as Array<{ id: string; lastUsedAt: string }>;
     const before = (await list()).find(row => row.id === first.tokenRecord.id)!;
     expect(before.lastUsedAt).toBe("");
+    const founderApproval = await approval();
+    expect(founderApproval.status).toBe(403);
+    expect(await founderApproval.json()).toMatchObject({ ok: false, _meta: { access: { requiredScopes: [], missingScopes: [] } } });
     const allowed = await preview();
     expect(allowed.status).toBe(400);
     const allowedBody = await allowed.json();
@@ -106,11 +113,13 @@ it("personal planning HTTP contracts retain accounting, owner restrictions, revo
     const inactive = await preview();
     expect(inactive.status).toBe(401);
     expect(await inactive.json()).toMatchObject({ code: "TOKEN_INACTIVE" });
+    expect((await approval(first.token)).status).toBe(401);
     const replacement = await issue();
     await database.query("update public.team_task_intake_tokens set created_at=now()-interval '1 day',expires_at=now()-interval '1 second' where id=$1", [replacement.tokenRecord.id]);
     const expired = await preview(replacement.token);
     expect(expired.status).toBe(401);
     expect(await expired.json()).toMatchObject({ code: "TOKEN_INACTIVE" });
+    expect((await approval(replacement.token)).status).toBe(401);
   } finally {
     vi.unstubAllGlobals(); vi.unstubAllEnvs();
     await database.query("delete from public.team_task_intake_tokens where profile_id=any($1)", [[profileId, otherProfileId]]);

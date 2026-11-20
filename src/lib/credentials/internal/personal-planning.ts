@@ -15,6 +15,7 @@ import { createEmptyEpicDeletePlanningItems } from "@/features/planning-items/mo
 import { hasCanonicalTeamPlanningItem } from "@/features/planning-items/model/planning-items-team-canonical-item";
 import { enqueueTeamPlanningGitHubProjection, dispatchAndLoadPlanningGitHubProjections } from "@/features/planning-items/model/planning-items-github-projection";
 import type { PlanningInvocation } from "@/features/planning-items/model/planning-items";
+import { runPlanningApprovalLifecycle } from "@/features/planning-items/model/planning-items-approval";
 
 const operationScopes: Record<PersonalPlanningCredentialInput["operation"], TeamPlanningItemScope> = {
   "planningContext.read": "read:planning-context",
@@ -22,15 +23,25 @@ const operationScopes: Record<PersonalPlanningCredentialInput["operation"], Team
   "planningItems.update": "write:planning-items:update",
   "planningItems.deleteEmpty": "write:planning-items:delete-empty",
   "planningItems.githubSync": "write:planning-items:github-sync",
+  "planningItems.approve": "read:planning-context",
 };
 type Failure = Extract<TeamPlanningItemsAuthResult, { ok: false }>;
 const forbidden = (): never => { throw Object.assign(new Error("Planning-API-Berechtigung ist nicht mehr gültig."), { code: "P0007" }); };
+const approvalConstraintMessages: Record<string, string> = {
+  "approved planning item requires a parent": "Für die Freigabe ist ein übergeordnetes Element erforderlich.",
+  "planning item parent was not found": "Das übergeordnete Element wurde nicht gefunden oder befindet sich im Papierkorb.",
+  "initiative parent must be an epic": "Eine Initiative benötigt ein Epic als übergeordnetes Element.",
+  "initiative approval requires one accountable and at least one responsible RACI assignment": "Die Initiative benötigt genau eine accountable und mindestens eine responsible RACI-Zuordnung.",
+  "deliverable approval requires an approved initiative": "Ein Deliverable benötigt eine freigegebene Initiative als übergeordnetes Element.",
+  "planning item is not proposed": "Planungselement ist nicht zur Freigabe vorgeschlagen.",
+  "planning item is trashed": "Planungselement befindet sich im Papierkorb.",
+};
 
 export async function authorizePersonalPlanning(input: PersonalPlanningCredentialInput) {
   const { operation, mode } = input;
   const scope = operationScopes[operation];
   if (input.action !== "planning-items.access" || !["read", "preview", "commit"].includes(mode) || typeof scope !== "string" || (operation === "planningContext.read" ? mode !== "read" : mode === "read")
-    || (operation === "planningItems.githubSync" && mode !== "commit")) {
+    || ((operation === "planningItems.githubSync" || operation === "planningItems.approve") && mode !== "commit")) {
     return { ok: false, status: 500, code: "AUTHORIZATION_UNAVAILABLE", error: "Planning-API-Berechtigung konnte nicht geprüft werden." } as Failure;
   }
   const permission = await requireTeamPlanningItemScope(input.credential.request, scope);
@@ -45,23 +56,47 @@ export async function authorizePersonalPlanning(input: PersonalPlanningCredentia
   const itemId = input.itemId?.trim() || "";
   const projectionIds = new Set<string>();
   const authorizeOperation = async (expectedOperation: PersonalPlanningCredentialInput["operation"], expectedMode = mode, githubSync = false) => {
-    if (operation !== expectedOperation || mode !== expectedMode || !permission.scopeGranted
+    if (operation !== expectedOperation || mode !== expectedMode || (operation !== "planningItems.approve" && !permission.scopeGranted)
       || (githubSync && !permission.scopes.includes("write:planning-items:github-sync"))) forbidden();
     const current = await requireTeamPlanningItemScope(input.credential.request, scope);
     if (!current.ok) throw Object.assign(new Error(current.error), { code: current.code === "TOKEN_INACTIVE" ? "P0004" : current.code === "AUTHORIZATION_UNAVAILABLE" ? "AUTHORIZATION_UNAVAILABLE" : "P0007", status: current.status });
     if (current.tokenId !== permission.tokenId || current.profile.id !== permission.profile.id
-      || current.profile.platformRole !== permission.profile.platformRole || !current.scopeGranted
+      || current.profile.platformRole !== permission.profile.platformRole || (operation !== "planningItems.approve" && !current.scopeGranted)
       || (githubSync && !current.scopes.includes("write:planning-items:github-sync"))) forbidden();
   };
   const invocation = (value: Omit<PlanningInvocation, "actor" | "mode">): PlanningInvocation => ({ ...value, actor, mode: mode === "commit" ? "commit" : "preview" });
-  const requiredScopes = [scope];
+  const requiredScopes = operation === "planningItems.approve" ? [] : [scope];
   return {
     ...metadata,
     profile: Object.freeze({ ...permission.profile }),
     scopes: Object.freeze([...permission.scopes]),
     requiredScopes,
-    missingScopes: permission.scopeGranted ? [] : [scope],
+    missingScopes: operation === "planningItems.approve" || permission.scopeGranted ? [] : [scope],
     planningItems: {
+      async approve(expectedApprovalRevision: number, idempotencyKey: string) {
+        await authorizeOperation("planningItems.approve", "commit");
+        if (!["ceo", "deputy"].includes(permission.profile.platformRole) || !itemId) forbidden();
+        const result = await supabase.rpc("approve_team_planning_item_transaction", {
+          p_token_id: permission.tokenId,
+          p_profile_id: permission.profile.id,
+          p_item_id: itemId,
+          p_expected_revision: expectedApprovalRevision,
+          p_idempotency_key: idempotencyKey,
+        });
+        if (result.error) throw Object.assign(new Error(approvalConstraintMessages[result.error.message] || "Freigabevoraussetzungen sind nicht erfüllt."), { code: result.error.code });
+        const transaction = result.data as { task?: Record<string, unknown>; replayed?: boolean } | null;
+        if (!transaction?.task || typeof transaction.replayed !== "boolean") throw new Error("Freigabe lieferte kein gültiges Ergebnis.");
+        let lifecycle: { attempted: boolean; completed: boolean } | null = null;
+        if (transaction.task.task_type === "deliverable") {
+          try {
+            const outcome = await runPlanningApprovalLifecycle(supabase, itemId);
+            lifecycle = { attempted: outcome.attempted, completed: outcome.completed };
+          } catch {
+            lifecycle = { attempted: false, completed: false };
+          }
+        }
+        return { task: transaction.task, replayed: transaction.replayed, lifecycle };
+      },
       requireGitHubSync() {
         const scopes = TEAM_PLANNING_ITEM_SCOPES.filter(value => value === scope || value === "write:planning-items:github-sync");
         return { requiredScopes: scopes, missingScopes: scopes.filter(value => !permission.scopes.includes(value)) };
