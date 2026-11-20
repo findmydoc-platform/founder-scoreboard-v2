@@ -1,4 +1,5 @@
 import { useState, type ComponentProps } from "react";
+import type { PlanningPromptTemplate, PlanningPromptTemplateEdit } from "@/features/planning-items/model/planning-prompt-templates";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { sessionAuthority } from "@/features/administrator-access/model/administrator-access";
@@ -81,21 +82,28 @@ export const ClearsOnAuthorityLoss: Story = {
   },
 };
 
-const initialPromptTemplate = { kind: "general", text: "Verwende kurze Absätze.", version: 1 };
+const promptTemplates: PlanningPromptTemplate[] = [
+  { kind: "general", text: "Verwende kurze Absätze.", version: 1 },
+  { kind: "initiative", text: "Beschreibe die gewünschte Wirkung.", version: 1 },
+  { kind: "deliverable", text: "Formuliere überprüfbare Ergebnisse.", version: 1 },
+  { kind: "sub_issue", text: "Beschreibe einen konkreten Arbeitsschritt.", version: 1 },
+];
 
 function promptTemplatesClient() {
-  let template = initialPromptTemplate;
+  let templates = promptTemplates;
   let rejectNextPublish = true;
   const result = (body: unknown, status = 200) => ({ response: Response.json(body, { status }), body });
   return {
-    requestJson: fn(async (path: string, options?: { method?: string; json?: { text: string } }) => {
+    requestJson: fn(async (path: string, options?: { method?: string; json?: PlanningPromptTemplateEdit }) => {
       if (path === "/api/administration-data") return result({ administration: administrationStoryModel });
-      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates: [template] });
+      if (options?.method !== "PUT") return result({ profileId: "prompt-templates-story", templates });
       if (rejectNextPublish) {
         rejectNextPublish = false;
         return result({ error: "Prompt-Vorlage konnte nicht veröffentlicht werden." }, 503);
       }
-      template = { ...template, text: options.json!.text, version: 2 };
+      const edit = options.json!;
+      const template = { kind: edit.kind, text: edit.text, version: edit.expectedVersion + 1 };
+      templates = templates.map(current => current.kind === template.kind ? template : current);
       return result({ template });
     }),
     requestForm: fn(),
@@ -109,26 +117,55 @@ export const PromptTemplateDraftAndPublish: Story = {
     const canvas = within(canvasElement);
     const openTemplates = async () => {
       await userEvent.click(await canvas.findByRole("tab", { name: "Prompt-Vorlagen" }));
-      return await canvas.findByRole("textbox", { name: "Allgemeine Prompt-Vorlage" });
     };
-    const draft = "Beschreibe das überprüfbare Ergebnis.";
-    const editor = await openTemplates();
-    await expect(editor).toHaveValue(initialPromptTemplate.text);
-    await userEvent.clear(editor);
-    await userEvent.type(editor, draft);
-    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
-    await expect(await openTemplates()).toHaveValue(draft);
+    const labels = ["Allgemeine Prompt-Vorlage", "Prompt-Vorlage für Initiativen", "Prompt-Vorlage für Deliverables", "Prompt-Vorlage für Sub-Issues"];
+    const editor = async (label: string) => within(await canvas.findByRole("region", { name: label }));
+    const enterDraft = async (label: string, draft: string) => {
+      const input = (await editor(label)).getByRole("textbox", { name: label });
+      await userEvent.clear(input);
+      await userEvent.type(input, draft);
+    };
+    const initiativeDraft = "Benenne Ziel und Erfolgskriterien.";
+    const deliverableDraft = "Beschreibe das überprüfbare Ergebnis.";
+    const localDraftNotice = "Entwurf auf diesem Gerät gespeichert.";
 
-    await userEvent.click(canvas.getByRole("button", { name: "Veröffentlichen" }));
-    await expect(await canvas.findByText("Prompt-Vorlage konnte nicht veröffentlicht werden.")).toBeInTheDocument();
-    await expect(canvas.getByText("Aktive Fassung 1")).toBeInTheDocument();
-    await expect(canvas.getByRole("textbox", { name: "Allgemeine Prompt-Vorlage" })).toHaveValue(draft);
+    try {
+      await openTemplates();
+      for (const [index, label] of labels.entries()) {
+        await expect((await editor(label)).getByRole("textbox", { name: label })).toHaveValue(promptTemplates[index].text);
+      }
+      await enterDraft(labels[1], initiativeDraft);
+      await enterDraft(labels[2], deliverableDraft);
+      await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+      await openTemplates();
+      const deliverable = await editor(labels[2]);
+      await expect((await editor(labels[1])).getByRole("textbox")).toHaveValue(initiativeDraft);
+      await expect(deliverable.getByRole("textbox")).toHaveValue(deliverableDraft);
 
-    await userEvent.click(canvas.getByRole("button", { name: "Veröffentlichen" }));
-    await expect(await canvas.findByText("Aktive Fassung 2")).toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
-    await expect(await openTemplates()).toHaveValue(draft);
-    await expect(canvas.getByRole("button", { name: "Veröffentlichen" })).toBeDisabled();
-    await expect(canvas.queryByText("Entwurf auf diesem Gerät gespeichert.")).not.toBeInTheDocument();
+      await userEvent.click(deliverable.getByRole("button", { name: "Veröffentlichen" }));
+      await expect(await deliverable.findByRole("alert")).toHaveTextContent("Prompt-Vorlage konnte nicht veröffentlicht werden.");
+      await expect(deliverable.getByText("Aktive Fassung 1")).toBeInTheDocument();
+      await expect(deliverable.getByRole("textbox")).toHaveValue(deliverableDraft);
+      await userEvent.click(deliverable.getByRole("button", { name: "Veröffentlichen" }));
+      await expect(await deliverable.findByText("Aktive Fassung 2")).toBeInTheDocument();
+
+      await userEvent.click(canvas.getByRole("tab", { name: "Übersicht" }));
+      await openTemplates();
+      const published = await editor(labels[2]);
+      await expect(published.getByRole("textbox")).toHaveValue(deliverableDraft);
+      await expect(published.getByRole("button", { name: "Veröffentlichen" })).toBeDisabled();
+      await expect(published.queryByText(localDraftNotice)).not.toBeInTheDocument();
+      const initiative = await editor(labels[1]);
+      await expect(initiative.getByText("Aktive Fassung 1")).toBeInTheDocument();
+      await expect(initiative.getByRole("textbox")).toHaveValue(initiativeDraft);
+      await expect(initiative.getByText(localDraftNotice)).toBeInTheDocument();
+      for (const index of [0, 3]) {
+        const unchanged = await editor(labels[index]);
+        await expect(unchanged.getByText("Aktive Fassung 1")).toBeInTheDocument();
+        await expect(unchanged.getByRole("textbox")).toHaveValue(promptTemplates[index].text);
+      }
+    } finally {
+      for (const template of promptTemplates) window.localStorage.removeItem(`founderops:planning-prompt-draft:prompt-templates-story:${template.kind}`);
+    }
   },
 };

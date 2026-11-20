@@ -31,6 +31,15 @@ test("active administrators can load the current template and publish a replacem
   expect(current.calls.at(-1).body).toEqual({ p_kind: "general", p_text: revised.text, p_expected_version: 1 });
 });
 
+test.each(["initiative", "deliverable", "sub_issue"])("active administrators can publish the %s template", async (kind) => {
+  const current = await fixture();
+  const template = { kind, text: "Beschreibe das erwartete Ergebnis.", version: 3 };
+  current.state.responses.publish_planning_prompt_template = template;
+
+  expect(await (await current.put({ kind, text: template.text, expectedVersion: 2 })).json()).toEqual({ template });
+  expect(current.calls.at(-1).body).toEqual({ p_kind: kind, p_text: template.text, p_expected_version: 2 });
+});
+
 test("an eligible CEO without active access cannot read or publish", async () => {
   const current = await fixture();
   current.state.role = "ceo";
@@ -43,6 +52,7 @@ test("an eligible CEO without active access cannot read or publish", async () =>
 test("invalid edits and stale versions produce explicit failures", async () => {
   const current = await fixture();
   expect((await current.put({ kind: "general", text: "  ", expectedVersion: 1 })).status).toBe(400);
+  expect((await current.put({ kind: "epic", text: revised.text, expectedVersion: 1 })).status).toBe(400);
   expect(current.calls).toEqual([]);
   current.state.responses.publish_planning_prompt_template = () =>
     Response.json({ code: "P0001", message: "Database detail" }, { status: 400 });

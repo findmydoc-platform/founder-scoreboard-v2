@@ -6,7 +6,12 @@ import { UiButton, UiNotice, UiPanel, UiTextArea } from "@/shared/atoms/ui-primi
 
 type Draft = Pick<PlanningPromptTemplateEdit, "expectedVersion" | "text">;
 type PublishResult = { published: PlanningPromptTemplate } | { error?: string; conflict: boolean };
-const templateLabels = { general: "Allgemeine Prompt-Vorlage" };
+const templateLabels = {
+  general: "Allgemeine Prompt-Vorlage",
+  initiative: "Prompt-Vorlage für Initiativen",
+  deliverable: "Prompt-Vorlage für Deliverables",
+  sub_issue: "Prompt-Vorlage für Sub-Issues",
+} satisfies Record<PlanningPromptTemplate["kind"], string>;
 
 function readStoredDraft(key: string): Draft | null {
   try {
@@ -27,6 +32,7 @@ export function PlanningPromptTemplateEditor({ profileId, template, onReload, on
   onPublish: (edit: PlanningPromptTemplateEdit) => Promise<PublishResult>;
 }) {
   const editorId = useId();
+  const titleId = `${editorId}-title`;
   const key = `founderops:planning-prompt-draft:${profileId}:${template.kind}`;
   const [draft, setDraft] = useState(() => readStoredDraft(key));
   const [busy, setBusy] = useState(false);
@@ -77,9 +83,9 @@ export function PlanningPromptTemplateEditor({ profileId, template, onReload, on
   }
 
   return (
-    <UiPanel className="grid min-w-0 gap-4">
+    <UiPanel aria-labelledby={titleId} className="grid min-w-0 gap-4">
       <div>
-        <h2 className="text-lg font-semibold text-slate-950">
+        <h2 id={titleId} className="text-lg font-semibold text-slate-950">
           <label htmlFor={editorId}>{templateLabels[template.kind]}</label>
         </h2>
         <p className="mt-1 text-sm text-slate-600">Aktive Fassung {template.version}</p>

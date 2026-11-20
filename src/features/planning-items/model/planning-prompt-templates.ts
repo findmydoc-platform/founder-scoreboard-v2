@@ -1,4 +1,4 @@
-export const planningPromptTemplateKinds = ["general"] as const;
+export const planningPromptTemplateKinds = ["general", "initiative", "deliverable", "sub_issue"] as const;
 
 export type PlanningPromptTemplateKind = typeof planningPromptTemplateKinds[number];
 
