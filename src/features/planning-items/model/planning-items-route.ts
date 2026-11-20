@@ -11,7 +11,8 @@ export type PlanningItemsOperation =
   | "planningItems.create"
   | "planningItems.update"
   | "planningItems.deleteEmpty"
-  | "planningItems.githubSync";
+  | "planningItems.githubSync"
+  | "planningItems.approve";
 
 export type PlanningItemsRequestMode = "read" | "preview" | "commit";
 
@@ -83,12 +84,15 @@ export function planningItemsTokenInactiveError() {
   });
 }
 
-function publicCommitError(error: unknown, fallbackError: string) {
+function publicCommitError(error: unknown, fallbackError: string, operation?: PlanningItemsOperation) {
   const code = error instanceof Error && "code" in error ? String(error.code || "") : "";
   if (code === "AUTHORIZATION_UNAVAILABLE" && error instanceof Error && "status" in error) return planningItemsError(error.message, Number(error.status), { code });
   if (code === "P0001") return planningItemsError("Planungselement wurde zwischenzeitlich geändert. Bitte erneut laden.", 409);
   if (code === "P0002") return planningItemsError("Planungselement wurde nicht gefunden.", 404);
-  if (code === "P0003") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+  if (code === "P0003") return planningItemsError(operation === "planningItems.approve" && error instanceof Error ? error.message : "Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+  if (code === "P0020") return planningItemsError("Idempotency-Key wurde mit anderen Daten wiederverwendet.", 409);
+  if (code === "P0009") return planningItemsError("Planungselement ist durch ein Review geschützt.", 409);
+  if (code === "23514") return planningItemsError(operation === "planningItems.approve" && error instanceof Error ? error.message : "Planungselement erfüllt die erforderlichen Bedingungen nicht.", 409);
   if (["P0008", "P0010"].includes(code)) return planningItemsError("Statusübergang ist wegen eines zwischenzeitlich geänderten Planungs- oder Review-Zustands nicht mehr zulässig.", 409);
   if (code === "P0017") return planningItemsError("Ergänze vor der Review-Anfrage einen Evidence-Link oder dokumentiere das Ergebnis ohne Link.", 409);
   if (code === "P0004") {
@@ -224,7 +228,7 @@ export async function handlePlanningItemsRequest(
       if (await accessRequest.requiresGitHubSync(permission)) allRequiredScopes = permission.planningItems.requireGitHubSync().requiredScopes;
     } catch (error) {
       const metadata = accessMetadata(permission, accessRequest, requiredScopes, []);
-      return addAccessMetadata(publicCommitError(error, fallbackError), metadata);
+      return addAccessMetadata(publicCommitError(error, fallbackError, accessRequest.operation), metadata);
     }
   }
 
@@ -244,6 +248,6 @@ export async function handlePlanningItemsRequest(
   try {
     return await addAccessMetadata(await handler(permission), metadata);
   } catch (error) {
-    return addAccessMetadata(publicCommitError(error, fallbackError), metadata);
+    return addAccessMetadata(publicCommitError(error, fallbackError, accessRequest.operation), metadata);
   }
 }

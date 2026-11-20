@@ -177,6 +177,18 @@ test("HTTP save rebuilds the preview from a new request and rejects intervening 
   expect(await saved.json()).toMatchObject({ ok: false, error: expect.stringContaining("zwischenzeitlich") });
 });
 
+test("HTTP approval rejects revisions outside the PostgreSQL integer range before mutation", async () => {
+  let mutationRequests = 0;
+  await fixture({ onData: () => { mutationRequests++; return Response.json({ code: "22003" }, { status: 400 }); } });
+  const { POST } = await importTestModule("src/app/api/team/planning-items/v2/items/[id]/approval/route.ts", { "server-only": {} });
+  const response = await POST(new NextRequest("https://app.example.test/api/team/planning-items/v2/items/bound-item/approval", {
+    method: "POST", headers: { authorization: "Bearer fmd_ti_synthetic", "content-type": "application/json", "idempotency-key": "00000000-0000-4000-8000-000000000307" },
+    body: JSON.stringify({ expectedApprovalRevision: 2147483648 }),
+  }), { params: Promise.resolve({ id: "bound-item" }) });
+  expect(response.status).toBe(400);
+  expect(mutationRequests).toBe(0);
+});
+
 test("scope metadata cannot be mutated to grant a GitHub-sync capability", async () => {
   const token = await fixture({ receipt: { scopes: ["write:planning-items:create"] } });
   const result = await token.authorize(undefined, "planningItems.create", "preview");
