@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useEffect, useState } from "react";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -236,11 +236,12 @@ export const CompleteViewSearchKeepsDeliverableBehavior: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Tabelle" }));
     await revealLastTablePage(canvas);
     const search = canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" });
-    await userEvent.type(search, "Completed work 25");
+    await userEvent.click(search);
+    // Count reads for each complete search value.
+    fireEvent.change(search, { target: { value: "Completed work 25" } });
     await expect(await canvas.findByRole("link", { name: "Completed work 25" })).toBeVisible();
     await waitFor(() => expect(canvas.queryByRole("link", { name: "Completed work 1" })).not.toBeInTheDocument());
-    await userEvent.clear(search);
-    await userEvent.type(search, "No matching Deliverable");
+    fireEvent.change(search, { target: { value: "No matching Deliverable" } });
     await waitFor(() => expect(canvas.getAllByText("Keine Aufgaben für diese Filter.").some(element => element.getClientRects().length > 0)).toBe(true));
     await expect(canvas.queryByRole("link", { name: "Historical parent context" })).not.toBeInTheDocument();
     await expect(canvas.getByLabelText("History reads")).toHaveTextContent("4");
