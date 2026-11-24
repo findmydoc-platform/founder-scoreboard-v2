@@ -34,7 +34,7 @@ export default async function PlatformReleaseDetailPage({ params, searchParams }
     && (permission.profile?.platformRole || null) === (profile?.platformRole || null);
   const admitted = permission.ok && sameActor ? permission : undefined;
   const headerResult = admitted?.account.loadReleaseHeader({ headerSlots: ["quickLinks", "calendarEvents"] });
-  const result = await admitted?.account.readReleaseContent({ version });
+  const result = await admitted?.account.readReleaseContent({ version, detailDocument: true });
   const release = result?.status === "ready" ? result.releases.find(item => item.version === version) : null;
   if (!release) notFound();
   const readSession = admitted?.readSession;

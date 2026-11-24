@@ -276,6 +276,20 @@ function HydratedTaskDetailSurface({
     onBeginEdit,
   });
   const reviewActive = task.taskType === "deliverable" && isTaskReviewActive(task);
+  const canDemandReviewBasis = reviewActive && controller.permissions.canOpenReview;
+  const reviewBasis = canDemandReviewBasis ? detailOwner?.taskReviewBasis(task.id) : undefined;
+  const reviewBasisDemand = Boolean(reviewBasis) && task.detailAvailability !== "stale";
+  const reviewDemand = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!detailOwner || !reviewBasisDemand) return;
+    const demand = new AbortController();
+    reviewDemand.current = demand;
+    void detailOwner.loadTaskReviewBasis(task.id, { signal: demand.signal });
+    return () => {
+      if (reviewDemand.current === demand) reviewDemand.current = null;
+      demand.abort();
+    };
+  }, [detailOwner, task.id, task.updatedAt, reviewBasisDemand]);
   const reviewLocked = task.taskType === "deliverable" && isTaskReviewLocked(task);
   const directChildren = directChildType
     ? subIssues.filter((item) => item.parentTaskId === task.id && item.taskType === directChildType)
@@ -555,6 +569,7 @@ function HydratedTaskDetailSurface({
           task={task}
           subIssues={directChildren}
           subIssueMembershipComplete={childrenKnown}
+          verifiedReviewEvidence={reviewBasis?.evidence}
           onOpenTask={openTask}
           profiles={teamProfiles}
           baseline={controller.overviewBaselineDraft}
@@ -738,6 +753,17 @@ function HydratedTaskDetailSurface({
       currentProfileId={currentProfile?.id || ""}
       profiles={teamProfiles}
       canReview={controller.permissions.canOpenReview}
+      decisionBasis={reviewBasis}
+      onRetryDecisionBasis={detailOwner && reviewBasis ? async () => {
+        const signal = reviewDemand.current?.signal;
+        if (!signal) return false;
+        if (reviewBasis.targetChanged) {
+          const target = await detailOwner.loadTaskDetail(task.id, { area: "target", signal });
+          if (!target.ok || signal.aborted) return false;
+        }
+        const loaded = await detailOwner.loadTaskReviewBasis(task.id, { refresh: true, signal });
+        return loaded && !detailOwner.taskReviewBasis(task.id)?.blockedReason;
+      } : undefined}
       canWithdraw={canWithdrawReview}
       canManageReviewOwner={controller.permissions.canManageReviewOwner}
       pending={pending}

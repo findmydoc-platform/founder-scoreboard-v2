@@ -34,8 +34,7 @@ import { normalizePlanningShellState } from "../planning-app-model";
 import { emptyPlanningShellState } from "../planning-shell-state";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { isSupportingWorkspace, supportingWorkspaceModelToPlanningShellState } from "../supporting-planning-shell-projection";
-import { sprintModelCoverage } from "./sprint-read-coverage";
-import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
+import type { SprintScopedQuery, SprintScopedRead, SprintSelectedProjectionRead, SprintJointRead } from "@/features/sprint/model/sprint-scoped-read";
 import { normalizePlanningHeaderData } from "@/lib/planning-header-data";
 import { setProtectedPlanningShellStateCache } from "@/features/planning/model/internal/planning-protected-cache";
 import type { AppWorkspace } from "../workspace-routes";
@@ -75,6 +74,19 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
     const session = await currentOperationSession();
     return { userId: session.userId, revision: session.revision, isCurrent: guard };
   }
+  async function readSprintAssessment<T>(area: "assessment" | "assessment-source", sprintId: string, signal: AbortSignal) {
+    const query = new URLSearchParams({ area, sprintId });
+    const { response, body } = await ownedApiClient.requestJson<T & { error?: string }>(`/api/sprint-data?${query}`, { signal, useDevProfileOverride: false });
+    if (!response.ok || !body) throw Object.assign(new Error(body?.error || "Die Bewertung des Sprints konnte nicht geladen werden."), { status: response.status });
+    return body;
+  }
+
+  async function readSprintCompletion<T>(area: "completion" | "completion-source", sprintId: string, signal: AbortSignal) {
+    const { response, body } = await ownedApiClient.requestJson<T & { error?: string }>(`/api/sprints/${encodeURIComponent(sprintId)}/lock?area=${area}`, { signal, useDevProfileOverride: false });
+    if (!response.ok || !body) throw Object.assign(new Error(body?.error || "Die Abschlussgrundlage konnte nicht geprüft werden."), { status: response.status });
+    return body;
+  }
+
   const ownedApiClient: BrowserApiResponseClient = {
     async requestJson<T>(input: Parameters<BrowserApiClient["requestJson"]>[0], requestOptions?: Parameters<BrowserApiClient["requestJson"]>[1]) {
       const binding = await dispatchBinding(requestOptions?.expectedSession);
@@ -112,6 +124,26 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
   };
   function requireReadAuthority(authority: import("../planning-server-header-read").PlanningReadAuthority | undefined) {
     if (runtime.userId && (!authority || authority.userId !== runtime.userId || !Number.isFinite(authority.deadline) || authority.deadline <= Date.now())) throw new Error("Die ursprüngliche Leseberechtigung konnte nicht bestätigt werden.");
+  }
+  async function requestSprintRead<T extends { readAuthority: import("../planning-server-header-read").PlanningReadAuthority }>(
+    query: SprintScopedQuery, signal: AbortSignal, basis?: string,
+  ): Promise<T> {
+    const session = await currentOperationSession();
+    owner.internal.bindSession(session);
+    const params = new URLSearchParams({ scope: query.scope, ...query.filters });
+    if (query.sprintId) params.set("sprintId", query.sprintId);
+    if (query.continuation) params.set("continuation", query.continuation);
+    if (basis && query.scope === "selected") {
+      params.set("projection", "matches");
+      params.set("basis", basis);
+    }
+    if (basis && query.scope === "assignment") params.set("selectedBasis", basis);
+    const { response, body } = await ownedApiClient.requestJson<T & { error?: string; code?: string }>(`/api/sprint-data?${params}`, {
+      signal, expectedSession: { userId: session.userId, revision: session.revision, isCurrent: () => runtime.session?.revision === session.revision },
+    });
+    if (!response.ok || !body) throw Object.assign(new Error(body?.error || "Sprint-Aufgaben konnten nicht geladen werden."), { status: response.status, code: body?.code });
+    requireReadAuthority(body.readAuthority);
+    return body;
   }
   function requireReleaseActor(body: Partial<Pick<PlatformReleaseReferenceReceipt, "readActor" | "readAuthority">>, session: BrowserSessionSnapshot) {
     requireReadAuthority(body.readAuthority);
@@ -233,8 +265,13 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht angefragt werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
         if(!body?.task)throw new Error("Die Review-Anfrage ist noch nicht bestätigt.");return {task:body.task,activities:body.activities};
       },
-      async decideTaskReview(task,input) {
-        const {response,body}=await taskApi.reviewTaskRequest(ownedApiClient,task.id,{...input,expectedUpdatedAt:task.updatedAt});
+      async readTaskReviewBasis(taskId, { signal }) {
+        const { response, body } = await taskApi.requestTaskReviewBasis(ownedApiClient, taskId, signal);
+        if (!response.ok || !body?.basis) throw Object.assign(new Error(body?.error || "Die Grundlage für das Review konnte nicht geladen werden."), { status: response.status });
+        return body.basis;
+      },
+      async decideTaskReview(task,input,decisionBasis) {
+        const {response,body}=await taskApi.reviewTaskRequest(ownedApiClient,task.id,{...input,expectedUpdatedAt:task.updatedAt,decisionBasis});
         if(!response.ok)throw Object.assign(new Error(body?.error||"Review konnte nicht gespeichert werden."),{status:response.status,code:body?.code,kind:body?.conflictReason==="revision"?"versionConflict":undefined});
         if(!body?.task||!body.review)throw new Error("Die Review-Entscheidung ist noch nicht bestätigt.");return {task:body.task,review:body.review,activities:body.activities};
       },
@@ -286,12 +323,14 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         if(!body?.objection)throw new Error("Die Entscheidung ist noch nicht bestätigt.");
         return {objection:mapScoreObjection(body.objection),score:body.score?mapFounderSprintScore(body.score):null};
       },
-      async lockSprint(basis) {
-        const {response,body}=await planningApi.lockSprintRequest(ownedApiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt}))});
+      async lockSprint(basis, completionBasis, expectedSession) {
+        const {response,body}=await planningApi.lockSprintRequest(ownedApiClient,basis.sprint.id,{expectedUpdatedAt:basis.sprint.updatedAt,expectedTasks:basis.tasks.map(task=>({id:task.id,updatedAt:task.updatedAt})),completionBasis},expectedSession);
         if(!response.ok)throw Object.assign(new Error(body?.error||"Sprint-Abschluss fehlgeschlagen."),{status:response.status,code:body?.code});
         if(!body?.sprint||body.sprint.id!==basis.sprint.id||!body.sprint.scoreLocked||body.sprint.status!=="closed")throw new Error("Sprint-Abschluss ist noch nicht bestätigt.");
         return {...body,sprint:body.sprint};
       },
+      readSprintCompletion: (sprintId, { signal }) => readSprintCompletion<import("@/features/sprint/model/sprint-completion-read").SprintCompletionRead>("completion", sprintId, signal),
+      observeSprintCompletion: (sprintId, { signal }) => readSprintCompletion<import("@/features/sprint/model/sprint-completion-read").SprintCompletionSource>("completion-source", sprintId, signal),
       async readSprintLock(sprintId) {
         const {response,body}=await planningApi.requestSprintLock(ownedApiClient,sprintId);
         if(!response.ok)throw Object.assign(new Error(body?.error||"Abschlussstand nicht verfügbar."),{status:response.status,code:body?.code});
@@ -622,6 +661,11 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
         requireReadAuthority(body.readAuthority);
         return { model: body.model, readAuthority: body.readAuthority!, currentProfile: body.currentProfile || null };
       },
+      readSprintAssessment: (sprintId, { signal }) => readSprintAssessment<import("@/features/sprint/model/sprint-assessment-read").SprintAssessmentReceipt>("assessment", sprintId, signal),
+      observeSprintAssessment: (sprintId, { signal }) => readSprintAssessment<import("@/features/sprint/model/sprint-assessment-read").SprintAssessmentSource>("assessment-source", sprintId, signal),
+      readSprintCollection: (query, signal) => requestSprintRead<SprintScopedRead>(query, signal),
+      readSprintJoint: (query, basis, signal) => requestSprintRead<SprintJointRead>(query, signal, basis),
+      readSprintProjection: (query, basis, signal) => requestSprintRead<SprintSelectedProjectionRead>(query, signal, basis),
       async readWorkspace(workspace, query, options) {
         if (workspace === "planning" && options?.onBoardStream && query?.view === "board" && !query.column && !query.continuation) {
           const response = await ownedApiClient.requestResponse(`/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(query))}`, { signal: options.signal, headers: { accept: "application/x-ndjson" } });
@@ -675,11 +719,6 @@ export function createBrowserPlanningState(options: PlanningPageState, isCurrent
           const { response, body } = await planningApi.requestSupportingWorkspaceData(ownedApiClient, workspace, { independentHeader: true });
           if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
           return body?.model ? { data: normalizePlanningShellState(supportingWorkspaceModelToPlanningShellState(workspace, body.model)), coverage: supportingReadCoverage(workspace, body.model), taskOmittedFields: supportingOmittedFields(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], toolCoverage: workspace === "tools" ? (body.model as import("@/features/tools/model/tools-read-model").ToolsWorkspaceModel).coverage : undefined, eventCoverage: workspace === "events" ? (body.model as import("@/features/events/model/events-read-model").EventsWorkspaceModel).coverage : undefined, notificationCoverage: workspace === "notifications" ? (body.model as import("@/features/notifications/model/notifications-read-model").NotificationsWorkspaceModel).coverage : undefined, headerData: body.headerData, currentProfile: body.currentProfile } : null;
-        }
-        if (workspace === "sprint") {
-          const { response, body } = await planningApi.requestSprintWorkspaceData(ownedApiClient, { independentHeader: true });
-          if (!response.ok) throw Object.assign(new Error(body?.error || "Planungsdaten konnten nicht geladen werden."), { status: response.status });
-          return body?.model ? { data: normalizePlanningShellState(sprintWorkspaceModelToPlanningShellState(body.model)), coverage: sprintModelCoverage(body.model), taskOmittedFields: supportingOmittedFields(body.model), profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"], projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"], headerData: body.headerData, currentProfile: body.currentProfile } : null;
         }
         return null;
       },

@@ -26,6 +26,7 @@ export function FilterToolbar({
   searchPlaceholder,
   query,
   onQueryChange,
+  onSearchSubmit,
   expanded,
   onExpandedChange,
   activeFilters,
@@ -48,6 +49,7 @@ export function FilterToolbar({
   searchPlaceholder: string;
   query: string;
   onQueryChange: (value: string) => void;
+  onSearchSubmit?: () => void;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   activeFilters: ActiveFilter[];
@@ -102,6 +104,11 @@ export function FilterToolbar({
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={onSearchSubmit ? event => {
+              if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              onSearchSubmit();
+            } : undefined}
             inputSize="lg"
             inputPadding="md"
             className="w-full pl-9 pr-9"

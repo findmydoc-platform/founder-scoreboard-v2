@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { SprintScopedQuery } from "@/features/sprint/model/sprint-scoped-read";
+import type { PlanningState } from "@/features/planning/model/planning-state";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { TaskStatusControl } from "@/features/tasks/atoms/task-status-control";
@@ -30,7 +32,8 @@ export function SprintTaskTables({
   data,
   sprint,
   sprintTasks,
-  otherTasks,
+  planningState,
+  scopedSelected = false,
   pending,
   canManageFinalTaskStatus,
   reviewOwnerName,
@@ -44,7 +47,8 @@ export function SprintTaskTables({
   data: PlanningShellState;
   sprint: Sprint;
   sprintTasks: Task[];
-  otherTasks: Task[];
+  planningState: Pick<PlanningState, "sprintCollection" | "loadSprintCollection" | "loadSharedSprintSearch" | "cancelSprintCollection">;
+  scopedSelected?: boolean;
   pending: boolean;
   canManageFinalTaskStatus: boolean;
   reviewOwnerName: (task: Task) => string;
@@ -57,8 +61,47 @@ export function SprintTaskTables({
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { state: filters, updateState: updateFilters, resetState: resetFilters } = useTableUrlState({ namespace: "sprintTasks", schema: sprintTaskFilterSchema });
-  const visibleSprintTasks = buildSprintTaskTableRows(sprintTasks, data, filters);
-  const visibleOtherTasks = buildSprintTaskTableRows(otherTasks, data, filters);
+  const { status, assignee, risk, review, score, sort, direction } = filters;
+  const query = filters.query.trim().toLocaleLowerCase("de");
+  // URL synchronization can recreate the filters without changing the active request.
+  const scopedFilters = useMemo(() => ({ query, status, assignee, risk, review, score, sort, direction }),
+    [query, status, assignee, risk, review, score, sort, direction]);
+  const selectedQuery = useMemo<SprintScopedQuery>(() => ({ scope: "selected", sprintId: sprint.id, filters: scopedFilters, continuation: null }), [sprint.id, scopedFilters]);
+  const selected = scopedSelected ? planningState.sprintCollection(selectedQuery) : null;
+  const selectedStatus = selected?.status;
+  const visibleSprintTasks = selected ? selected.page?.items || [] : buildSprintTaskTableRows(sprintTasks, data, filters);
+  const selectedTotal = selected ? selected.page?.scopeTotal : sprintTasks.length;
+  const selectedMatched = selected ? selected.page?.matchedTotal : sprintTasks.length;
+  useEffect(() => () => { if (scopedSelected) planningState.cancelSprintCollection(selectedQuery); }, [scopedSelected, planningState, selectedQuery]);
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const assignmentQuery = useMemo<SprintScopedQuery>(() => ({ scope: "assignment", sprintId: sprint.id, filters: scopedFilters, continuation: null }), [sprint.id, scopedFilters]);
+  const assignment = planningState.sprintCollection(assignmentQuery);
+  const visibleOtherTasks = assignment.page?.items || [];
+  const assignmentChoices = (task: Task) => {
+    const allowed = assignment.page?.assignmentTargetsByItemId?.[task.id] || [];
+    const options = data.sprints.filter(sprint => allowed.includes(sprint.id) || sprint.id === task.sprintId)
+      .map(sprint => ({ value: sprint.id, label: sprint.name, disabled: !allowed.includes(sprint.id) }));
+    if (task.sprintId && !options.some(option => option.value === task.sprintId)) {
+      options.unshift({ value: task.sprintId, label: task.sprintId, disabled: true });
+    }
+    return options;
+  };
+  const selectedNeedsRead = scopedSelected && selectedStatus === "not-loaded";
+  const assignmentNeedsRead = assignmentOpen && assignment.status === "not-loaded";
+  useEffect(() => {
+    if (selectedStatus === "current") void planningState.loadSprintCollection(selectedQuery);
+  }, [selectedStatus, selectedQuery, planningState]);
+  useEffect(() => {
+    if (!selectedNeedsRead && !assignmentNeedsRead) return;
+    const timer = window.setTimeout(() => {
+      if (selectedNeedsRead && assignmentNeedsRead) {
+        void planningState.loadSharedSprintSearch(selectedQuery);
+      } else if (assignmentNeedsRead) void planningState.loadSprintCollection(assignmentQuery);
+      else void planningState.loadSprintCollection(selectedQuery);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [assignmentNeedsRead, assignmentQuery, planningState, selectedNeedsRead, selectedQuery]);
+  useEffect(() => () => { if (assignmentOpen) planningState.cancelSprintCollection(assignmentQuery); }, [assignmentOpen, planningState, assignmentQuery]);
   const reviewLabels: Record<SprintTaskReviewFilter, string> = { all: "Alle Reviews", not_requested: "Nicht angefragt", requested: "Angefragt", accepted: "Akzeptiert", partial: "Kleine Nacharbeit", changes_requested: "Grundlegend überarbeiten" };
   const scoreLabels: Record<SprintTaskScoreFilter, string> = { all: "Alle Scores", open: "Score offen", final: "Score final" };
   const activeFilters: ActiveFilter[] = [
@@ -83,14 +126,19 @@ export function SprintTaskTables({
         searchPlaceholder="Aufgabe, Bereich oder Zuständigkeit suchen"
         query={filters.query}
         onQueryChange={(query) => updateFilters({ query }, "replace")}
+        onSearchSubmit={() => {
+          if (assignmentOpen && scopedSelected) void planningState.loadSharedSprintSearch(selectedQuery);
+          else if (assignmentOpen) void planningState.loadSprintCollection(assignmentQuery);
+          else if (scopedSelected) void planningState.loadSprintCollection(selectedQuery);
+        }}
         expanded={filtersOpen}
         onExpandedChange={setFiltersOpen}
         activeFilters={activeFilters}
         isDirty={JSON.stringify(filters) !== JSON.stringify(DEFAULT_SPRINT_TASK_FILTERS)}
         onReset={resetFilters}
         results={[
-          { id: "sprint", label: "Sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length },
-          { id: "other", label: "Andere", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length },
+          ...(selectedMatched === undefined ? [] : [{ id: "sprint", label: "Sprint", visibleCount: visibleSprintTasks.length, totalCount: selectedMatched }]),
+          ...(assignmentOpen && assignment.page ? [{ id: "other", label: "Andere", visibleCount: visibleOtherTasks.length, totalCount: assignment.page.matchedTotal }] : []),
         ]}
         panelId="sprint-task-filters"
       >
@@ -102,10 +150,13 @@ export function SprintTaskTables({
           <FilterField label="Score"><CustomSelect aria-label="Sprint-Aufgaben nach Score filtern" value={filters.score} onChange={(score) => updateFilters({ score: score as SprintTaskScoreFilter })} className="h-10 text-sm" options={scoreOptions} /></FilterField>
         </div>
       </FilterToolbar>
-      <DataTableFrame
+      {selected && !selected.page ? <div role="status" className="text-sm text-slate-600">
+        <p>{selected.status === "forbidden" ? "Kein Zugriff auf Sprint-Aufgaben." : ["unavailable", "stale"].includes(selected.status) ? "Sprint-Aufgaben konnten nicht geladen werden." : "Sprint-Aufgaben werden geladen."}</p>
+        {["unavailable", "stale"].includes(selected.status) ? <UiButton type="button" onClick={() => { void planningState.loadSprintCollection(selectedQuery); }}>Sprint-Aufgaben erneut laden</UiButton> : null}
+      </div> : <DataTableFrame
         title="Sprint-Aufgaben"
         caption="Aufgaben im ausgewählten Sprint"
-        results={[{ id: "sprint", visibleCount: visibleSprintTasks.length, totalCount: sprintTasks.length }]}
+        results={[{ id: "sprint", visibleCount: visibleSprintTasks.length, totalCount: selectedMatched || 0 }]}
         filtering={{ mode: "external", labelledBy: "sprint-task-filters" }}
         minWidth={940}
         mobileContentBreakpoint="xl"
@@ -148,7 +199,7 @@ export function SprintTaskTables({
                 </div>
               </article>
             ))}
-            {!visibleSprintTasks.length && <UiEmptyState className="m-4 md:col-span-2">{sprintTasks.length ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}</UiEmptyState>}
+            {!visibleSprintTasks.length && <UiEmptyState className="m-4 md:col-span-2">{selectedTotal ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}</UiEmptyState>}
           </div>
         )}
       >
@@ -215,18 +266,27 @@ export function SprintTaskTables({
               ))}
               {!visibleSprintTasks.length && (
                 <DataEmptyRow colSpan={6}>
-                  {sprintTasks.length ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}
+                  {selectedTotal ? "Keine Sprint-Aufgaben für diese Filter." : "Noch keine Aufgaben in diesem Sprint."}
                 </DataEmptyRow>
               )}
             </tbody>
-      </DataTableFrame>
+      </DataTableFrame>}
 
-      {otherTasks.length > 0 && (
+      {!assignmentOpen ? <UiButton type="button" variant="secondary" onClick={() => {
+        setAssignmentOpen(true);
+        void planningState.loadSprintCollection(assignmentQuery);
+      }}>Backlog und andere Sprints laden</UiButton> : null}
+      {assignmentOpen && ["not-loaded", "loading"].includes(assignment.status) ? <p role="status" className="text-sm text-slate-600">Zuweisungskandidaten werden geladen.</p> : null}
+      {assignmentOpen && ["unavailable", "stale", "forbidden"].includes(assignment.status) ? <div role="status" className="text-sm text-slate-600">
+        <p>{assignment.status === "forbidden" ? "Kein Zugriff auf Zuweisungskandidaten." : "Zuweisungskandidaten konnten nicht geladen werden."}</p>
+        {assignment.status !== "forbidden" ? <UiButton type="button" variant="secondary" onClick={() => { void planningState.loadSprintCollection(assignmentQuery); }}>Zuweisungskandidaten erneut laden</UiButton> : null}
+      </div> : null}
+      {assignmentOpen && assignment.page && (
         <DataTableFrame
           title="Backlog und andere Sprints"
           description="Nicht im ausgewählten Sprint."
           caption="Aufgaben außerhalb des ausgewählten Sprints"
-          results={[{ id: "other", visibleCount: visibleOtherTasks.length, totalCount: otherTasks.length }]}
+          results={[{ id: "other", visibleCount: visibleOtherTasks.length, totalCount: assignment.page.matchedTotal }]}
           filtering={{ mode: "external", labelledBy: "sprint-task-filters" }}
           minWidth={840}
           mobileContentBreakpoint="xl"
@@ -244,16 +304,16 @@ export function SprintTaskTables({
                     </div>
                     <dl className="grid grid-cols-2 gap-3 text-xs text-slate-600">
                       <div><dt className="font-semibold text-slate-500">Zuständig</dt><dd className="mt-1">{taskAssigneeLabel(task)}</dd></div>
-                      <div><dt className="font-semibold text-slate-500">Aktueller Sprint</dt><dd className="mt-1">{currentSprint?.name || "ohne Sprint"}</dd></div>
+                      <div><dt className="font-semibold text-slate-500">Aktueller Sprint</dt><dd className="mt-1">{currentSprint?.name || task.sprintId || "ohne Sprint"}</dd></div>
                     </dl>
                     <label className="grid gap-1 text-xs font-semibold text-slate-500">
                       Sprint zuweisen
-                      <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-11 w-full text-sm" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
+                      <CustomSelect value={task.sprintId} disabled={pending || !assignmentChoices(task).some(option => !option.disabled)} onChange={(value) => onAssignSprint(task, value)} className="h-11 w-full text-sm" options={assignmentChoices(task)} />
                     </label>
                   </article>
                 );
               })}
-              {!visibleOtherTasks.length && <UiEmptyState className="m-4 md:col-span-2">{otherTasks.length ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</UiEmptyState>}
+              {!visibleOtherTasks.length && <UiEmptyState className="m-4 md:col-span-2">{assignment.page?.scopeTotal ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</UiEmptyState>}
             </div>
           )}
         >
@@ -277,17 +337,20 @@ export function SprintTaskTables({
                         <div className="mt-1 truncate text-xs text-slate-500">{task.workstream} · {task.priority} · {task.hours}h</div>
                       </DataCell>
                       <DataCell className="text-slate-700">{taskAssigneeLabel(task)}</DataCell>
-                      <DataCell className="text-slate-700">{currentSprint?.name || "ohne Sprint"}</DataCell>
+                      <DataCell className="text-slate-700">{currentSprint?.name || task.sprintId || "ohne Sprint"}</DataCell>
                       <DataCell>
-                        <CustomSelect value={task.sprintId} disabled={pending} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={data.sprints.map((item) => ({ value: item.id, label: item.name }))} />
+                        <CustomSelect value={task.sprintId} disabled={pending || !assignmentChoices(task).some(option => !option.disabled)} onChange={(value) => onAssignSprint(task, value)} className="h-8 w-56 text-xs" options={assignmentChoices(task)} />
                       </DataCell>
                     </DataRow>
                   );
                 })}
-                {!visibleOtherTasks.length && <DataEmptyRow colSpan={4}>{otherTasks.length ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</DataEmptyRow>}
+                {!visibleOtherTasks.length && <DataEmptyRow colSpan={4}>{assignment.page?.scopeTotal ? "Keine Aufgaben aus anderen Sprints für diese Filter." : "Noch keine Aufgaben aus anderen Sprints vorhanden."}</DataEmptyRow>}
               </tbody>
         </DataTableFrame>
       )}
+      {assignmentOpen && assignment.page?.continuation ? <UiButton type="button" variant="secondary" disabled={assignment.moreStatus === "loading"} onClick={() => {
+        void planningState.loadSprintCollection({ ...assignmentQuery, continuation: assignment.page?.continuation || null });
+      }}>{assignment.moreStatus === "loading" ? "Zuweisungskandidaten werden geladen." : assignment.moreStatus === "unavailable" ? "Weitere Zuweisungskandidaten erneut laden" : "Weitere Zuweisungskandidaten laden"}</UiButton> : null}
     </>
   );
 }

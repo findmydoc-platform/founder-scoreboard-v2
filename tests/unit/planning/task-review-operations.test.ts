@@ -90,3 +90,149 @@ test("a successful HTTP-style response without the real approval revision remain
 test("an unavailable unknown check does not present a previously cached Task as newly verified server data",async()=>{
  const {planning}=fixture({decideTaskReview:async()=>{throw new Error("Lost");},readTaskDetail:async()=>{throw new Error("Read unavailable");}});await planning.decideTaskReview(task,input);const id=planning.taskReviewOperations(task.id)[0].id;await planning.checkTaskReview(id);expect(planning.taskReviewOperations(task.id)[0]).toMatchObject({phase:"unconfirmed",readStatus:"unavailable",serverTask:null});
 });
+
+test("an opened Deliverable cannot submit a Review while its decision basis is unknown", async () => {
+  let writes = 0;
+  const { planning } = fixture({
+    readTaskReviewBasis: () => new Promise(() => {}),
+    decideTaskReview: async () => {
+      writes++;
+      return { task: { id: task.id, updatedAt: review.createdAt }, review };
+    },
+  });
+
+  await expect(planning.decideTaskReview(task, input)).resolves.toMatchObject({ ok: false });
+  expect(writes).toBe(0);
+  expect(planning.taskDetail(task.id).task?.reviewStatus).toBe("requested");
+});
+
+const basisTime = Date.parse("2026-10-28T10:00:30Z");
+function reviewBasis(overrides: Partial<import("@/features/reviews/model/deliverable-review-basis").DeliverableReviewBasis> = {}) {
+  return {
+    taskId: task.id, taskUpdatedAt: task.updatedAt!, sourceRevision: "review-source-1",
+    evaluatedAt: new Date(basisTime).toISOString(), validUntil: new Date(basisTime + 60_000).toISOString(),
+    readAuthority: { userId: "user", deadline: basisTime + 60_000 },
+    readActor: { profileId: "reviewer", platformRole: "ceo" as const },
+    evidence: { status: "present" as const, hasException: false, links: [{ taskId: task.id, title: "Original", url: "https://example.com/review-evidence", kind: "evidence" as const }], exceptionNote: null }, sprintLock: { sprintId: null, locked: false },
+    decision: { status: "allowed" as const, token: "verified-review-token" }, ...overrides,
+  };
+}
+function scopedReviewOwner(adapter: Partial<PlanningStateAdapter>) {
+  const profile = { id: "reviewer", name: "Review Owner", platformRole: "ceo" as const, orgRole: "CEO", githubLogin: "", weeklyCapacity: 40 };
+  return createPlanningState({
+    userId: "user", initialSession: { userId: "user", user: { id: "user" }, revision: "session-1", expiresAt: (basisTime + 120_000) / 1000 },
+    initialCurrentProfile: profile, initialData: { ...emptyPlanningShellState, tasks: [task] },
+    adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null, now: () => basisTime, ...adapter },
+  });
+}
+
+test("the opened Deliverable can submit from a scoped basis without opening unrelated Reviews", async () => {
+  const reads: string[] = [], writes: string[] = [];
+  const owner = scopedReviewOwner({
+    readTaskReviewBasis: async id => { reads.push(id); return reviewBasis(); },
+    readWorkspace: async () => { throw new Error("Unrelated Review collection unavailable"); },
+    decideTaskReview: async (_, __, token) => {
+      if (token) writes.push(token);
+      return { task: { id: task.id, reviewStatus: "accepted", updatedAt: review.createdAt }, review };
+    },
+  });
+
+  try {
+    await expect(owner.planning.loadTaskReviewBasis(task.id)).resolves.toBe(true);
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({
+      readStatus: "current", evidence: { status: "present", hasException: false, links: [{ taskId: task.id, title: "Original", url: "https://example.com/review-evidence", kind: "evidence" }], exceptionNote: null }, sprintLock: { sprintId: null, locked: false },
+    });
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ ok: true });
+    expect(reads).toEqual([task.id]);
+    expect(writes).toEqual(["verified-review-token"]);
+    expect(owner.planning.taskReviewBasis(task.id)?.readStatus).toBe("stale");
+    expect(JSON.stringify(owner.planning.protectedCache())).not.toContain(writes[0]);
+  } finally { owner.internal.dispose(); }
+});
+
+test("the original Review deadline expires even while the session and source remain unchanged", async () => {
+  let now = basisTime;
+  const owner = scopedReviewOwner({
+    now: () => now,
+    readTaskReviewBasis: async () => reviewBasis({ readAuthority: { userId: "user", deadline: basisTime + 1 } }),
+    decideTaskReview: async () => { throw new Error("Expired basis must not be sent"); },
+  });
+  try {
+    await expect(owner.planning.loadTaskReviewBasis(task.id)).resolves.toBe(true);
+    now += 1;
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ code: "review_basis_required" });
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "stale" });
+  } finally { owner.internal.dispose(); }
+});
+
+test("a denied Review basis leaves the independent Deliverable detail readable", async () => {
+  const owner = scopedReviewOwner({ readTaskReviewBasis: async () => { throw Object.assign(new Error("Review denied"), { status: 403 }); } });
+  try {
+    await expect(owner.planning.loadTaskReviewBasis(task.id)).resolves.toBe(false);
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "forbidden" });
+    expect(owner.planning.taskDetail(task.id).task?.title).toBe("Original");
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ code: "review_basis_required" });
+  } finally { owner.internal.dispose(); }
+});
+
+test("a Review result started before a confirmed evidence edit cannot authorize the decision", async () => {
+  const basis = deferred<ReturnType<typeof reviewBasis>>();
+  const reached = deferred<void>();
+  const owner = scopedReviewOwner({
+    readTaskReviewBasis: () => { reached.resolve(); return basis.promise; },
+    saveTask: async (_, patch) => ({ task: { ...patch, id: task.id, updatedAt: review.createdAt } }),
+  });
+  try {
+    const loading = owner.planning.loadTaskReviewBasis(task.id);
+    await reached.promise;
+    await expect(owner.planning.saveTask(task, { evidenceLinks: ["https://example.com/updated-evidence"] })).resolves.toMatchObject({ ok: true });
+    basis.resolve(reviewBasis());
+    await expect(loading).resolves.toBe(false);
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "stale" });
+    expect(owner.planning.taskDetail(task.id).task?.evidenceLinks).toEqual(["https://example.com/updated-evidence"]);
+  } finally { owner.internal.dispose(); }
+});
+
+test("a held Review basis from a replaced session cannot republish protected decision data", async () => {
+  const basis = deferred<ReturnType<typeof reviewBasis>>();
+  const reached = deferred<void>();
+  const owner = scopedReviewOwner({ readTaskReviewBasis: () => { reached.resolve(); return basis.promise; } });
+  try {
+    const loading = owner.planning.loadTaskReviewBasis(task.id);
+    await reached.promise;
+    owner.internal.bindSession({ userId: "user", user: { id: "user" }, revision: "session-2", expiresAt: (basisTime + 120_000) / 1000 });
+    basis.resolve(reviewBasis());
+    await expect(loading).resolves.toBe(false);
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "not-loaded" });
+  } finally { owner.internal.dispose(); }
+});
+
+test("the Owner rejects a Review receipt for a different Actor with the same browser session", async () => {
+  const owner = scopedReviewOwner({
+    readTaskReviewBasis: async () => reviewBasis({ readActor: { profileId: "different-reviewer", platformRole: "ceo" } }),
+  });
+  try {
+    await expect(owner.planning.loadTaskReviewBasis(task.id)).resolves.toBe(false);
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "unavailable" });
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ code: "review_basis_required" });
+  } finally { owner.internal.dispose(); }
+});
+
+test("a server-side stale Review reply invalidates the button basis and keeps the submitted decision explicit", async () => {
+  let writes = 0;
+  const owner = scopedReviewOwner({
+    readTaskReviewBasis: async () => reviewBasis(),
+    decideTaskReview: async () => {
+      writes++;
+      throw Object.assign(new Error("Review source changed"), { status: 409, code: "stale_review_basis" });
+    },
+  });
+  try {
+    await expect(owner.planning.loadTaskReviewBasis(task.id)).resolves.toBe(true);
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ kind: "rejected", status: 409 });
+    expect(owner.planning.taskReviewOperations(task.id)[0]).toMatchObject({ phase: "rejected", submitted: { command: { kind: "decision", input } } });
+    expect(owner.planning.taskReviewBasis(task.id)).toEqual({ readStatus: "stale" });
+    await expect(owner.planning.decideTaskReview(task, input)).resolves.toMatchObject({ code: "review_basis_required" });
+    expect(writes).toBe(1);
+  } finally { owner.internal.dispose(); }
+});

@@ -210,8 +210,13 @@ export function updateNotificationStatusRequest(apiClient: BrowserApiClient, eve
   });
 }
 
-export function lockSprintRequest(apiClient: BrowserApiClient, sprintId: string, payload: unknown) {
-  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockReceipt> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`, { method: "POST", json: payload });
+export function lockSprintRequest(
+  apiClient: BrowserApiClient,
+  sprintId: string,
+  payload: unknown,
+  expectedSession?: Pick<import("@/lib/credentials/browser").BrowserSessionSnapshot, "userId" | "revision">,
+) {
+  return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockReceipt> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`, { method: "POST", json: payload, expectedSession, replayInvalidSession: !expectedSession });
 }
 export function requestSprintLock(apiClient: BrowserApiClient, sprintId: string) {
   return apiClient.requestJson<Partial<import("@/features/sprint/model/sprint-lock").SprintLockObservation> & { error?: string; code?: string }>(`/api/sprints/${sprintId}/lock`);

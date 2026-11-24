@@ -30,7 +30,7 @@ function matchesAttention(row: SprintScoreRow, attention: SprintScoreAttentionFi
   return row.openScore > 0 || row.openScoreObjections > 0;
 }
 
-export function buildSprintScoreTableViewModel(rows: SprintScoreRow[], filters: SprintScoreTableFilters) {
+export function buildSprintScoreTableViewModel(rows: readonly SprintScoreRow[], filters: SprintScoreTableFilters) {
   const query = filters.query.trim().toLocaleLowerCase("de");
   const direction = filters.direction === "desc" ? -1 : 1;
   const visibleRows = rows

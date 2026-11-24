@@ -22,32 +22,55 @@ export const reviewChecklistItems = [
   ["blockerHandled", "Blocker/Abhängigkeiten sauber geklärt", "2,5 Punkte"],
 ] as const;
 
-export function buildSprintScoreViewModel({
-  data,
-  selectedSprintId,
-  coverage,
-}: {
-  data: PlanningShellState;
-  selectedSprintId: string;
-  coverage?: SprintReadCoverage;
-}) {
+export function buildSprintWorkspaceViewModel({ data, selectedSprintId }: { data: PlanningShellState; selectedSprintId: string }) {
   const currentSprint = findCurrentSprint(data.sprints);
   const sprint = data.sprints.find((item) => item.id === selectedSprintId) || currentSprint || data.sprints[0];
   const sprintTasks = sprint ? data.tasks.filter((task) => task.sprintId === sprint.id) : data.tasks;
   const otherTasks = sprint ? data.tasks.filter((task) => task.sprintId !== sprint.id) : [];
   const unassignedTasks = data.tasks.filter((task) => !task.sprintId);
+  const reviewTasks = sprintTasks.filter((task) => task.reviewStatus !== "not_requested" || task.status === "Review");
+  const meetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id).sort((a, b) => a.meetingAt.localeCompare(b.meetingAt)) : [];
+  const meeting = meetings[0];
+  const finalScores = sprintTasks.filter((task) => task.scoreFinal).length;
+  const openScores = sprintTasks.filter((task) => !task.scoreFinal).length;
+  const sprintHasTasks = sprintTasks.length > 0;
+  const sprintIsCurrent = currentSprint?.id === sprint?.id;
+
+  return {
+    currentSprint,
+    sprint,
+    sprintTasks,
+    otherTasks,
+    unassignedTasks,
+    reviewTasks,
+    meeting,
+    meetings,
+    finalScores,
+    openScores,
+    sprintHasTasks,
+    sprintIsCurrent,
+  };
+}
+
+export function buildSprintScoreViewModel({ data, selectedSprintId, coverage }: {
+  data: PlanningShellState;
+  selectedSprintId: string;
+  coverage?: SprintReadCoverage;
+}) {
+  const workspace = buildSprintWorkspaceViewModel({ data, selectedSprintId });
+  const { sprint, sprintTasks } = workspace;
+  const meetings = sprint ? data.meetings.filter(item => item.sprintId === sprint.id) : [];
   const scoreRows = data.profiles.map((profile: Profile) => {
     const row = founderScore(sprintTasks, profile);
     const profileTasks = sprintTasks.filter((task) => taskBelongsToProfile(task, profile));
     const commitment = data.sprintCommitments.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
-    const sprintMeetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id) : [];
     const persistedScore = data.founderSprintScores.find((item) => item.sprintId === sprint?.id && item.profileId === profile.id);
     const canCompute = !coverage || ["items", "commitments", "meetings", "attendance", "scores", "objections"].every(key => coverage[key as keyof SprintReadCoverage] === "complete");
     const computedScore = canCompute ? computeFounderSprintScore({
       profile,
       tasks: sprintTasks,
       commitment,
-      meetings: sprintMeetings,
+      meetings,
       meetingAttendance: data.meetingAttendance,
     }) : null;
     const strikeState = data.founderStrikeStates.find((item) => item.profileId === profile.id);
@@ -70,27 +93,5 @@ export function buildSprintScoreViewModel({
       openScoreObjections: data.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.profileId === profile.id && item.status === "open").length,
     };
   });
-  const reviewTasks = sprintTasks.filter((task) => task.reviewStatus !== "not_requested" || task.status === "Review");
-  const meetings = sprint ? data.meetings.filter((item) => item.sprintId === sprint.id).sort((a, b) => a.meetingAt.localeCompare(b.meetingAt)) : [];
-  const meeting = meetings[0];
-  const finalScores = sprintTasks.filter((task) => task.scoreFinal).length;
-  const openScores = sprintTasks.filter((task) => !task.scoreFinal).length;
-  const sprintHasTasks = sprintTasks.length > 0;
-  const sprintIsCurrent = currentSprint?.id === sprint?.id;
-
-  return {
-    currentSprint,
-    sprint,
-    sprintTasks,
-    otherTasks,
-    unassignedTasks,
-    scoreRows,
-    reviewTasks,
-    meeting,
-    meetings,
-    finalScores,
-    openScores,
-    sprintHasTasks,
-    sprintIsCurrent,
-  };
+  return { ...workspace, scoreRows };
 }

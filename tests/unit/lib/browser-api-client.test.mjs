@@ -338,3 +338,24 @@ test("bound JSON rejects a recovered session that ended while recovery was held"
  let finish;const port=sessionPort();port.recover=()=>new Promise(resolve=>{finish=resolve;});port.isCurrent=()=>false;const api=browserApiModule.createBrowserApiClient({sessionPort:port});const fetch=vi.fn().mockResolvedValue(jsonResponse({code:"session_invalid_before_effect"},401));globalThis.fetch=fetch;
  let alive=true;port.isCurrent=()=>alive;const writing=api.requestJson("/api/tasks/task-1/sync-github",{method:"POST",json:{createIfMissing:false},expectedSession:{userId:"user-a",revision:"current-token"}});await vi.waitFor(()=>assert.equal(typeof finish,"function"));alive=false;finish({kind:"refreshed",session:{userId:"user-a",revision:"refreshed-token"}});const result=await writing;assert.equal(result.response.status,409);assert.equal(result.body.code,"session_superseded");assert.equal(fetch.mock.calls.length,1);
 });
+
+test("an explicitly bound completion mutation is not replayed after a before-effect session rejection", async () => {
+  const expiresAt = Math.floor(Date.now() / 1000) + 120;
+  const session = sessionPort({
+    snapshot: { revision: "original-session", userId: "user-a", expiresAt },
+    recovery: { kind: "refreshed", session: { revision: "new-session", userId: "user-a", expiresAt } },
+  });
+  const apiClient = browserApiModule.createBrowserApiClient({ sessionPort: session });
+  globalThis.fetch = vi.fn()
+    .mockResolvedValueOnce(jsonResponse({ code: "session_invalid_before_effect" }, 401))
+    .mockResolvedValueOnce(jsonResponse({ sprint: { id: "sprint", status: "closed", scoreLocked: true } }));
+  const result = await apiClient.requestJson("/api/sprints/sprint/lock", {
+    method: "POST",
+    json: { completionBasis: "original-basis" },
+    expectedSession: { userId: "user-a", revision: "original-session" },
+    replayInvalidSession: false,
+  });
+  assert.equal(result.response.status, 401);
+  assert.equal(globalThis.fetch.mock.calls.length, 1);
+  assert.equal(session.recover.mock.calls.length, 0);
+});

@@ -13,6 +13,7 @@ import {
   parseEvidenceUrl,
 } from "@/features/tasks/model/task-evidence-links";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
+import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { SubIssueEvidenceSection } from "@/features/tasks/molecules/sub-issue-evidence-section";
 import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { taskMentionFieldTargetIds } from "@/features/tasks/model/task-comment-target";
@@ -218,7 +219,38 @@ function EvidenceGroups({
   );
 }
 
+type VerifiedReviewEvidence = NonNullable<import("@/features/reviews/model/planning-task-review").TaskReviewBasisView["evidence"]>;
+
+function VerifiedReviewLinks({ evidence, taskId, onOpenTask }: { evidence: VerifiedReviewEvidence; taskId: string; onOpenTask?: (id: string) => void }) {
+  const groups = new Map<string, { title: string; links: Map<string, LinkedPullRequest | undefined> }>();
+  for (const link of evidence.links) {
+    const group = groups.get(link.taskId) ?? { title: link.taskId === taskId ? "Dieses Deliverable" : link.title, links: new Map() };
+    group.links.set(link.url, link.pullRequest ?? group.links.get(link.url));
+    groups.set(link.taskId, group);
+  }
+  return groups.size ? (
+    <div className="mt-3 grid gap-4">
+      {[...groups].map(([id, group]) => {
+        const urls = [], pullRequests = [];
+        for (const [url, pullRequest] of group.links) {
+          if (pullRequest) pullRequests.push(pullRequest);
+          else urls.push(url);
+        }
+        return <div key={id} className="grid gap-2">
+          <h4 className="break-words text-sm font-medium text-slate-600">
+            {id === taskId ? group.title : <TaskReferenceLink task={{ id, title: group.title }} onOpenTask={onOpenTask} prefetch={false} showIcon={false} />}
+          </h4>
+          {urls.length ? <EvidenceLinksList links={urls} /> : null}
+          {pullRequests.length ? <LinkedPullRequestsList pullRequests={pullRequests} /> : null}
+        </div>;
+      })}
+    </div>
+  ) : <p className="mt-2 text-sm text-slate-500">Keine Nachweis-Links hinterlegt.</p>;
+}
+
 function ReviewEvidenceSection({
+  taskId,
+  verifiedEvidence,
   referenceContext,
   evidenceLinks,
   evidenceRequired,
@@ -226,6 +258,8 @@ function ReviewEvidenceSection({
   inherited,
   onOpenTask,
 }: {
+  taskId: string;
+  verifiedEvidence?: VerifiedReviewEvidence;
   referenceContext: GitHubBriefReferenceContext;
   evidenceLinks: string[];
   evidenceRequired: string;
@@ -243,7 +277,8 @@ function ReviewEvidenceSection({
       <h3 className="text-sm font-semibold text-slate-950">Nachweis</h3>
       <div className="mt-2 text-[15px] leading-7 text-slate-700">
         <p><TaskBriefText value={evidenceRequired.trim() || "Kein erwarteter Nachweis hinterlegt."} context={referenceContext} /></p>
-        <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />
+        {verifiedEvidence ? <VerifiedReviewLinks evidence={verifiedEvidence} taskId={taskId} onOpenTask={onOpenTask} />
+          : <EvidenceGroups evidenceLinks={evidenceLinks} linkedPullRequests={linkedPullRequests} inherited={inherited} onOpenTask={onOpenTask} />}
       </div>
     </section>
   );
@@ -253,6 +288,7 @@ type Props = {
   task: Task;
   subIssues?: Task[];
   subIssueMembershipComplete?: boolean;
+  verifiedReviewEvidence?: VerifiedReviewEvidence;
   onOpenTask?: (id: string) => void;
   profiles: Profile[];
   baseline: TaskOverviewDraft;
@@ -278,6 +314,7 @@ export function TaskOverviewPanel({
   task,
   subIssues = [],
   subIssueMembershipComplete = true,
+  verifiedReviewEvidence,
   onOpenTask,
   profiles,
   baseline,
@@ -651,6 +688,8 @@ export function TaskOverviewPanel({
               />
               {flatReadOnly ? (
                 <ReviewEvidenceSection
+                  taskId={task.id}
+                  verifiedEvidence={verifiedReviewEvidence}
                   referenceContext={{ githubRepo: task.githubRepo }}
                   key={task.id}
                   evidenceLinks={evidenceLinks}

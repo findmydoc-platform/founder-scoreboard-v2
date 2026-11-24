@@ -884,6 +884,9 @@ function WorkweekGuide({ apiClient }: { apiClient: BrowserApiClient }) {
   </>;
 }
 
+// Tour preparation waits up to eight seconds for a visible target before reporting an error.
+const workweekTourReadiness = { timeout: 8_000 };
+
 export const GuidesValidityAndPublicationInsideTheOwnerEditor: Story = {
   args: { profile, apiClient: client({ immediateAllowed: true }) },
   render: ({ apiClient }) => <WorkweekGuide apiClient={apiClient} />,
@@ -891,7 +894,7 @@ export const GuidesValidityAndPublicationInsideTheOwnerEditor: Story = {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(await page.findByRole("button", { name: "Arbeitswoche kennenlernen" }));
     const editor = await page.findByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" });
-    const guide = await page.findByRole("dialog", { name: "Woche auswählen" });
+    const guide = await page.findByRole("dialog", { name: "Woche auswählen" }, workweekTourReadiness);
     await expect(editor.contains(guide)).toBe(true);
     await waitFor(() => expect(within(guide).getByRole("button", { name: "Tour schließen" })).toBeVisible());
     await userEvent.click(within(guide).getByRole("button", { name: "Weiter" }));
@@ -923,7 +926,7 @@ export const StartsTheWorkweekGuideFromTheProductGallery: Story = {
     await userEvent.click(page.getByRole("button", { name: "Neuerungen öffnen" }));
     await expect(await page.findByRole("dialog", { name: "Arbeitswochen auswählen und geplante Zeiten ändern" })).toBeVisible();
     await userEvent.click(page.getByRole("button", { name: "Lass dich leiten" }));
-    const guide = await page.findByRole("dialog", { name: "Woche auswählen" });
+    const guide = await page.findByRole("dialog", { name: "Woche auswählen" }, workweekTourReadiness);
     await expect(page.getByRole("dialog", { name: "Meine Arbeitswoche bearbeiten" }).contains(guide)).toBe(true);
     await userEvent.click(within(guide).getByRole("button", { name: "Tour schließen" }));
     await waitFor(() => expect(page.getByRole("button", { name: "Editor schließen" })).toHaveFocus());

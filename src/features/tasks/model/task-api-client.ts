@@ -196,6 +196,11 @@ export function reportTaskBlockerRequest(apiClient: BrowserApiClient, taskId: st
   });
 }
 
+export function requestTaskReviewBasis(apiClient: BrowserApiClient, taskId: string, signal: AbortSignal) {
+  return apiClient.requestJson<{ basis?: import("@/features/reviews/model/deliverable-review-basis").DeliverableReviewBasis; error?: string }>(
+    `/api/tasks/${encodeURIComponent(taskId)}/review`, { signal, useDevProfileOverride: false });
+}
+
 export function reviewTaskRequest(apiClient: BrowserApiClient, taskId: string, payload: unknown) {
   return apiClient.requestJson<{ error?: string; code?: string; conflictReason?: "revision"; activities?: TaskActivity[]; review?: TaskReview; task?: Partial<Task> }>(`/api/tasks/${taskId}/review`, {
     method: "POST",

@@ -196,10 +196,24 @@ beforeAll(async () => {
     if (url.pathname === "/rest/v1/rpc/planning_workspace_snapshot") {
       send({ ...planningProject, scope_revision: "synthetic-planning-revision", active_task_count: itemPageFixture ? 1 : 0, latest_updated_at: itemPageFixture ? "2026-11-01T12:00:00Z" : null }); return;
     }
-    if (url.pathname === "/rest/v1/platform_releases") {
+    if (["/rest/v1/platform_releases", "/rest/v1/rpc/platform_release_document_snapshot"].includes(url.pathname)) {
       const summary = loginUser === userA ? "Synthetic previous account release" : "Synthetic replacement release";
       const manifest = { schemaVersion: 2, version: "v1.0.0", summary, highlights: [], changes: [], components: [], visuals: [], publishedAt: "2026-10-01T00:00:00Z" };
-      send([{ version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest }]); return;
+      const release = { version: "v1.0.0", summary, published_at: manifest.publishedAt, manifest_digest: "synthetic", manifest };
+      if (url.pathname.startsWith("/rest/v1/rpc/")) {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString());
+        if (!mapped || request.headers.authorization !== "Bearer synthetic-service" || ![userA, userB].includes(body.p_user_id)
+          || body.p_profile_id !== "synthetic-profile" || body.p_platform_role !== role) {
+          send({ status: "forbidden" });
+          return;
+        }
+        send({ status: "ready", release: body.p_version === release.version ? release : null, notification: null });
+        return;
+      }
+      send([release]);
+      return;
     }
     if (itemPageFixture && url.pathname === "/rest/v1/active_tasks") {
       const id = url.searchParams.get("id");

@@ -5,7 +5,7 @@ import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-comm
 import type { PlanningReadStatus, PlanningTaskSaveCheck } from "../planning-state";
 import { reviewDecisionTaskState } from "@/features/reviews/model/task-review-state";
 
-type Dependencies = { adapter:TaskReviewAdapter; current():PlanningShellState; active():boolean; generation():number; changed():void; nextSequence():number; canRead(id:string):boolean; dependencyPending(task:Task):boolean; accept(receipt:TaskReviewReceipt,task:Task,started:number,command:TaskReviewSubmission):void; refresh(id:string,after:number):Promise<PlanningReadStatus>; invalidate():void };
+type Dependencies = { adapter:TaskReviewAdapter; current():PlanningShellState; active():boolean; generation():number; changed():void; nextSequence():number; canRead(id:string):boolean; dependencyPending(task:Task):boolean; decisionBasis(task:Task): string | undefined; invalidateBasis(taskId:string, denied?:boolean):void; accept(receipt:TaskReviewReceipt,task:Task,started:number,command:TaskReviewSubmission):void; refresh(id:string,after:number):Promise<PlanningReadStatus>; invalidate():void };
 export function createTaskReviewOperations(deps:Dependencies) {
  const operations=new Map<string,TaskReviewOperation>();
  const checks=new Map<string,Promise<PlanningTaskSaveCheck>>();
@@ -38,9 +38,14 @@ export function createTaskReviewOperations(deps:Dependencies) {
   const current=deps.current().tasks.find(row=>row.id===task.id);
   if(!current)return reject("rejected","Diese Aufgabe ist nicht verfügbar.",404);
   if(command.kind==="approval"?current.approvalRevision!==task.approvalRevision:!task.updatedAt||current.updatedAt!==task.updatedAt)return reject("versionConflict","Aufgabe wurde zwischenzeitlich geändert. Bitte den aktuellen Stand prüfen.",409);
+  const decisionBasis = command.kind === "decision" && deps.adapter.readTaskReviewBasis ? deps.decisionBasis(task) : undefined;
+  if (command.kind === "decision" && deps.adapter.readTaskReviewBasis && !decisionBasis) {
+   operations.delete(operation.id);
+   return { ok: false, kind: "rejected", code: "review_basis_required", error: "Prüfe zuerst die aktuelle Grundlage für dieses Review." };
+  }
   const generation=deps.generation(),authority=authorityEpochs.get(task.id)||0,started=deps.nextSequence(); starts.set(operation.id,started); deps.changed();
   try {
-   const receipt=await (command.kind==="approval"?deps.adapter.decideTaskApproval?.(structuredClone(task),command.action,command.note):command.kind==="request"?deps.adapter.requestTaskReview?.(structuredClone(task),structuredClone(command.input)):command.kind==="decision"?deps.adapter.decideTaskReview?.(structuredClone(task),structuredClone(command.input)):command.kind==="withdraw"?deps.adapter.withdrawTaskReview?.(structuredClone(task),command.reason):deps.adapter.reopenTaskReview?.(structuredClone(task),structuredClone(command.input)));
+   const receipt=await (command.kind==="approval"?deps.adapter.decideTaskApproval?.(structuredClone(task),command.action,command.note):command.kind==="request"?deps.adapter.requestTaskReview?.(structuredClone(task),structuredClone(command.input)):command.kind==="decision"?deps.adapter.decideTaskReview?.(structuredClone(task),structuredClone(command.input),decisionBasis):command.kind==="withdraw"?deps.adapter.withdrawTaskReview?.(structuredClone(task),command.reason):deps.adapter.reopenTaskReview?.(structuredClone(task),structuredClone(command.input)));
    if(!allowed(task.id)||generation!==deps.generation()||authority!==(authorityEpochs.get(task.id)||0))return {ok:false,kind:"sessionSuperseded",error:"Die Sitzung oder Berechtigung wurde ersetzt."};
    if(!receipt?.task.updatedAt||receipt.task.id&&receipt.task.id!==task.id||command.kind==="approval"&&(!Number.isInteger(receipt.task.approvalRevision)||!receipt.task.approvalStatus)||command.kind==="decision"&&(!receipt.review||!Number.isInteger(receipt.review.id)||receipt.review.id<=0||receipt.review.taskId!==task.id||!receipt.review.createdAt))throw new Error("Die Entscheidung ist noch nicht vollständig bestätigt.");
    deps.accept(receipt,task,started,command);operation.phase="confirmed";
@@ -50,6 +55,9 @@ export function createTaskReviewOperations(deps:Dependencies) {
    if(!allowed(task.id)||generation!==deps.generation()||authority!==(authorityEpochs.get(task.id)||0))return {ok:false,kind:"sessionSuperseded",error:"Die Sitzung oder Berechtigung wurde ersetzt."};
    const failure=error&&typeof error==="object"?error as {status?:number;kind?:string;code?:string}:{};
    const kind=failure.kind==="versionConflict"?"versionConflict":failure.status&&failure.status<500?"rejected":"unconfirmed";
+   if (command.kind === "decision" && (kind === "unconfirmed" || kind === "versionConflict" || failure.status === 403 || failure.code === "stale_review_basis")) {
+    deps.invalidateBasis(task.id, failure.status === 403);
+   }
    const result=reject(kind,error instanceof Error?error.message:"Entscheidung konnte nicht gespeichert werden.",failure.status);
    if(kind==="unconfirmed")deps.invalidate();
    if(kind==="versionConflict"&&command.kind!=="request")void check(operation.id);

@@ -113,7 +113,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   loadBacklogSelection(query: import("@/features/backlog/model/backlog-selection").BacklogSelectionQuery, options?: { immediate?: boolean; signal?: AbortSignal; refresh?: boolean; append?: boolean }): Promise<boolean>;
   backlog(): { parentMembershipCompleteIds: readonly string[]; invalidationEpoch: number; orphanReadStatus: Record<import("@/features/backlog/model/backlog-selection").BacklogOrphanSection, PlanningReadStatus>; supportReadStatus: { controls: PlanningReadStatus; sprints: PlanningReadStatus }; model: import("@/features/backlog/model/backlog-read-model").BacklogModel; readStatus: PlanningReadStatus };
   sprintCommitmentEdits(sprintId: string, profileId: string): readonly import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditView[];
-  resumeSprintCommitmentEdit(sprintId: string, profileId: string): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
+  resumeSprintCommitmentEdit(sprintId: string, profileId: string, includeHoursDraft?: boolean): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor | null;
   scoreObjectionScore(sprintId: string, profileId: string): { score: import("@/lib/types").FounderSprintScore | null; complete: boolean };
   beginScoreObjectionCreation(sprintId: string, profileId: string): import("@/features/sprint/model/score-objection-state").ScoreObjectionCreationEditor;
   resumeScoreObjectionCreation(id: string): import("@/features/sprint/model/score-objection-state").ScoreObjectionCreationEditor | null;
@@ -121,7 +121,7 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   scoreObjectionOperations(sprintId: string): readonly import("@/features/sprint/model/score-objection-state").ScoreObjectionOperation[];
   beginScoreObjectionReview(shown: import("@/lib/types").ScoreObjection, score: import("@/lib/types").FounderSprintScore | null): import("@/features/sprint/model/score-objection-state").ScoreObjectionEditor;
   beginSprintCommitmentEdit(shown: import("@/lib/types").SprintCommitment): import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentEditor;
-  beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[]): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
+  beginSprintLock(sprint: import("@/lib/types").Sprint, tasks: readonly Task[], completionRevision?: number): import("@/features/sprint/model/sprint-lock").SprintLockEditor;
   sprintLocks(sprintId: string): readonly import("@/features/sprint/model/sprint-lock").SprintLockView[];
   resumeSprintLock(sprintId: string): import("@/features/sprint/model/sprint-lock").SprintLockEditor | null;
 
@@ -133,6 +133,17 @@ export interface PlanningState extends PlanningCandidateAccess, PlanningHierarch
   reviewWindow(): import("@/features/sprint/model/review-window-editing").ReviewWindowView;
   resumeReviewWindowEdit(): import("@/features/sprint/model/review-window-editing").ReviewWindowEditor | null;
   beginReviewWindowEdit(displayedHours: number): import("@/features/sprint/model/review-window-editing").ReviewWindowEditor;
+  cancelSprintCollection(query: import("@/features/sprint/model/sprint-scoped-read").SprintScopedQuery): void;
+  selectedSprintScope(): import("./internal/sprint-collection-reads").SprintCollectionView | null;
+  sprintCollection(query: import("@/features/sprint/model/sprint-scoped-read").SprintScopedQuery): import("./internal/sprint-collection-reads").SprintCollectionView;
+  loadSprintCollection(query: import("@/features/sprint/model/sprint-scoped-read").SprintScopedQuery): Promise<boolean>;
+  loadSharedSprintSearch(query: import("@/features/sprint/model/sprint-scoped-read").SprintScopedQuery): Promise<boolean>;
+  sprintCompletion(sprintId: string): import("./internal/sprint-completion-state").SprintCompletionView | undefined;
+  loadSprintCompletion(sprintId: string, options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  checkSprintCompletion(sprintId: string, options?: { signal?: AbortSignal }): Promise<boolean>;
+  sprintAssessment(sprintId: string): import("./internal/sprint-assessment-state").SprintAssessmentView;
+  loadSprintAssessment(sprintId: string, options?: { signal?: AbortSignal; refresh?: boolean }): Promise<boolean>;
+  checkSprintAssessment(sprintId: string, options?: { signal?: AbortSignal }): Promise<boolean>;
   sprintWorkspace(): { model: import("@/features/sprint/model/sprint-read-model").SprintWorkspaceModel & { coverage: import("@/features/sprint/model/sprint-read-model").SprintReadCoverage }; readStatus: PlanningReadStatus };
   checkSprintSave(sprintId: string): Promise<PlanningTaskSaveCheck>;
   sprintEdits(sprintId: string): readonly import("@/features/sprint/model/sprint-editing").SprintEditorView[];

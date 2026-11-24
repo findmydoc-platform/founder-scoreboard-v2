@@ -5,17 +5,38 @@ import { platformReleaseSeed } from "@/features/platform-releases/model/platform
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 
+const detailPath = "src/app/team/platform-releases/[version]/page.tsx";
+
 test.each([
-  { detail: true, path: "src/app/team/platform-releases/[version]/page.tsx" },
-  { detail: false, path: "src/app/team/platform-releases/page.tsx" },
-])("the Release SSR entry has usable content without observing Planning matching ($path)", async ({ detail, path }) => {
+  { name: "snapshot", detail: true },
+  { name: "missing RPC", detail: true, fallback: true, rpc: { code: "PGRST202" }, http: 404 },
+  { name: "ambiguous recipient rows", detail: true, fallback: true, rpc: { status: "legacy-required" } },
+  { name: "provider unavailable", detail: true, unavailable: true, rpc: { code: "unavailable" }, http: 503 },
+  { name: "unclassified absence", detail: true, unavailable: true, rpc: { code: "other" }, http: 404 },
+  { name: "authorization denied", detail: true, unavailable: true, rpc: { status: "forbidden" } },
+  { name: "role rebound after read", detail: true, unavailable: true, rebind: true },
+  { name: "archive", detail: false },
+])("the Release SSR entry preserves the protected content contract ($name)", async ({ detail, fallback, rpc, http, unavailable, rebind }) => {
+  const path = detail ? detailPath : "src/app/team/platform-releases/page.tsx";
   const release = platformReleaseSeed[0];
   const protocol = administratorProtocol({ role: "viewer" });
   const authFetch = globalThis.fetch;
   const queries = [];
+  const snapshots = [];
+  const notifications = [];
   const matching = [];
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
+    if (url.pathname === "/rest/v1/rpc/platform_release_document_snapshot") {
+      snapshots.push(await request.json());
+      if (rebind) protocol.state.role = "founder";
+      if (rpc) return Response.json(rpc, { status: http || 200 });
+      return Response.json({
+        status: "ready",
+        release: { version: release.version, summary: release.summary, published_at: release.publishedAt, manifest_digest: release.manifestDigest, manifest: release.manifest },
+        notification: { id: 17, entity_id: release.version, seen_at: null },
+      });
+    }
     if (!url.pathname.startsWith("/rest/v1/") || url.pathname.startsWith("/rest/v1/rpc/")) return authFetch(request);
     const table = url.pathname.split("/").at(-1);
     if (table === "platform_releases") {
@@ -27,29 +48,44 @@ test.each([
       matching.push(table);
       return Response.json({ message: "Planning matches unavailable" }, { status: 400 });
     }
-    if (["notification_events", "profiles", "fmd_tools", "founder_events"].includes(table)) return Response.json([], { headers: { "content-range": "*/0" } });
+    if (table === "notification_events") {
+      notifications.push(url.searchParams);
+      return Response.json([{ id: 17, entity_id: release.version, seen_at: null }]);
+    }
+    if (["profiles", "fmd_tools", "founder_events"].includes(table)) return Response.json([], { headers: { "content-range": "*/0" } });
     return authFetch(request);
   });
   const page = await importTestModule(path, {
     "server-only": {}, "next/headers": { cookies: async () => protocol.cookieJar(), headers: async () => new Headers() },
     "next/cache": { unstable_cache: load => load },
-    "next/navigation": { notFound: () => { throw new Error("Unexpected not found"); }, redirect: () => {} },
+    "next/navigation": { notFound: () => { throw new Error("Release not found"); }, redirect: () => {} },
     "@/features/planning/PlanningApp": { PlanningApp: () => null },
     "@/features/platform-releases/templates/platform-releases-shell": { PlatformReleasesShell: () => null },
     "@/features/platform-releases/organisms/platform-release-archive": { PlatformReleaseArchive: () => null },
     "@/features/platform-releases/organisms/platform-release-detail": { PlatformReleaseDetail: () => null },
     "@/features/platform-releases/organisms/platform-release-owned-detail": { PlatformReleaseOwnedDetail: () => null },
   });
-  const result = await page.default({ params: Promise.resolve({ version: release.version }), searchParams: Promise.resolve({ technical: "open" }) });
-  const child = result.props.children;
-  const content = detail ? child.props.release : child.props.releases[0];
-  expect(content).toMatchObject({ version: release.version, summary: release.summary });
-  expect(content).not.toHaveProperty("planningReferences");
+  const result = page.default({ params: Promise.resolve({ version: release.version }), searchParams: Promise.resolve({ technical: "open" }) });
+  if (unavailable) {
+    await expect(result).rejects.toThrow("Release not found");
+  } else {
+    const child = (await result).props.children;
+    const content = detail ? child.props.release : child.props.releases[0];
+    expect(content).toMatchObject({ version: release.version, summary: release.summary, notificationId: 17, seenAt: null });
+    expect(content).not.toHaveProperty("planningReferences");
+    if (detail) expect(child.props.technicalInitiallyOpen).toBe(true);
+  }
   expect(matching).toEqual([]);
-  expect(queries).toHaveLength(1);
+  expect(queries).toHaveLength(detail && !fallback ? 0 : 1);
+  expect(notifications).toHaveLength(detail && !fallback ? 0 : 1);
   if (detail) {
-    expect(queries[0].get("version")).toBe("eq." + release.version);
-    expect(child.props.technicalInitiallyOpen).toBe(true);
+    expect(snapshots).toEqual([{ p_version: release.version, p_user_id: "synthetic-user", p_profile_id: "synthetic-profile", p_platform_role: "viewer" }]);
+    if (fallback) {
+      expect(queries[0].get("version")).toBe(`eq.${release.version}`);
+      expect(notifications[0].get("recipient_profile_id")).toBe("eq.synthetic-profile");
+    }
+  } else {
+    expect(snapshots).toEqual([]);
   }
 });
 

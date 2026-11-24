@@ -10,8 +10,8 @@ import { CustomSelect } from "@/shared/atoms/custom-select";
 export function SprintCommitmentField({ planningState, shown, field, disabled = false, compact = false }: {
   planningState: PlanningState; shown: SprintCommitment; field: "level" | "hours"; disabled?: boolean; compact?: boolean;
 }) {
-  const [hoursDraft, setHoursDraft] = useState<string | null>(null);
-  const [editor, setEditor] = useState<SprintCommitmentEditor | null>(() => planningState.resumeSprintCommitmentEdit(shown.sprintId, shown.profileId));
+  const [editor, setEditor] = useState<SprintCommitmentEditor | null>(() => planningState.resumeSprintCommitmentEdit(shown.sprintId, shown.profileId, field === "hours"));
+  const [hoursDraft, setHoursDraft] = useState<string | null>(() => editor?.view().hoursDraft ?? null);
   useEffect(() => () => editor?.close(), [editor]);
   const begin = () => {
     const next = editor || planningState.beginSprintCommitmentEdit(shown);
@@ -40,11 +40,15 @@ export function SprintCommitmentField({ planningState, shown, field, disabled = 
     type="number" min={0} max={80}
     value={hoursDraft ?? retained?.weeklyHours ?? shown.weeklyHours}
     disabled={unavailable}
-    onFocus={() => { begin(); setHoursDraft(String(shown.weeklyHours)); }}
-    onChange={event => setHoursDraft(event.target.value)}
+    onFocus={() => { begin(); if (hoursDraft === null) setHoursDraft(String(shown.weeklyHours)); }}
+    onChange={event => {
+      setHoursDraft(event.target.value);
+      begin().setHoursDraft(event.target.value);
+    }}
     onBlur={() => {
       if (hoursDraft !== null && hoursDraft.trim() !== "" && Number.isFinite(Number(hoursDraft)) && Number(hoursDraft) >= 0 && Number(hoursDraft) <= 80) {
         if (Number(hoursDraft) !== shown.weeklyHours) void begin().save({ weeklyHours: Number(hoursDraft) });
+        else editor?.setHoursDraft(null);
         setHoursDraft(null);
       }
     }}

@@ -20,6 +20,8 @@ export function SprintControlsSummary({
   finalScores,
   openScores,
   unassignedTasksCount,
+  tasksKnown = true,
+  sprintTaskCounts,
   sprintHasTasks,
   sprintIsCurrent,
   sprintControlsDisabled,
@@ -37,7 +39,9 @@ export function SprintControlsSummary({
   reviewTasksCount: number;
   finalScores: number;
   openScores: number;
-  unassignedTasksCount: number;
+  unassignedTasksCount: number | null;
+  tasksKnown?: boolean;
+  sprintTaskCounts?: Record<string, number> | null;
   sprintHasTasks: boolean;
   sprintIsCurrent: boolean;
   sprintControlsDisabled: boolean;
@@ -59,20 +63,22 @@ export function SprintControlsSummary({
     ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(sprint.reviewDueAt))
     : "ohne Datum";
   const reviewWindowOpen = Boolean(sprint.reviewDueAt && new Date(sprint.reviewDueAt).getTime() > renderedAt);
-  const lockBlocked = provisional || sprintControlsDisabled || !canFinalizeSprintScore || sprint.scoreLocked || reviewWindowOpen || openObjectionsCount > 0;
+  const scopedCompletion = Boolean(planningState.sprintCompletion(sprint.id));
+  const lockBlocked = provisional || sprintControlsDisabled || !canFinalizeSprintScore || sprint.scoreLocked
+    || !scopedCompletion && (!tasksKnown || reviewWindowOpen || openObjectionsCount > 0);
   const lockTitle = !canFinalizeSprintScore
     ? "Nur der CEO kann Sprint-Scores finalisieren."
-    : reviewWindowOpen
+    : !scopedCompletion && reviewWindowOpen
       ? `Finalisierung erst nach der Review- und Einwandfrist am ${reviewDueLabel}.`
-      : openObjectionsCount > 0
+      : !scopedCompletion && openObjectionsCount > 0
         ? "Offene Score-Einwände müssen zuerst abgeschlossen werden."
         : undefined;
   const summaryItems = [
-    { label: "Aufgaben", value: sprintTasks.length },
-    { label: "Review", value: reviewTasksCount },
-    { label: "Scores final", value: `${finalScores}/${sprintTasks.length}` },
-    { label: "Scores offen", value: openScores },
-    { label: "Ohne Sprint", value: unassignedTasksCount },
+    { label: "Aufgaben", value: tasksKnown ? sprintTasks.length : "—" },
+    { label: "Review", value: tasksKnown ? reviewTasksCount : "—" },
+    { label: "Scores final", value: tasksKnown ? `${finalScores}/${sprintTasks.length}` : "—" },
+    { label: "Scores offen", value: tasksKnown ? openScores : "—" },
+    { label: "Ohne Sprint", value: unassignedTasksCount ?? "—" },
   ];
 
   return (
@@ -90,7 +96,7 @@ export function SprintControlsSummary({
                 value: item.id,
                 label: `${item.name}${provisionalIds.includes(item.id) ? " (unbestätigt)" : ""}`,
                 current: currentSprint?.id === item.id,
-                locked: data.tasks.some((task) => task.sprintId === item.id),
+                locked: sprintTaskCounts ? (sprintTaskCounts[item.id] || 0) > 0 : tasksKnown && data.tasks.some((task) => task.sprintId === item.id),
               }))}
             />
           </label>
@@ -98,13 +104,14 @@ export function SprintControlsSummary({
           {sprintIsCurrent && (
             <span
               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600"
+              role="img"
               aria-label="Aktueller Sprint"
               title="Aktueller Sprint"
             >
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]" />
             </span>
           )}
-          {sprintHasTasks && (
+          {tasksKnown && sprintHasTasks && (
             <UiBadge
               size="xs"
               className="h-9 gap-1.5"
