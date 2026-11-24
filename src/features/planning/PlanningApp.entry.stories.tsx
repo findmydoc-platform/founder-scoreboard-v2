@@ -317,6 +317,8 @@ export const SameQueryRefreshDefersFocusedCardReplacement: Story = {
 export const ReturnRestoresBoardPositionAndSelection: Story = {
   decorators: [Story => <div style={{ width: 600 }}><Story /></div>],
   play: async ({ canvasElement }) => {
+    // Prepare the panel before testing selection and scroll restoration.
+    await import("@/features/tasks/organisms/task-detail-panel");
     const canvas = within(canvasElement);
     const card = await canvas.findByRole("link", { name: task.title });
     const board = canvas.getByRole("region", { name: "Board nach Status" });
