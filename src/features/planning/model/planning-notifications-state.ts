@@ -9,6 +9,7 @@ export type PlanningHeaderView = { data: PlanningHeaderData; slots: Record<Plann
 export type PlanningNotificationsView = { completeness: "complete" | "partial"; events: readonly NotificationEvent[]; deliveries: readonly NotificationDelivery[]; readStatus: PlanningReadStatus; operations: readonly NotificationOperationView[] };
 export type PlanningReleasesView = { releases: readonly PlatformReleaseRecord[]; readStatus: PlanningReadStatus };
 export interface PlanningNotificationsState {
+  acceptServerHeaderSlot(read: import("./planning-server-header-read").PlanningServerHeaderRead, slot: import("./planning-server-header-read").PlanningServerHeaderSlot, incoming: PlanningHeaderData): boolean;
   header(): PlanningHeaderView;
   refreshHeader(slots?: readonly PlanningHeaderSlotKey[]): Promise<boolean>;
   notifications(): PlanningNotificationsView;

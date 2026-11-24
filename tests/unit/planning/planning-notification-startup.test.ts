@@ -34,8 +34,8 @@ test("Planning API returns the board while notification reconciliation is unavai
   const body = await response.json();
   expect(body.model.project.name).toBe("Planning");
   expect(body.headerData.notifications.state).toBe("idle");
-  expect(body.headerData.quickLinks.state).toBe("ready");
-  expect(body.headerData.calendarEvents.state).toBe("ready");
+  expect(body.headerData.quickLinks.state).toBe("idle");
+  expect(body.headerData.calendarEvents.state).toBe("idle");
   expect(notificationRead).not.toHaveBeenCalled();
 });
 

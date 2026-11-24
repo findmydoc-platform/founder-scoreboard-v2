@@ -1,0 +1,719 @@
+{
+  "id": "planning-read-contract-v1",
+  "evaluationTime": "2026-11-13T12:00:00Z",
+  "taskDefaults": {
+    "order": 0,
+    "title": "Synthetic fixture item",
+    "description": "",
+    "status": "Offen",
+    "priority": "P2",
+    "assigneeId": "fixture-other",
+    "assignee": "Synthetic Other",
+    "ownerId": "fixture-other",
+    "owner": "Synthetic Other",
+    "workstream": "Operations",
+    "fixedDate": "",
+    "definitionOfDone": "Verified fixture outcome",
+    "dependsOn": "",
+    "evidenceLink": "",
+    "evidenceLinks": [],
+    "linkedPullRequests": [],
+    "issueNumber": "",
+    "issueUrl": "",
+    "note": "",
+    "watched": false,
+    "hours": 2,
+    "sprintId": "fixture-current",
+    "reviewStatus": "not_requested",
+    "scorePoints": 0,
+    "scoreFinal": false,
+    "githubRepo": "findmydoc-platform/management",
+    "githubIssueNumber": null,
+    "githubIssueUrl": "",
+    "githubIssueSyncStatus": "not_synced",
+    "githubIssueLastSyncedAt": "",
+    "githubIssueSyncError": "",
+    "taskType": "deliverable",
+    "parentTaskId": "fixture-initiative",
+    "approvalStatus": "approved",
+    "approvalRevision": 1,
+    "parentApprovalStatus": "approved",
+    "scoreRelevant": true,
+    "updatedAt": "2026-11-01T12:00:00Z"
+  },
+  "profiles": [
+    {
+      "id": "fixture-reader",
+      "name": "Synthetic Reader",
+      "platformRole": "founder"
+    },
+    {
+      "id": "fixture-other",
+      "name": "Synthetic Other",
+      "platformRole": "founder"
+    },
+    {
+      "id": "fixture-reviewer",
+      "name": "Synthetic Prüfer",
+      "platformRole": "ceo"
+    }
+  ],
+  "sprints": [
+    {
+      "id": "fixture-current",
+      "name": "Synthetic current Sprint",
+      "status": "active",
+      "startDate": "2026-11-09",
+      "endDate": "2026-11-22",
+      "reviewDueAt": "2026-11-24T12:00:00Z",
+      "scoreLocked": false
+    },
+    {
+      "id": "fixture-future-sprint",
+      "name": "Synthetic future Sprint",
+      "status": "planning",
+      "startDate": "2026-12-01",
+      "endDate": "2026-12-14",
+      "reviewDueAt": "2026-12-16T12:00:00Z",
+      "scoreLocked": false
+    }
+  ],
+  "tasks": [
+    {
+      "id": "fixture-epic",
+      "taskType": "epic",
+      "parentTaskId": "",
+      "title": "Synthetic Epic",
+      "githubIssueSyncStatus": "not_applicable",
+      "sprintId": "",
+      "scoreRelevant": false,
+      "approvalStatus": null,
+      "githubRepo": "",
+      "priority": "",
+      "parentApprovalStatus": null
+    },
+    {
+      "id": "fixture-initiative",
+      "taskType": "initiative",
+      "parentTaskId": "fixture-epic",
+      "title": "Synthetic Initiative",
+      "strategy": {
+        "goal": "Strategieziel Glühwürmchen",
+        "successCriteria": "Verified outcome",
+        "scopeConstraints": ""
+      },
+      "githubIssueSyncStatus": "not_applicable",
+      "sprintId": "",
+      "scoreRelevant": false,
+      "githubRepo": ""
+    },
+    {
+      "id": "fixture-literal",
+      "order": 10,
+      "title": "Synthetic 100%_ready\\[x]",
+      "description": "Änderung mit Größe",
+      "assigneeId": "fixture-reader",
+      "assignee": "Synthetic Reader",
+      "ownerId": "fixture-reader",
+      "owner": "Synthetic Reader",
+      "githubRepo": "findmydoc-platform/management",
+      "githubIssueNumber": 42,
+      "githubIssueUrl": "https://github.com/findmydoc-platform/management/issues/42",
+      "reviewOwnerProfileId": "fixture-reviewer",
+      "fixedDate": "2026-11-20",
+      "workstream": "Delivery",
+      "definitionOfDone": "Synthetic DoD Löschprobe",
+      "issueNumber": "42",
+      "issueUrl": "https://github.com/findmydoc-platform/management/issues/42",
+      "linkedPullRequests": [
+        {
+          "title": "Synthetic direct PR",
+          "repository": "example/project",
+          "number": 17,
+          "url": "https://github.com/example/project/pull/17",
+          "status": "merged"
+        }
+      ]
+    },
+    {
+      "id": "fixture-decoy",
+      "order": 11,
+      "title": "Synthetic 100abcXreadyYx",
+      "description": "No literal SQL characters",
+      "priority": "P0",
+      "status": "In Arbeit"
+    },
+    {
+      "id": "fixture-foreign",
+      "order": 12,
+      "title": "Synthetic foreign parent",
+      "status": "In Arbeit",
+      "priority": "P1"
+    },
+    {
+      "id": "fixture-child-open",
+      "taskType": "sub_issue",
+      "parentTaskId": "fixture-foreign",
+      "order": 1,
+      "title": "Synthetic assigned child",
+      "assigneeId": "fixture-reader",
+      "assignee": "Synthetic Reader",
+      "priority": "P0",
+      "sprintId": "",
+      "scoreRelevant": false,
+      "approvalStatus": null
+    },
+    {
+      "id": "fixture-child-done",
+      "taskType": "sub_issue",
+      "parentTaskId": "fixture-foreign",
+      "order": 2,
+      "title": "Synthetic completed child",
+      "status": "Erledigt",
+      "sprintId": "",
+      "scoreRelevant": false,
+      "approvalStatus": null
+    },
+    {
+      "id": "fixture-owner-fallback",
+      "order": 13,
+      "title": "Synthetic owner fallback",
+      "assigneeId": "",
+      "assignee": "",
+      "ownerId": "fixture-reader",
+      "owner": "Synthetic Reader"
+    },
+    {
+      "id": "fixture-assignee-wins",
+      "order": 14,
+      "title": "Synthetic foreign assignee wins",
+      "ownerId": "fixture-reader",
+      "owner": "Synthetic Reader"
+    },
+    {
+      "id": "fixture-waiting",
+      "order": 15,
+      "title": "Synthetic waiting consumer"
+    },
+    {
+      "id": "fixture-offpage-blocker",
+      "order": 2000,
+      "title": "Synthetic external blocker",
+      "priority": "P4",
+      "status": "In Arbeit"
+    },
+    {
+      "id": "fixture-old-match",
+      "order": 16,
+      "title": "Synthetic old completed match",
+      "description": "Historical needle",
+      "status": "Erledigt",
+      "updatedAt": "2020-01-01T12:00:00Z",
+      "hours": 7,
+      "githubIssueNumber": 73,
+      "githubIssueUrl": "https://github.com/findmydoc-platform/management/issues/73",
+      "issueNumber": "73",
+      "issueUrl": "https://github.com/findmydoc-platform/management/issues/73"
+    },
+    {
+      "id": "fixture-future",
+      "order": 17,
+      "title": "Synthetic future Sprint",
+      "sprintId": "fixture-future-sprint"
+    },
+    {
+      "id": "fixture-unscheduled",
+      "order": 18,
+      "title": "Synthetic unscheduled",
+      "sprintId": "",
+      "scoreRelevant": false
+    }
+  ],
+  "relationships": [
+    {
+      "id": 1,
+      "taskId": "fixture-waiting",
+      "relatedTaskId": "fixture-offpage-blocker",
+      "relationType": "blocked_by",
+      "note": "Synthetic outgoing wait",
+      "createdBy": "fixture-reviewer",
+      "createdAt": "2026-11-01T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "taskId": "fixture-offpage-blocker",
+      "relatedTaskId": "fixture-owner-fallback",
+      "relationType": "blocks",
+      "note": "Synthetic incoming wait",
+      "createdBy": "fixture-reviewer",
+      "createdAt": "2026-11-01T12:00:00Z"
+    }
+  ],
+  "searchCases": [
+    {
+      "name": "literal percent",
+      "filters": {
+        "query": "100%"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "literal underscore",
+      "filters": {
+        "query": "_ready"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "literal backslash and brackets",
+      "filters": {
+        "query": "\\[x]"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "German case and trim",
+      "filters": {
+        "query": "  ÄNDERUNG  "
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "parent strategy",
+      "filters": {
+        "query": "Glühwürmchen"
+      },
+      "ids": [
+        "fixture-decoy",
+        "fixture-foreign",
+        "fixture-literal",
+        "fixture-owner-fallback",
+        "fixture-assignee-wins",
+        "fixture-waiting",
+        "fixture-old-match",
+        "fixture-future",
+        "fixture-unscheduled",
+        "fixture-offpage-blocker"
+      ]
+    },
+    {
+      "name": "canonical issue number",
+      "filters": {
+        "query": "#42"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "Sprint name",
+      "filters": {
+        "query": "future Sprint"
+      },
+      "ids": [
+        "fixture-future"
+      ]
+    },
+    {
+      "name": "review owner",
+      "filters": {
+        "query": "prüfer"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "old completed search",
+      "filters": {
+        "query": "Historical needle"
+      },
+      "ids": [
+        "fixture-old-match"
+      ]
+    },
+    {
+      "name": "proven empty",
+      "filters": {
+        "query": "no-such-fixture-needle"
+      },
+      "ids": []
+    },
+    {
+      "name": "quick OR and additional AND",
+      "filters": {
+        "quick": [
+          "open",
+          "high"
+        ],
+        "status": "In Arbeit"
+      },
+      "ids": [
+        "fixture-decoy",
+        "fixture-foreign"
+      ]
+    },
+    {
+      "name": "personal parent inclusion and owner fallback",
+      "filters": {
+        "quick": [
+          "mine"
+        ]
+      },
+      "ids": [
+        "fixture-foreign",
+        "fixture-literal",
+        "fixture-owner-fallback"
+      ]
+    },
+    {
+      "name": "parent additional priority excludes child priority",
+      "filters": {
+        "quick": [
+          "mine"
+        ],
+        "priority": "P0"
+      },
+      "ids": []
+    },
+    {
+      "name": "both relationship directions outside visible subset",
+      "filters": {
+        "risk": "blocked"
+      },
+      "ids": [
+        "fixture-owner-fallback",
+        "fixture-waiting"
+      ]
+    },
+    {
+      "name": "Definition of Done field",
+      "filters": {
+        "query": "LÖSCHPROBE"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "assignee field",
+      "filters": {
+        "query": "Synthetic Reader"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "fixed date field",
+      "filters": {
+        "query": "2026-11-20"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    },
+    {
+      "name": "canonical repository field",
+      "filters": {
+        "query": "findmydoc-platform/management"
+      },
+      "ids": [
+        "fixture-decoy",
+        "fixture-foreign",
+        "fixture-literal",
+        "fixture-owner-fallback",
+        "fixture-assignee-wins",
+        "fixture-waiting",
+        "fixture-old-match",
+        "fixture-future",
+        "fixture-unscheduled",
+        "fixture-offpage-blocker"
+      ]
+    },
+    {
+      "name": "legacy Issue identity field",
+      "filters": {
+        "query": "#73"
+      },
+      "ids": [
+        "fixture-old-match"
+      ]
+    },
+    {
+      "name": "legacy Issue URL field",
+      "filters": {
+        "query": "management/issues/73"
+      },
+      "ids": [
+        "fixture-old-match"
+      ]
+    },
+    {
+      "name": "priority field",
+      "filters": {
+        "query": "P0"
+      },
+      "ids": [
+        "fixture-decoy"
+      ]
+    },
+    {
+      "name": "workstream field",
+      "filters": {
+        "query": "Delivery"
+      },
+      "ids": [
+        "fixture-literal"
+      ]
+    }
+  ],
+  "expected": {
+    "directChildProgress": {
+      "fixture-foreign": {
+        "completed": 1,
+        "total": 2,
+        "unfinished": 1,
+        "percentage": 50
+      },
+      "fixture-initiative": {
+        "completed": 1,
+        "total": 10,
+        "unfinished": 9,
+        "percentage": 10
+      }
+    },
+    "personalAfterFinalChildCompletes": [
+      "fixture-literal",
+      "fixture-owner-fallback"
+    ],
+    "weekIncluded": [
+      "fixture-literal"
+    ],
+    "weekExcluded": [
+      "fixture-future",
+      "fixture-unscheduled"
+    ],
+    "deputy": {
+      "activeFrom": "2026-11-13",
+      "activeUntil": "2026-11-13",
+      "atDate": true,
+      "nextDate": false
+    },
+    "machine": {
+      "completedIncluded": "fixture-old-match",
+      "canonicalParent": [
+        "fixture-child-open",
+        "fixture-foreign",
+        "fixture-initiative",
+        "fixture-epic"
+      ],
+      "waitsOn": [
+        [
+          "fixture-waiting",
+          "fixture-offpage-blocker"
+        ],
+        [
+          "fixture-owner-fallback",
+          "fixture-offpage-blocker"
+        ]
+      ],
+      "releaseDirectMatchPrecedesIssueFallback": {
+        "pullRequest": {
+          "repository": " EXAMPLE/PROJECT ",
+          "number": 17
+        },
+        "directTaskIds": [
+          "fixture-literal"
+        ],
+        "fallbackTaskIds": [
+          "fixture-old-match"
+        ],
+        "expectedLineage": [
+          "fixture-literal",
+          "fixture-initiative"
+        ]
+      },
+      "digest": {
+        "sourceItemLimit": 200,
+        "sliceBeforeDedupe": {
+          "candidateKeys": [
+            "known",
+            "new"
+          ],
+          "limit": 1,
+          "existingKeys": [
+            "known"
+          ],
+          "createdKeys": []
+        }
+      },
+      "managedTrashIdentity": "fixture-trashed-managed"
+    },
+    "objectionWindow": {
+      "endDate": "2026-11-12",
+      "dueAt": "2026-11-13T12:00:00Z",
+      "atDeadline": true,
+      "afterDeadline": false
+    }
+  },
+  "selectionLevel": "deliverable",
+  "machineInputs": {
+    "managedRegistry": [
+      {
+        "taskId": "fixture-literal",
+        "issueNodeId": "SYNTHETIC_ACTIVE_NODE",
+        "trashed": false
+      },
+      {
+        "taskId": "fixture-trashed-managed",
+        "issueNodeId": "SYNTHETIC_TRASH_NODE",
+        "trashed": true
+      }
+    ],
+    "unmanagedProviderNode": "SYNTHETIC_UNMANAGED_NODE",
+    "release": {
+      "pullRequest": {
+        "repository": " EXAMPLE/PROJECT ",
+        "number": 17
+      },
+      "linkedIssues": [
+        {
+          "repository": "example/legacy",
+          "number": 43
+        }
+      ],
+      "issueFallbackTasks": [
+        {
+          "id": "fixture-old-match",
+          "githubRepo": "example/legacy",
+          "githubIssueNumber": 43
+        }
+      ]
+    },
+    "digest": {
+      "orderedCandidates": [
+        {
+          "dedupeKey": "known",
+          "entityId": "fixture-literal"
+        },
+        {
+          "dedupeKey": "new",
+          "entityId": "fixture-old-match"
+        }
+      ],
+      "existingKeys": [
+        "known"
+      ],
+      "limit": 1,
+      "dryRun": false
+    }
+  },
+  "ownershipCases": [
+    {
+      "name": "assignee identity",
+      "task": {
+        "assigneeId": "fixture-reader",
+        "assignee": "other",
+        "ownerId": "fixture-other",
+        "owner": ""
+      },
+      "belongs": true
+    },
+    {
+      "name": "present foreign assignee blocks owner fallback",
+      "task": {
+        "assigneeId": "fixture-other",
+        "assignee": "",
+        "ownerId": "fixture-reader",
+        "owner": ""
+      },
+      "belongs": false
+    },
+    {
+      "name": "legacy assignee name",
+      "task": {
+        "assigneeId": "",
+        "assignee": "Synthetic Reader",
+        "ownerId": "fixture-other",
+        "owner": ""
+      },
+      "belongs": true
+    },
+    {
+      "name": "legacy assignee identity",
+      "task": {
+        "assigneeId": "",
+        "assignee": "fixture-reader",
+        "ownerId": "fixture-other",
+        "owner": ""
+      },
+      "belongs": true
+    },
+    {
+      "name": "owner identity fallback",
+      "task": {
+        "assigneeId": "",
+        "assignee": "",
+        "ownerId": "fixture-reader",
+        "owner": ""
+      },
+      "belongs": true
+    },
+    {
+      "name": "owner name fallback",
+      "task": {
+        "assigneeId": "",
+        "assignee": "",
+        "ownerId": "",
+        "owner": "Synthetic Reader"
+      },
+      "belongs": true
+    },
+    {
+      "name": "no ownership",
+      "task": {
+        "assigneeId": "",
+        "assignee": "",
+        "ownerId": "",
+        "owner": ""
+      },
+      "belongs": false
+    }
+  ],
+  "databaseMaterialization": {
+    "projectId": "findmydoc-founder-execution",
+    "nullWhenEmpty": [
+      "parentTaskId",
+      "sprintId",
+      "assigneeId",
+      "ownerId",
+      "fixedDate",
+      "githubIssueUrl",
+      "githubIssueLastSyncedAt",
+      "githubIssueSyncError"
+    ],
+    "identityColumns": {
+      "assignee": "assigneeId when present, otherwise assignee",
+      "owner": "ownerId when present, otherwise owner"
+    },
+    "strategicNullWhenEmpty": [
+      "githubRepo",
+      "priority"
+    ],
+    "ancillaryTables": {
+      "strategy": "planning_item_strategy",
+      "pullRequests": "task_links with type github_pull_request and metadata repository/number",
+      "relationships": "task_relationship_edges"
+    },
+    "timestampNote": "Preserve declared updatedAt after setup-trigger writes before beginning the measured read."
+  }
+}

@@ -226,8 +226,7 @@ export function taskText(task: Task) {
     .toLowerCase();
 }
 
-export function isThisWeek(task: Task, sprints: Sprint[] = []) {
-  const now = new Date();
+export function isThisWeek(task: Pick<Task, "sprintId">, sprints: Sprint[] = [], now = new Date()) {
   const sprint = sprints.find((item) => item.id === task.sprintId);
   if (!sprint?.startDate || !sprint.endDate) return false;
   const start = new Date(sprint.startDate);

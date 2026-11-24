@@ -150,7 +150,7 @@ test("a later compact Board read retains opened full content and complete altern
   if (first.status !== "ready" || complete.status !== "ready") throw new Error("Expected initial scopes");
   const full = { ...complete.model.items.find(item => item.id === "item-00")!, detailAvailability: undefined, problemStatement: "Full problem", intendedOutcome: "Full outcome" };
   const session = { userId: "reader", user: { id: "reader" }, revision: "compact-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readTaskDetail: async () => ({ model: { revision: full.updatedAt || "full", project: complete.model.project, item: full, ancestors: [], children: [], relatedItems: [], people: [], sprints: [], discussion: { comments: [], externalComments: [] }, blockers: [], relationships: [], activity: [], reviews: [] } }),
     readWorkspace: async (_, query) => {
@@ -189,7 +189,7 @@ test("initial compact coverage cannot submit a missing brief as an authoritative
   if (initial.status !== "ready") throw new Error("Expected compact hydration");
   const session = { userId: "reader", user: { id: "reader" }, revision: "compact-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let writes = 0;
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: { saveTask: async task => { writes++; return { task }; }, readWorkspace: async () => null } });
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: { saveTask: async task => { writes++; return { task }; }, readWorkspace: async () => null } });
   const result = await owner.planning.saveTask(owner.planning.board().tasks[0], { description: "Overwrite omitted content" });
   expect(result).toMatchObject({ ok: false, kind: "versionConflict" });
   expect(writes).toBe(0);

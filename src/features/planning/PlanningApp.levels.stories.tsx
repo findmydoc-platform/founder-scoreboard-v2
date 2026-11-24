@@ -51,7 +51,7 @@ function StrategicLevelsFlow() {
     const restore = mockAccountLifecycle("google", { linked: true }, input => {
       const url = new URL(String(input), "http://localhost:3000");
       if (url.pathname === "/api/auth/session") return Response.json({ session });
-      if (url.pathname === "/api/planning-board-data") return Response.json({ model: page(JSON.parse(url.searchParams.get("scope") || "{}")), currentProfile: profile });
+      if (url.pathname === "/api/planning-board-data") return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(JSON.parse(url.searchParams.get("scope") || "{}")), currentProfile: profile });
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initial.board.workspaceRevision });
       if (url.pathname === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (url.pathname === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [] });
@@ -60,7 +60,7 @@ function StrategicLevelsFlow() {
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
   }, []);
-  return ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null;
+  return ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null;
 }
 const meta = { title: "Planning/Strategic levels flow", component: StrategicLevelsFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof StrategicLevelsFlow>;
 export default meta;

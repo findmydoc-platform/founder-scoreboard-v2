@@ -51,7 +51,7 @@ test("the shared owner appends a completed page, retains active cards and retrie
   if (initial.status !== "ready") throw new Error("Expected initial Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let fail = true;
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readWorkspace: async (_, query) => {
       if (fail) throw new Error("Page unavailable");
@@ -181,7 +181,7 @@ test("a late response from a previous filter cannot replace the current bounded 
   if (firstPage.status !== "ready") throw new Error("Expected initial page");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   const pending: Array<() => Promise<void>> = [];
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(firstPage.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", firstPage.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(firstPage.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", firstPage.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readWorkspace: (_, query) => new Promise(resolve => { pending.push(async () => {
       const result = await reader.load({ ...context, query });
@@ -276,7 +276,7 @@ test("the owner accepts concurrent independent columns, coalesces identical page
   if (initial.status !== "ready") throw new Error("Expected bounded Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   const pending: Array<{ query: import("@/features/planning/model/planning-board-query").PlanningBoardQueryInput; finish(fail?: boolean): Promise<void> }> = [];
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readWorkspace: (_, query) => new Promise((resolve, reject) => pending.push({ query: query!, finish: async fail => {
       if (fail) { reject(new Error("Column unavailable")); return; }
@@ -314,7 +314,7 @@ test("concurrent successful status pages keep both columns current when their co
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   const pending: Array<() => Promise<void>> = [];
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }), readWorkspace: (_, query) => new Promise(resolve => pending.push(async () => {
       const result = await reader.load({ ...context, query });
       if (result.status !== "ready") throw new Error("Expected page");
@@ -337,7 +337,7 @@ test.each(["query", "session"])("a late column page cannot re-enter an ended %s 
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let sessionChanged!: (userId: string | null) => void;
   const pending: Array<() => Promise<void>> = [];
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     subscribeSession: listener => { sessionChanged = listener; return () => {}; },
     saveTask: async task => ({ task }), readWorkspace: (_, query) => new Promise(resolve => pending.push(async () => {
       const result = await reader.load({ ...context, query });
@@ -365,7 +365,7 @@ test("a stale continuation refreshes only its status membership and marks other 
   const initial = await reader.load({ ...context, query: {} });
   if (initial.status !== "ready") throw new Error("Expected Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }), readWorkspace: async (_, query) => {
       const result = await reader.load({ ...context, query });
       if (result.status === "staleContinuation") throw Object.assign(new Error("Changed result"), { code: "stale_continuation" });
@@ -396,7 +396,7 @@ test("a column page preserves confirmed edits and pending work in shared depende
   const session = { userId: "reader", user: { id: "reader" }, revision: "session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let finishPage!: () => Promise<void>;
   let finishSave!: (result: { task: Partial<import("@/lib/types").Task> }) => void;
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(initial.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", initial.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: task => task.id === "pending-work" ? new Promise(resolve => { finishSave = resolve; }) : Promise.resolve({ task: { id: task.id, title: "Confirmed edit", updatedAt: "confirmed-r2" } }),
     readWorkspace: (_, query) => new Promise(resolve => { finishPage = async () => {
       const result = await reader.load({ ...context, query });

@@ -42,7 +42,7 @@ function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "e
     let active = true;
     void mockItemPageBrowser({ respond: input => {
       const path = new URL(String(input), window.location.origin).pathname;
-      if (path === "/api/planning-board-data") { setBoardReads(value => value + 1); return Response.json({ model, currentProfile: itemPageProfile }); }
+      if (path === "/api/planning-board-data") { setBoardReads(value => value + 1); return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: itemPageProfile }); }
       if (path === "/api/planning-revision") return Response.json({ revision: model.board.workspaceRevision });
       if (path === `/api/tasks/${parent.id}/detail-data`) {
         setDetailReads(value => value + 1);
@@ -59,7 +59,7 @@ function ChildListFlow({ level = "deliverable", failure = "none" }: { level?: "e
     // The fixture is fixed for the lifetime of one story.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <><output className="sr-only" aria-label="Child detail reads">{detailReads}</output><output className="sr-only" aria-label="Child Board reads">{boardReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session)} initialData={{ ...emptyPlanningShellState, tasks: [parent], profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <><output className="sr-only" aria-label="Child detail reads">{detailReads}</output><output className="sr-only" aria-label="Child Board reads">{boardReads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", model, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: [parent], profiles: [itemPageProfile] }} initialHeaderData={itemPageHeaderData} initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/On-demand children", component: ChildListFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof ChildListFlow>;
 export default meta;

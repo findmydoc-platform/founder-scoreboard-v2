@@ -3,6 +3,7 @@ export const runtimeRoutes = {
   "calendar.team": { scope: "calendar", method: "GET", route: "/api/team-workweek/team" },
   "planning.header": { scope: "planning", method: "GET", route: "/api/planning-header-data" },
   "planning.board": { scope: "planning", method: "GET", route: "/api/planning-board-data" },
+  "planning.source-version": { scope: "planning", method: "GET", route: "/api/planning-source-version" },
   "planning.revision": { scope: "planning", method: "GET", route: "/api/planning-revision" },
   "planning.sprint": { scope: "planning", method: "GET", route: "/api/sprint-data" },
   "planning.strategic": { scope: "planning", method: "GET", route: "/api/strategic-planning-data" },

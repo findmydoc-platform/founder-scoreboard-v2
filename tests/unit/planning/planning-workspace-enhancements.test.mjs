@@ -63,3 +63,14 @@ test("planning revision route preserves authorization, exact count, latest times
   assert.equal((await denied.GET()).status, 403);
   assert.deepEqual(denied.calls, []);
 });
+
+
+test("source-only observation returns its version without requesting a complete snapshot or aggregate", async () => {
+  const protocol = administratorProtocol({ role: "viewer", responses: { planning_source_version: "source-47" } });
+  const route = await importTestModule("src/app/api/planning-source-version/route.ts", { "server-only": {} });
+  const response = await route.GET(protocol.request());
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { version: "source-47" });
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.deepEqual(protocol.calls.map(call => call.name), ["planning_source_version"]);
+});
