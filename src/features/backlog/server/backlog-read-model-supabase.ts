@@ -88,3 +88,18 @@ export function createSupabaseBacklogReadModel(supabase: SupabaseClient): Backlo
     },
   };
 }
+
+export async function loadSupabaseBacklogBootstrap(supabase: SupabaseClient, binding: {
+  userId: string; profileId: string; platformRole: Profile["platformRole"];
+}): Promise<BacklogLoadResult> {
+  const result = await supabase.from("profiles").select("id,auth_user_id,name,platform_role,org_role,github_login,weekly_capacity")
+    .eq("auth_user_id", binding.userId).maybeSingle<Pick<DbProfile, "id" | "name" | "platform_role" | "org_role" | "github_login" | "weekly_capacity"> & { auth_user_id: string }>();
+  const row = result.data;
+  if (result.error || !row || row.auth_user_id !== binding.userId || row.id !== binding.profileId || row.platform_role !== binding.platformRole
+    || typeof row.name !== "string" || row.org_role !== null && typeof row.org_role !== "string"
+    || row.github_login !== null && row.github_login !== undefined && typeof row.github_login !== "string"
+    || !Number.isFinite(row.weekly_capacity) || row.weekly_capacity < 0) return { status: "forbidden" };
+  return { status: "ready", model: { revision: "", items: [], sprints: [], commitments: [],
+    people: [{ id: row.id, name: row.name, platformRole: row.platform_role, orgRole: row.org_role ?? "", githubLogin: row.github_login ?? "", weeklyCapacity: row.weekly_capacity }],
+    coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial", strategies: "partial", raci: "partial", links: "partial" } } };
+}

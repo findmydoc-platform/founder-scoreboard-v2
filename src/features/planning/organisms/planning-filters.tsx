@@ -32,20 +32,21 @@ function useCompactPlanningViewport() {
 }
 
 type PlanningFiltersProps = {
+  scalarReadStatus?: import("../model/planning-state").PlanningReadStatus;
   filters: PlanningFiltersValue;
   planningLevel: PlanningLevel;
   planningParentFilterId: string;
   levelTotals?: Partial<Record<PlanningLevel, number>>;
-  profiles: Profile[];
+  profiles: readonly Pick<Profile, "id" | "name">[];
   initiatives: readonly Pick<Task, "id" | "title">[];
   epics?: readonly Pick<Task, "id" | "title">[];
-  sprints: Sprint[];
+  sprints: readonly Pick<Sprint, "id" | "name">[];
   tasks: Task[];
   workstreams: string[];
   quickFilters: Array<{ id: string; label: string }>;
   expanded: boolean;
-  visibleCount: number;
-  totalCount: number;
+  visibleCount: number | null;
+  totalCount: number | null;
   showPlanningLevel: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onChange: (filters: PlanningFiltersValue, history?: TableUrlHistoryMode) => void;
@@ -55,6 +56,7 @@ type PlanningFiltersProps = {
 };
 
 export function PlanningFilters({
+  scalarReadStatus,
   filters,
   planningLevel,
   planningParentFilterId,
@@ -76,16 +78,18 @@ export function PlanningFilters({
   onPlanningLevelChange,
   onPlanningParentFilterChange,
 }: PlanningFiltersProps) {
+  const resultCounts = visibleCount !== null && totalCount !== null ? { visibleCount, totalCount } : undefined;
   const compactViewport = useCompactPlanningViewport();
   const mobileDialogRef = useModalDialog<HTMLDivElement>({
     open: expanded && compactViewport,
     onClose: () => onExpandedChange(false),
   });
-  const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee;
+  const optionsCurrent = scalarReadStatus === undefined || scalarReadStatus === "current";
+  const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || (optionsCurrent ? filters.assignee : "Kontext nicht aktuell");
   const selectedInitiative = initiatives.find((initiative) => initiative.id === filters.initiativeId);
-  const initiativeUnavailable = filters.initiativeId !== "Alle" && !selectedInitiative;
-  const initiativeName = selectedInitiative?.title || "nicht verfügbar";
-  const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
+  const initiativeUnavailable = optionsCurrent && filters.initiativeId !== "Alle" && !selectedInitiative;
+  const initiativeName = selectedInitiative?.title || (optionsCurrent ? "nicht verfügbar" : "Kontext nicht aktuell");
+  const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || (optionsCurrent ? filters.sprintId : "Kontext nicht aktuell");
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
     ? epics || tasks.filter((task) => task.taskType === "epic")
@@ -143,6 +147,7 @@ export function PlanningFilters({
         <FilterField label="Zuständig">
           <CustomSelect
             aria-label="Nach Zuständigkeit filtern"
+              disabled={!optionsCurrent}
             value={filters.assignee}
             onChange={(assignee) => onChange({ ...filters, assignee })}
             className="h-10 text-sm"
@@ -189,6 +194,7 @@ export function PlanningFilters({
           <FilterField label="Initiative">
             <CustomSelect
               aria-label="Nach Initiative filtern"
+              disabled={!optionsCurrent}
               value={initiativeUnavailable ? "" : filters.initiativeId}
               onChange={(initiativeId) => onChange({ ...filters, initiativeId })}
               className="h-10 text-sm"
@@ -200,6 +206,7 @@ export function PlanningFilters({
           <FilterField label="Sprint">
             <CustomSelect
               aria-label="Nach Sprint filtern"
+              disabled={!optionsCurrent}
               value={filters.sprintId}
               onChange={(sprintId) => onChange({ ...filters, sprintId })}
               className="h-10 text-sm"
@@ -211,6 +218,7 @@ export function PlanningFilters({
           <FilterField label="Bereich">
             <CustomSelect
               aria-label="Nach Bereich filtern"
+              disabled={!optionsCurrent}
               value={filters.workstream}
               onChange={(workstream) => onChange({ ...filters, workstream })}
               className="h-10 text-sm"
@@ -286,7 +294,7 @@ export function PlanningFilters({
           activeFilters={activeFilters}
           isDirty={isDirty}
           onReset={resetFilters}
-          results={[{ id: "tasks", visibleCount, totalCount }]}
+          results={resultCounts ? [{ id: "tasks", ...resultCounts }] : []}
           leadingControls={showPlanningLevel ? (
             <div data-tour-id="planning-kanban-level-switch">
               <PlanningLevelSelect
@@ -325,7 +333,7 @@ export function PlanningFilters({
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div className="min-w-0">
                 <h2 id="planning-mobile-filter-title" className="text-base font-semibold text-slate-950">Planung filtern</h2>
-                <p className="text-xs text-slate-500" aria-live="polite">{visibleCount} von {totalCount} Ergebnissen</p>
+                {resultCounts ? <p className="text-xs text-slate-500" aria-live="polite">{resultCounts.visibleCount} von {resultCounts.totalCount} Ergebnissen</p> : null}
               </div>
               <button
                 type="button"
@@ -408,7 +416,7 @@ export function PlanningFilters({
                 </UiButton>
               ) : null}
               <UiButton variant="primary" size="lg" onClick={() => onExpandedChange(false)} className="min-w-0 flex-1">
-                {visibleCount} anzeigen
+                {resultCounts ? `${resultCounts.visibleCount} anzeigen` : "Ergebnisse anzeigen"}
               </UiButton>
             </div>
           </div>

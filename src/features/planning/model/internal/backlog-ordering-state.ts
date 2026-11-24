@@ -16,7 +16,7 @@ export function createBacklogOrdering(options: {
     if (reading && reading.boundary >= boundary) return reading.promise;
     const started = options.nextSequence(); const promise = options.refresh().then(ok => ({ ok, started })); reading = { boundary, promise }; void promise.finally(() => { if (reading?.promise === promise) reading = undefined; }); return promise;
   }
-  function begin(shown: readonly Task[]): BacklogOrderEditor {
+  function begin(shown: readonly Task[], basisOptions: { complete?: boolean; refreshAfterReceipt?: boolean } = {}): BacklogOrderEditor {
     let basis = structuredClone([...shown]); const generation = options.generation(), scope = authority, id = `order:${++nextId}`;
     let view: BacklogOrderView = { id, phase: "editing", source: null, target: null, placement: "before", error: "", checking: false, canResave: false, serverTasks: [], confirmedIds: [] };
     let compared: Task[] | undefined;
@@ -43,7 +43,7 @@ export function createBacklogOrdering(options: {
       const rows = basis.filter(eligible).sort((a,b) => a.order - b.order || a.id.localeCompare(b.id));
       const remaining = rows.filter(task => task.id !== source.id), targetIndex = remaining.findIndex(task => task.id === target.id), insert = targetIndex + (placement === "after" ? 1 : 0);
       const order = [...remaining.slice(0,insert), source, ...remaining.slice(insert)];
-      retained.get(id)!.orders = new Map(order.filter((task,index) => task.order !== (index + 1)*10).map(task => [task.id, (order.findIndex(row => row.id === task.id)+1)*10]));
+      if (basisOptions.complete !== false) retained.get(id)!.orders = new Map(order.filter((task,index) => task.order !== (index + 1)*10).map(task => [task.id, (order.findIndex(row => row.id === task.id)+1)*10]));
       view = { ...view, phase: "saving", error: "" }; boundary++; const started = options.nextSequence(); publish();
       try {
         const receipt = await options.adapter.moveBacklog(source,target,placement); if (!valid()) return result("ended");
@@ -55,7 +55,7 @@ export function createBacklogOrdering(options: {
         });
         const unresolvedMembership = updates.length ? options.accept(updates,started,basis) : false;
         view = { ...view, confirmedIds: updates.map(update => update.id) }; retained.get(id)!.view = view; boundary++;
-        if (unresolvedMembership) { options.invalidate(false); void refresh(); }
+        if (unresolvedMembership) { options.invalidate(false); if (basisOptions.refreshAfterReceipt !== false) void refresh(); }
         return malformed || receipt.completeness !== "complete" ? finish("unconfirmed", view.confirmedIds.length ? "Ein Teil der Reihenfolge ist gespeichert. Für den Rest ist das noch unklar. Bitte prüfen und nicht erneut verschieben." : "Ob die Reihenfolge gespeichert wurde, ist noch unklar. Bitte prüfen und nicht erneut verschieben.") : finish("saved");
       } catch (error) {
         if (!valid()) return result("ended");

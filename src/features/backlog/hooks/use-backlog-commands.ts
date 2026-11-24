@@ -9,6 +9,7 @@ import type { Sprint, Task } from "@/lib/types";
 type UseBacklogCommandsOptions = {
   planningState: import("@/features/planning/model/planning-state").PlanningState;
   canManageBacklog: boolean;
+  scoped?: boolean;
   orderedTasks: Task[];
   sprints?: Sprint[];
 };
@@ -16,6 +17,7 @@ type UseBacklogCommandsOptions = {
 export function useBacklogCommands({
   planningState,
   canManageBacklog,
+  scoped = false,
   orderedTasks,
   sprints,
 }: UseBacklogCommandsOptions) {
@@ -24,6 +26,7 @@ export function useBacklogCommands({
   const ordering = useBacklogOrdering({
     planningState,
     canManageBacklog,
+    scoped,
     orderedTasks,
     setMessage,
   });

@@ -230,7 +230,7 @@ export function FilterSegmentedControl<Value extends string>({
             {option.count !== undefined && (
               <span className={classNames(
                 variant === "structural" ? "rounded-none px-2 py-0.5 text-[11px]" : "rounded-full px-2 py-0.5 text-[11px]",
-                variant === "structural" && active ? "bg-white/20 text-white" : active ? "bg-white text-blue-700" : "bg-slate-100 text-slate-500",
+                variant === "structural" && active ? "bg-white/20 text-white" : active ? "bg-white text-blue-700" : "bg-slate-100 text-slate-600",
               )}>{option.count}</span>
             )}
           </button>

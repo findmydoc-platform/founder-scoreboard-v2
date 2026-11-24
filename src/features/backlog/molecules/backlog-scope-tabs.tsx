@@ -11,7 +11,7 @@ const scopeTabs: Array<{ id: BacklogScope; label: string }> = [
 type BacklogScopeTabsProps = {
   onScopeChange: (scope: BacklogScope) => void;
   scope: BacklogScope;
-  counts: Record<BacklogScope, number>;
+  counts?: Record<BacklogScope, number>;
 };
 
 export function BacklogScopeTabs({ onScopeChange, scope, counts }: BacklogScopeTabsProps) {
@@ -20,7 +20,7 @@ export function BacklogScopeTabs({ onScopeChange, scope, counts }: BacklogScopeT
       <FilterSegmentedControl
         label="Backlog-Scope"
         value={scope}
-        options={scopeTabs.map((tab) => ({ value: tab.id, label: tab.label, count: counts[tab.id] }))}
+        options={scopeTabs.map((tab) => ({ value: tab.id, label: tab.label, count: counts?.[tab.id] }))}
         onChange={onScopeChange}
         variant="structural"
         className="w-full"

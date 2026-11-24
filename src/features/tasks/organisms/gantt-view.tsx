@@ -12,7 +12,7 @@ function parseIsoDate(value: string) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: Task[]; items: Task[]; sprints: Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
+export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { tasks: readonly Task[]; items: readonly Task[]; sprints: readonly Sprint[]; relations: TaskRelation[]; onOpenTask: (taskId: string) => void }) {
   const firstTaskStart = tasks
     .map((task) => parseIsoDate(sprints.find((sprint) => sprint.id === task.sprintId)?.startDate || ""))
     .filter((date): date is Date => Boolean(date))
@@ -58,7 +58,7 @@ export function GanttView({ tasks, items, sprints, relations, onOpenTask }: { ta
                   task={task}
                   onOpenTask={onOpenTask}
                   showIcon={false}
-                  className="absolute top-3 h-6 rounded bg-blue-500 px-2 text-left text-[11px] font-semibold text-white shadow-sm"
+                  className="absolute top-3 h-6 rounded bg-blue-600 px-2 text-left text-[11px] font-semibold text-white shadow-sm"
                   style={{ left: `${(left / days.length) * 100}%`, width: `${Math.min(100 - (left / days.length) * 100, (length / days.length) * 100)}%` }}
                   title={`${task.title} · ${initiative?.title || "ohne Initiative"}`}
                   aria-label={`${task.title} · ${length} Tage`}

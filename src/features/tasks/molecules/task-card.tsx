@@ -131,6 +131,7 @@ const TaskCardChildItem = memo(function TaskCardChildItem({
   status: childStatus,
   isViewerChild,
   onOpenTask,
+  prefetchTaskLinks,
   showDoneDivider,
 }: {
   id: string;
@@ -138,6 +139,7 @@ const TaskCardChildItem = memo(function TaskCardChildItem({
   status: string;
   isViewerChild: boolean;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   showDoneDivider: boolean;
 }) {
   const status = normalizeStatus(childStatus);
@@ -149,6 +151,7 @@ const TaskCardChildItem = memo(function TaskCardChildItem({
       <TaskReferenceLink
         task={{ id, title }}
         onOpenTask={onOpenTask}
+        prefetch={prefetchTaskLinks}
         showIcon={false}
         layout="flex"
         draggable={false}
@@ -190,6 +193,7 @@ function TaskCardChildRollup({
   childProgress,
   childList,
   onOpenTask,
+  prefetchTaskLinks,
   viewerOpenSubIssueIds,
 }: {
   task: Task;
@@ -197,6 +201,7 @@ function TaskCardChildRollup({
   childProgress?: ReturnType<typeof taskChildProgress> | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   viewerOpenSubIssueIds: string[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -294,6 +299,7 @@ function TaskCardChildRollup({
                 status={child.status}
                 isViewerChild={isViewerChild}
                 onOpenTask={onOpenTask}
+                prefetchTaskLinks={prefetchTaskLinks}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
               />
             );
@@ -314,6 +320,7 @@ function TaskCardChildRollup({
                 status={child.status}
                 isViewerChild={false}
                 onOpenTask={onOpenTask}
+                prefetchTaskLinks={prefetchTaskLinks}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
               />
             );
@@ -487,6 +494,7 @@ export function TaskCard({
   attentionSignals,
   childList,
   onOpenTask,
+  prefetchTaskLinks,
   onStatusChange,
   onStatusEditingStart,
   onDragStart,
@@ -508,6 +516,7 @@ export function TaskCard({
   attentionSignals?: TaskAttentionSignal[] | null;
   childList?: TaskCardChildList;
   onOpenTask: (taskId: string) => void;
+  prefetchTaskLinks?: false;
   onStatusChange?: (status: TaskStatus) => void;
   onStatusEditingStart?: () => void;
   onDragStart?: (task: Task, event: DragEvent<HTMLElement>) => void;
@@ -551,6 +560,7 @@ export function TaskCard({
       <TaskReferenceLink
         task={task}
         onOpenTask={onOpenTask}
+        prefetch={prefetchTaskLinks}
         showIcon={false}
         className="min-w-0 max-w-full text-left text-sm font-semibold leading-snug text-slate-900 hover:text-blue-700"
       >
@@ -580,6 +590,7 @@ export function TaskCard({
         childProgress={childProgress}
         childList={childList}
         onOpenTask={onOpenTask}
+        prefetchTaskLinks={prefetchTaskLinks}
         viewerOpenSubIssueIds={viewerOpenSubIssueIds}
       />
       <div className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-slate-500">

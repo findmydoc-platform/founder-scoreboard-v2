@@ -8,28 +8,16 @@ import { BacklogRankTable } from "@/features/backlog/molecules/backlog-rank-tabl
 import { BacklogScopeTabs } from "@/features/backlog/molecules/backlog-scope-tabs";
 import { BacklogSprintPane } from "@/features/backlog/molecules/backlog-sprint-pane";
 import { PlanningBacklogTree, type BacklogPlanningLevel } from "@/features/backlog/molecules/planning-backlog-tree";
-import { DEFAULT_BACKLOG_FILTERS, buildBacklogOverviewViewModel, type BacklogReadinessFilter, type BacklogScope, type BacklogTableFilters } from "@/features/backlog/model/backlog-view-model";
+import { DEFAULT_BACKLOG_FILTERS, buildBacklogOverviewViewModel, buildSelectedBacklogOverviewViewModel, backlogUsesGlobalRank, type BacklogReadinessFilter, type BacklogScope } from "@/features/backlog/model/backlog-view-model";
 import { PlanningLevelSelect } from "@/features/planning/molecules/planning-level-select";
 import type { Sprint, Task } from "@/lib/types";
 import { classNames, UiNotice, UiButton } from "@/shared/atoms/ui-primitives";
 import { FilterField, FilterToolbar } from "@/shared/molecules/filter-toolbar";
-import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } from "@/shared/hooks/use-table-url-state";
-
-const backlogFilterSchema: TableUrlSchema<BacklogTableFilters> = {
-  level: enumUrlField("deliverable", ["epic", "initiative", "deliverable"] as const),
-  query: stringUrlField(),
-  scope: enumUrlField("all", ["all", "proposals", "ready", "unscheduled"] as const),
-  status: stringUrlField("Alle"),
-  readiness: enumUrlField("all", ["all", "ready", "incomplete"] as const),
-  priority: stringUrlField("Alle"),
-  epic: stringUrlField("Alle"),
-  initiative: stringUrlField("Alle"),
-  assignee: stringUrlField("Alle"),
-  sort: enumUrlField("rank", ["rank", "priority", "title", "approval", "initiative", "assignee", "readiness", "status"] as const),
-  direction: enumUrlField("asc", ["asc", "desc"] as const),
-};
+import { useTableUrlState } from "@/shared/hooks/use-table-url-state";
+import { backlogFilterSchema } from "../model/backlog-url-filters";
 
 type BacklogOverviewProps = {
+  readMode: "legacy" | "selected";
   planningState: import("@/features/planning/model/planning-state").PlanningState;
   canManageBacklog: boolean;
   onOpenTask: (taskId: string) => void;
@@ -38,22 +26,27 @@ type BacklogOverviewProps = {
 };
 
 export function BacklogOverview({
+  readMode,
   planningState,
   canManageBacklog,
   onOpenTask,
   onCreatePlanningItem,
   onProposeDeliverable,
 }: BacklogOverviewProps) {
-  const model = useBacklogModel(planningState);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState("");
   const [draggedBasis, setDraggedBasis] = useState<{ task: Task; tasks: Task[]; sprints: Sprint[] } | null>(null);
   const { state: filters, updateState: updateFilters } = useTableUrlState({ namespace: "backlog", schema: backlogFilterSchema });
+  const backlog = useBacklogModel(planningState, readMode, filters), model = backlog.model;
+  const scoped = backlog.scoped;
+
   const backlogLevel = filters.level;
   const viewModel = useMemo(
-    () => buildBacklogOverviewViewModel(model, filters, canManageBacklog),
-    [canManageBacklog, filters, model],
+    () => scoped ? buildSelectedBacklogOverviewViewModel(model, filters, canManageBacklog) : buildBacklogOverviewViewModel(model, filters, canManageBacklog),
+    [canManageBacklog, filters, model, scoped],
   );
+  const selectionCurrent = !scoped || "selectionCurrent" in viewModel && viewModel.selectionCurrent;
+  const canAssign = canManageBacklog && (!scoped || selectionCurrent && Boolean(model.sprintBasis));
   const visibleItems = viewModel.visibleItems;
   const { levelTasks, rankEditingEnabled, visibleLevelTasks, visibleTaskIds } = viewModel;
   const {
@@ -67,6 +60,7 @@ export function BacklogOverview({
   } = useBacklogCommands({
     planningState,
     canManageBacklog,
+    scoped,
     orderedTasks: viewModel.orderedTasks,
     sprints: [...model.sprints],
   });
@@ -127,7 +121,7 @@ export function BacklogOverview({
       activeFilters={activeFilters}
       isDirty={viewModel.filterStateIsDirty}
       onReset={() => updateFilters({ ...DEFAULT_BACKLOG_FILTERS, level: backlogLevel })}
-      results={[{ id: "backlog", visibleCount: visibleLevelTasks.length, totalCount: backlogLevel === "deliverable" ? viewModel.allItems.length : levelTasks.length }]}
+      results={scoped ? selectionCurrent && model.selection ? [{ id: "backlog", visibleCount: visibleLevelTasks.length, totalCount: model.selection.total }] : [] : [{ id: "backlog", visibleCount: visibleLevelTasks.length, totalCount: backlogLevel === "deliverable" ? viewModel.allItems.length : levelTasks.length }]}
       panelId="backlog-data-filters"
       leadingControls={(
         <div data-tour-id="backlog-level-switch">
@@ -135,6 +129,7 @@ export function BacklogOverview({
             ariaLabel="Planungsebene im Backlog"
             value={backlogLevel}
             tasks={[...model.items]}
+            totals={readMode === "selected" ? model.controls?.levelTotals || { epic: null, initiative: null, deliverable: null } : undefined}
             onChange={(level) => updateFilters({
               level,
               epic: "Alle",
@@ -159,9 +154,11 @@ export function BacklogOverview({
     </FilterToolbar>
   );
 
-  if (planningState.backlog().readStatus === "forbidden" || planningState.backlog().readStatus === "not-loaded") return <UiNotice>Backlog ist in dieser Sitzung nicht verfügbar.</UiNotice>;
+  if (backlog.readStatus === "forbidden" || !scoped && backlog.readStatus === "not-loaded") return <UiNotice>Backlog ist in dieser Sitzung nicht verfügbar.</UiNotice>;
   return (
-    <div className="grid gap-4" data-tour-id="backlog-overview">
+    <div className="grid gap-4" data-tour-id="backlog-overview" onKeyDownCapture={event => {
+      if (scoped && event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type === "search") { event.preventDefault(); backlog.commitSearch(event.target.value); }
+    }}>
       {planningState.backlogOrders().filter(item => ["unconfirmed", "blocked", "conflict"].includes(item.phase)).map(item => <UiNotice key={item.id} role="status" tone="warning">
         <p>Verschiebung: {item.source?.title} {item.placement === "before" ? "vor" : "nach"} {item.target?.title}</p>
         <p>{item.error}</p>
@@ -182,15 +179,26 @@ export function BacklogOverview({
       {(planningState.backlog().model.coverage?.items !== "complete" || Object.values(planningState.backlog().model.coverage || {}).some(value => value !== "complete")) ? <UiNotice>Du siehst nur einen Teil des Backlogs.</UiNotice> : null}
       {message && <UiNotice role="status" tone={message.includes("aktualisiert") ? "success" : "warning"}>{message}</UiNotice>}
       {toolbar}
-      {backlogLevel === "deliverable" && canManageBacklog && !rankEditingEnabled && <UiNotice tone="info">Rangänderungen sind nur in der ungefilterten Backlog-Rangfolge möglich. Sprint-Zuordnungen bleiben verfügbar.</UiNotice>}
+      {backlogLevel === "deliverable" && canManageBacklog && !backlogUsesGlobalRank(filters) && <UiNotice tone="info">Rangänderungen sind nur in der ungefilterten Backlog-Rangfolge möglich. Sprint-Zuordnungen bleiben verfügbar.</UiNotice>}
 
+      {scoped && !selectionCurrent ? <UiNotice role="status" tone={backlog.readStatus === "unavailable" ? "warning" : "info"}>
+        {backlog.readStatus === "unavailable" ? "Backlog konnte nicht geladen werden." : "Backlog wird geladen."}
+        {backlog.readStatus === "unavailable" ? <UiButton onClick={backlog.reload}>Backlog erneut laden</UiButton> : null}
+      </UiNotice> : null}
+      {readMode === "selected" && backlog.supportReadStatus.controls === "unavailable" ? <UiNotice role="status" tone="warning">Backlog-Filter konnten nicht geladen werden. <UiButton onClick={() => backlog.loadSupport("controls")}>Filter erneut laden</UiButton></UiNotice> : null}
       <div className={classNames(
         "grid min-w-0 gap-4",
         backlogLevel === "deliverable" && "xl:grid-cols-[minmax(0,1fr)_340px]",
       )}>
         <div className="grid min-w-0 gap-4">
-          <PlanningBacklogTree
-            canAssignSprints={backlogLevel === "deliverable" && canManageBacklog}
+          {!scoped || selectionCurrent || model.items.length ? <PlanningBacklogTree
+            childOwner={planningState}
+            orphanGroups={backlog.orphanGroups}
+            parentMembershipCompleteIds={selectionCurrent ? backlog.parentMembershipCompleteIds : undefined}
+            parentProgressById={selectionCurrent ? model.selection?.parentProgressById : undefined}
+            collectionCoverage={selectionCurrent ? model.coverage?.items : undefined}
+            independentMembership={selectionCurrent && !filters.query.trim() && filters.status === "Alle" && filters.priority === "Alle" && filters.assignee === "Alle" && filters.scope === "all" && filters.readiness === "all"}
+            canAssignSprints={backlogLevel === "deliverable" && canAssign}
             canCreate={canManageBacklog}
             data={[...model.items]}
             draggedTaskId={draggedTaskId}
@@ -203,8 +211,8 @@ export function BacklogOverview({
             sprintBuckets={viewModel.sprintBuckets}
             sprintById={sprintById}
             visibleTaskIds={visibleTaskIds}
-          />
-          {backlogLevel === "deliverable" ? (
+          /> : null}
+          {backlogLevel === "deliverable" && selectionCurrent ? (
             <details className="overflow-hidden rounded-lg border border-slate-200 bg-white" data-tour-id="backlog-deliverable-ranking">
               <summary className="cursor-pointer border-l-4 border-blue-700 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                 Deliverable-Rangfolge und Sprint-Zuordnung
@@ -213,6 +221,7 @@ export function BacklogOverview({
                 <BacklogRankTable
                   key={`backlog-rank:${visibleItems.map((item) => item.task.id).join("|")}`}
                   canManageBacklog={canManageBacklog}
+                  totalItems={scoped ? model.selection?.total : undefined}
                   canReorder={rankEditingEnabled}
                   draggedTaskId={draggedTaskId}
                   isReordering={isReordering}
@@ -242,16 +251,25 @@ export function BacklogOverview({
             </details>
           ) : null}
         </div>
-        {backlogLevel === "deliverable" ? (
+        {backlogLevel === "deliverable" && (!scoped || model.sprintBasis) ? (
           <BacklogSprintPane
             buckets={viewModel.sprintBuckets}
-            canManageBacklog={canManageBacklog}
+            canManageBacklog={canAssign}
             draggedTask={draggedTask}
             onAssignTaskToSprint={handleAssignTaskToSprint}
             sprintById={sprintById}
           />
-        ) : null}
+        ) : backlogLevel === "deliverable" && scoped ? <UiNotice role="status" tone={backlog.supportReadStatus.sprints === "unavailable" ? "warning" : "info"}>
+          {backlog.supportReadStatus.sprints === "unavailable" ? "Sprintplanung konnte nicht geladen werden." : "Sprintplanung wird geladen."}
+          {backlog.supportReadStatus.sprints === "unavailable" ? <UiButton onClick={() => backlog.loadSupport("sprints")}>Sprintplanung erneut laden</UiButton> : null}
+        </UiNotice> : null}
       </div>
+      {scoped && selectionCurrent && model.selection?.continuation ? <div className="grid justify-items-start gap-2">
+        {backlog.pageStatus === "unavailable" ? <UiNotice role="status" tone="warning">Weitere Einträge konnten nicht geladen werden.</UiNotice> : null}
+        <UiButton disabled={backlog.pageStatus === "loading"} onClick={backlog.loadMore}>
+          {backlogLevel === "epic" ? "Weitere Epics laden" : backlogLevel === "initiative" ? "Weitere Initiativen laden" : "Weitere Deliverables laden"}
+        </UiButton>
+      </div> : null}
     </div>
   );
 }

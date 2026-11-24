@@ -57,7 +57,7 @@ export function usePlanningViewState({
   initialQuery,
   initialView,
 }: UsePlanningViewStateOptions) {
-  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "table" ? "table" : initialQuery?.view === "complete" ? initialView || "table" : "board");
+  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "table" ? "table" : initialQuery?.view === "complete" ? initialView || "table" : !initialQuery && initialView === "gantt" ? "gantt" : "board");
   const [localSelectedTaskId, setLocalSelectedTaskId] = useState<string | null>(null);
   const selectedTaskId = workspace === "planning" ? planningState.planningInteraction().selectedTaskId : localSelectedTaskId;
   const setSelectedTaskId = useCallback((taskId: string | null) => {
@@ -78,7 +78,7 @@ export function usePlanningViewState({
     targetSprintNumber: 0,
   });
   const initialBoardState = useMemo(() => initialQuery ? { level: initialQuery.level, parentId: initialQuery.parentId } : undefined, [initialQuery]);
-  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema, initialState: initialQuery?.filters });
+  const { state: filters, updateState: updateFilters, resetState: resetFilters, hasUrlState: hasPlanningFilterUrlState } = useTableUrlState({ namespace: "tasks", schema: planningFilterSchema, initialState: initialQuery?.filters || (!initialQuery && initialView === "gantt" ? initialData.profileUiPreferences.find(preference => preference.defaultTaskView === "gantt")?.planningFilters : undefined) });
   const {
     state: planningBoardUrlState,
     updateState: updatePlanningBoardUrlState,
