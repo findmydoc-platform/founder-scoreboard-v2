@@ -53,7 +53,7 @@ jobs:
     name: Migration Integration
     needs: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         if: needs.changes.outputs.migrations_required == 'true'
@@ -134,6 +134,14 @@ jobs:
       - name: Install dependencies
         if: needs.changes.outputs.app_required == 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Verify credential boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:credentials
+
+      - name: Verify Planning read boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:planning-reads
 
       - name: Install Storybook browser
         if: needs.changes.outputs.app_required == 'true'

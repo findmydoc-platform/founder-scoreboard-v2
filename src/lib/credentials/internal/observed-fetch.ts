@@ -4,6 +4,16 @@ import type { SafeOperation } from "../../runtime-logging/output";
 
 // Classification is private and finite. No input URL or credential enters telemetry.
 export const observedSupabaseFetch: typeof fetch = (input, init) => {
+  try {
+    const method = (init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const pathname = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).pathname;
+    if (method === "GET" && pathname === "/auth/v1/user") {
+      // Each live identity check must reach the provider. An explicit signal
+      // opts out of GET memoization within a render without changing data caches.
+      const inherited = init?.signal === null ? undefined : input instanceof Request ? input.signal : undefined;
+      init = { ...init, signal: init?.signal ?? inherited ?? new AbortController().signal };
+    }
+  } catch { /* Let fetch retain its existing invalid-input failure semantics. */ }
   if (!runtimeObservationActive()) return fetch(input, init);
   let operation: SafeOperation = "supabase.other";
   try {

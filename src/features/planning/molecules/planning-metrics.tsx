@@ -2,7 +2,7 @@ type PlanningMetricsProps = {
   metrics: {
     total: number;
     open: number;
-    blocked: number;
+    blocked: number | null;
     done: number;
   };
 };
@@ -18,7 +18,7 @@ export function PlanningMetrics({ metrics }: PlanningMetricsProps) {
       ].map(([label, value]) => (
         <div key={label} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
           <div className="text-xs font-medium text-slate-500">{label}</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">{value}</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-950">{value ?? "Unbekannt"}</div>
         </div>
       ))}
     </section>

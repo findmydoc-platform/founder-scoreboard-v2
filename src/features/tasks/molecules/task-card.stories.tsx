@@ -86,6 +86,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const CurrentChildPageDoesNotInventUnknownProgress: Story = {
+  args: { childProgress: null, attentionSignals: null, childList: { items: subIssues, readStatus: "current", load: fn() } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+    await expect(canvas.getByText("Signale unbekannt")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: "Sub-Issues anzeigen: Fortschritt unbekannt" }));
+    await expect(canvas.getByRole("link", { name: new RegExp(subIssues[0].title) })).toBeVisible();
+    await expect(canvas.getByText("Kindfortschritt unbekannt")).toBeVisible();
+  },
+};
+
 export const ForeignDeliverableWithAssignedSubIssue: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
