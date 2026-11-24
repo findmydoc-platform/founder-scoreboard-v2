@@ -116,7 +116,7 @@ it.each(["founder", "deputy"])("preserves the %s recipient versus operational-le
   const notifications = reads.filter(read => read.table === "notification_events");
   expect(notifications.length).toBeGreaterThan(0);
   for (const read of notifications) {
-    if (role === "deputy") expect(read.query.get("or")).toBe("(recipient_profile_id.eq.synthetic-profile,recipient_profile_id.is.null)");
+    if (role === "deputy") expect(read.query.get("or")).toBe('(recipient_profile_id.eq."synthetic-profile",recipient_profile_id.is.null)');
     else expect(read.query.get("recipient_profile_id")).toBe("eq.synthetic-profile");
   }
 });

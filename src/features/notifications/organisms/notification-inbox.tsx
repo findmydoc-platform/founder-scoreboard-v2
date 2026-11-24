@@ -12,26 +12,33 @@ import { UiBadge, UiEmptyState } from "@/shared/atoms/ui-primitives";
 
 export function NotificationInbox({
   notifications,
+  count,
   open,
   onToggle,
   onOpen,
   onOpenCenter,
   onDismiss,
+  onRetryCount,
+  onRetryPreview,
 }: {
   notifications: HeaderDataSlot<HeaderNotificationsData>;
+  count?: HeaderDataSlot<number | null>;
   open: boolean;
   onToggle: () => void;
   onOpen?: (event: HeaderNotification) => void;
   onOpenCenter?: () => void;
   onDismiss?: (eventId: number) => void;
+  onRetryCount?: () => void;
+  onRetryPreview?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useModalDialog<HTMLElement>({ open, onClose: onToggle, manageEnvironment: false, restoreFocusRef: triggerRef });
-  const stale = notifications.freshness === "stale";
-  const unreadCount = notifications.data.unreadCount;
+  const countSlot = count ?? { ...notifications, data: notifications.data.unreadCount };
+  const unreadCount = countSlot.state === "ready" ? countSlot.data : null;
+  const countStale = countSlot.freshness === "stale";
   const items = notifications.data.items;
-  const loading = notifications.state === "idle" || notifications.state === "loading";
+  const loading = (open && notifications.state === "idle") || notifications.state === "loading";
 
   useEffect(() => {
     if (!open) return;
@@ -60,11 +67,12 @@ export function NotificationInbox({
         aria-label={loading ? "Benachrichtigungen werden geladen" : "Benachrichtigungen"}
       >
         {loading ? <LoaderCircle size={16} className="motion-safe:animate-spin" /> : <Bell size={16} />}
-        {unreadCount > 0 && (
+        {unreadCount !== null && unreadCount > 0 && (
           <span className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-[11px] font-semibold text-white">
-            {stale ? "…" : unreadCount > 9 ? "9+" : unreadCount}
+            {countStale ? "…" : unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
+        {count && unreadCount === null ? <span aria-hidden="true" className="absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-slate-500 px-1 text-[11px] font-semibold text-white">…</span> : null}
       </button>
 
       {open && (
@@ -87,10 +95,15 @@ export function NotificationInbox({
               >
                 Zum Center
               </Link>
-              <UiBadge tone="slate" bordered={false}>{stale ? "Stand wird geprüft" : unreadCount}</UiBadge>
+              {countSlot.state === "error" ? (
+                onRetryCount ? <button type="button" onClick={onRetryCount} className="rounded-md px-2 py-1 text-xs font-semibold text-blue-700">Ungelesene Anzahl erneut laden</button> : <span className="text-xs text-slate-600">Ungelesene Anzahl nicht verfügbar.</span>
+              ) : countSlot.state === "idle" || countSlot.state === "loading" ? (
+                <span role="status" className="text-xs text-slate-600">Ungelesene Anzahl wird geladen.</span>
+              ) : unreadCount !== null ? <UiBadge tone="slate" bordered={false}>{countStale ? "Stand wird geprüft" : unreadCount}</UiBadge> : null}
             </div>
           </div>
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto p-2 sm:max-h-[420px]">
+            {notifications.error && onRetryPreview ? <div className="flex items-center justify-between gap-2 px-4 py-2 text-xs text-slate-600"><span>{notifications.error}</span><button type="button" onClick={onRetryPreview} className="min-h-11 font-semibold text-blue-700">Benachrichtigungen erneut laden</button></div> : null}
             {loading ? (
               <UiEmptyState className="px-4 py-8">
                 Benachrichtigungen werden geladen.

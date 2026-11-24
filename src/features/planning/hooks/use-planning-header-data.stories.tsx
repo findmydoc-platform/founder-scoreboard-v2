@@ -16,7 +16,7 @@ function BackgroundHeaderStory() {
   });
   const [owner] = useState(() => createPlanningState({ userId: "header-story", initialData: emptyPlanningShellState, initialHeaderData: { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]), calendarEvents: readyHeaderSlot([]) }, adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null, readHeader: network.read } }));
   useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
-  const headerData = usePlanningHeaderData({ planningState: owner.planning, enabled: signedIn });
+  const headerData = usePlanningHeaderData({ planningState: owner.planning, enabled: signedIn, previewOpen: true });
   return <main><h1>Planning Board</h1><p>Unread: {headerData.notifications.data.unreadCount}</p><p>Read: {owner.planning.header().slots.notifications.readStatus}</p>
     <button onClick={() => document.dispatchEvent(new Event("visibilitychange"))}>Return to tab</button>
     <button onClick={() => network.pending.at(-1)?.resolve({ ...emptyPlanningHeaderData, notifications: readyHeaderSlot({ unreadCount: network.pending.length, items: [] }) })}>Complete request</button>

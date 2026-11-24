@@ -69,16 +69,21 @@ test("the actual Decision Log page and public reader action use the fixed Notion
   expect(dataRequests.filter(request => new URL(request.url).pathname.endsWith("notification_events")).every(request => new URL(request.url).searchParams.get("recipient_profile_id") === "eq.reader-profile")).toBe(true);
 });
 
-test.each(["ceo", "founder", "deputy", "viewer"])("the existing %s reader retains the same recipient and operational-lead header filter", async readerRole => {
+test.each(["ceo", "founder", "deputy", "viewer"])("the %s reader defers notifications on the page and retains the authorized header filter", async readerRole => {
   role = readerRole;
   const rendered = await render();
   expect(rendered.props.initialDecisionLogResult.ok).toBe(true);
+  expect(rendered.props.initialHeaderData.notifications.state).toBe("idle");
+  expect(dataRequests.filter(request => new URL(request.url).pathname.endsWith("notification_events"))).toHaveLength(0);
+  const permission = await publicAccess();
+  expect(permission.ok).toBe(true);
+  await permission.loadHeader();
   const notifications = dataRequests.filter(request => new URL(request.url).pathname.endsWith("notification_events"));
   expect(notifications.length).toBeGreaterThan(0);
   for (const request of notifications) {
     const query = new URL(request.url).searchParams;
     expect(query.get("status")).toBe("eq.pending");
-    if (["ceo", "deputy"].includes(readerRole)) expect(query.get("or")).toBe("(recipient_profile_id.eq.reader-profile,recipient_profile_id.is.null)");
+    if (["ceo", "deputy"].includes(readerRole)) expect(query.get("or")).toBe('(recipient_profile_id.eq."reader-profile",recipient_profile_id.is.null)');
     else expect(query.get("recipient_profile_id")).toBe("eq.reader-profile");
   }
 });

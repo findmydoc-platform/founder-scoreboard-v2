@@ -177,3 +177,124 @@ test.each([false, true])("a task confirmation refreshes only an already loaded n
     expect(planning.header().slots.notifications.readStatus).toBe("current");
   }
 });
+
+test("a reserved Notification document accepts the inbox independently without repeating either read on mount", async () => {
+  const now = Date.now();
+  const readAuthority = { userId: "viewer-user", deadline: now + 7_000 };
+  const session = { user: { id: "viewer-user" }, userId: "viewer-user", revision: "session-1", expiresAt: Math.ceil((now + 8_000) / 1_000) };
+  const initialCurrentProfile = { id: "profile", name: "Viewer", githubLogin: "", platformRole: "viewer" } as const;
+  const receipt = { readAuthority, readActor: { profileId: "profile", platformRole: "viewer" as const }, sourceRevision: "revision-1",
+    observedAt: new Date(now - 1).toISOString(), validUntil: new Date(now + 6_000).toISOString() };
+  const network: string[] = [];
+  const { planning, internal } = createPlanningState({ userId: "viewer-user", initialWorkspace: "notifications", initialData: emptyPlanningShellState, initialCurrentProfile, initialSession: session,
+    initialNotificationEntry: { id: "initial-entry", session, readAuthority, timeoutAt: now + 5_000 },
+    adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null,
+      readNotificationInbox: async () => { network.push("inbox"); throw new Error("unexpected inbox"); },
+      readNotificationCount: async () => { network.push("count"); return { ...receipt, unreadCount: 16 }; } },
+  });
+  const inbox = planning.refreshNotifications(), count = planning.refreshNotificationCount();
+  expect(network).toEqual([]);
+  expect(planning.notificationCount()).toEqual({ readStatus: "loading", value: null });
+  expect(planning.acceptNotificationEntry("initial-entry", { area: "inbox", result: { status: "ready", receipt: {
+    ...receipt, events: [notification], references: [], referenceCoverage: "unavailable", coverage: "complete", continuation: null,
+  } } })).toBe(true);
+  await expect(inbox).resolves.toBe(true);
+  expect(planning.notifications().events).toEqual([notification]);
+  expect(planning.notificationCount()).toEqual({ readStatus: "loading", value: null });
+  expect(planning.acceptNotificationEntry("initial-entry", { area: "count", result: { status: "unavailable" } })).toBe(false);
+  await expect(count).resolves.toBe(false);
+  expect(planning.notificationCount()).toEqual({ readStatus: "unavailable", value: null });
+  await expect(planning.refreshNotificationCount()).resolves.toBe(true);
+  expect(network).toEqual(["count"]);
+  expect(planning.notificationCount()).toEqual({ readStatus: "current", value: 16 });
+  internal.dispose();
+});
+
+test("a visible notification revision reads only changed current or missing scopes and does not extend their expiry", async () => {
+  const now = Date.now();
+  let clock = now;
+  const readAuthority = { userId: "viewer-user", deadline: now + 10_000 };
+  const readActor = { profileId: "profile", platformRole: "viewer" as const };
+  const initialCurrentProfile = { id: "profile", name: "Viewer", githubLogin: "", platformRole: "viewer" } as const;
+  let revision = "revision-1", fail = false;
+  const calls: string[] = [];
+  const receipt = () => ({ readAuthority, readActor, sourceRevision: revision, observedAt: new Date(clock - 1).toISOString(), validUntil: new Date(clock + 2_000).toISOString() });
+  const { planning, internal } = createPlanningState({ userId: "viewer-user", initialData: emptyPlanningShellState, initialCurrentProfile, adapter: {
+    now: () => clock, saveTask: async () => ({ task: {} }), readWorkspace: async () => null,
+    readNotificationCount: async () => { calls.push("count"); return { ...receipt(), unreadCount: 16 }; },
+    readNotificationInbox: async () => { calls.push("inbox"); return { ...receipt(), events: [notification], references: [], referenceCoverage: "unavailable", coverage: "complete", continuation: null }; },
+    observeNotificationSource: async () => {
+      calls.push("revision");
+      if (fail) throw new Error("temporarily unavailable");
+      return { readAuthority, readActor, sourceRevision: revision };
+    },
+  } });
+  await planning.checkNotificationSource({ inbox: true, preview: false });
+  expect(calls).toEqual(["count", "inbox"]);
+  calls.length = 0;
+  await planning.checkNotificationSource({ inbox: true, preview: false });
+  expect(calls).toEqual(["revision"]);
+  fail = true;
+  calls.length = 0;
+  await planning.checkNotificationSource({ inbox: true, preview: false });
+  expect(calls).toEqual(["revision"]);
+  expect(planning.notificationCount().value).toBe(16);
+  fail = false;
+  revision = "revision-2";
+  calls.length = 0;
+  await planning.checkNotificationSource({ inbox: false, preview: false });
+  expect(calls).toEqual(["revision", "count"]);
+  expect(planning.notifications().readStatus).toBe("stale");
+  internal.acceptHydration(emptyPlanningShellState, "viewer-user", "notifications");
+  expect(calls).toEqual(["revision", "count"]);
+  clock += 2_001;
+  calls.length = 0;
+  await planning.checkNotificationSource({ inbox: false, preview: false });
+  expect(calls).toEqual(["count"]);
+  internal.dispose();
+});
+
+test("a Planning invalidation refreshes count without reading the unopened preview or hidden inbox", async () => {
+  const now = Date.now();
+  const readAuthority = { userId: "viewer-user", deadline: now + 7_000 };
+  const readActor = { profileId: "profile", platformRole: "viewer" as const };
+  const initialCurrentProfile = { id: "profile", name: "Viewer", githubLogin: "", platformRole: "viewer" } as const;
+  const receipt = { readAuthority, readActor, sourceRevision: "revision-1", observedAt: new Date(now - 1).toISOString(), validUntil: new Date(now + 6_000).toISOString() };
+  const reads: string[] = [];
+  const { planning, internal } = createPlanningState({ userId: "viewer-user", initialData: emptyPlanningShellState, initialCurrentProfile,
+    adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null,
+      readNotificationInbox: async () => { reads.push("inbox"); return { ...receipt, events: [notification], references: [], referenceCoverage: "unavailable", coverage: "complete", continuation: null }; },
+      readNotificationPreview: async () => { reads.push("preview"); return { ...receipt, items: [] }; },
+      readNotificationCount: async () => { reads.push("count"); return { ...receipt, unreadCount: 16 }; } },
+  });
+  await planning.refreshNotifications();
+  await planning.refreshNotificationCount();
+  reads.length = 0;
+  internal.invalidateHeader(["notifications"]);
+  expect(reads).toEqual(["count"]);
+  expect(planning.notifications().readStatus).toBe("stale");
+  await planning.refreshNotificationCount();
+  internal.dispose();
+});
+
+test("an early exact server count does not wait for inbox, and session replacement rejects the old inbox result", async () => {
+  const now = Date.now();
+  const userId = "viewer-user";
+  const readAuthority = { userId, deadline: now + 7_000 };
+  const session = { user: { id: userId }, userId, revision: "session-1", expiresAt: Math.ceil((now + 8_000) / 1_000) };
+  const initialCurrentProfile = { id: "profile", name: "Viewer", githubLogin: "", platformRole: "viewer" } as const;
+  const receipt = { readAuthority, readActor: { profileId: "profile", platformRole: "viewer" as const }, sourceRevision: "revision-1",
+    observedAt: new Date(now - 1).toISOString(), validUntil: new Date(now + 6_000).toISOString() };
+  const { planning, internal } = createPlanningState({ userId, initialWorkspace: "notifications", initialData: emptyPlanningShellState, initialCurrentProfile, initialSession: session,
+    initialNotificationEntry: { id: "initial-entry", session, readAuthority, timeoutAt: now + 5_000 },
+    adapter: { saveTask: async () => ({ task: {} }), readWorkspace: async () => null },
+  });
+  expect(planning.acceptNotificationEntry("initial-entry", { area: "count", result: { status: "ready", receipt: { ...receipt, unreadCount: 16 } } })).toBe(true);
+  expect(planning.notificationCount()).toEqual({ readStatus: "current", value: 16 });
+  expect(planning.notifications().readStatus).toBe("loading");
+  internal.bindSession({ ...session, revision: "session-2" });
+  expect(planning.acceptNotificationEntry("initial-entry", { area: "inbox", result: { status: "forbidden" } })).toBe(false);
+  expect(planning.notifications().readStatus).toBe("not-loaded");
+  expect(planning.notificationCount().value).toBeNull();
+  internal.dispose();
+});

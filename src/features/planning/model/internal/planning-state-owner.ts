@@ -116,7 +116,7 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   subscribeSession?: (listener: (userId: string | null) => void) => () => void;
 };
 
-export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialTaskDetailRead, initialBacklogRead, initialSession, initialServerHeaderRead, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
+export function createPlanningState({ userId, initialData, initialWorkspace = "planning", initialWorkspaceRead, initialTaskDetailRead, initialBacklogRead, initialSession, initialServerHeaderRead, initialNotificationEntry, initialReleaseReferenceEntry, initialHeaderData, initialCurrentProfile, initialDecisionLogResult, initialAdministrationAuthority, administrationActorProfileId, adapter, publishCache, acceptWorkspaceContext }: {
   userId: string;
   initialData: PlanningShellState;
   initialWorkspace?: AppWorkspace;
@@ -124,6 +124,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   initialTaskDetailRead?: import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration;
   initialBacklogRead?: import("../planning-backlog-hydration").PlanningBacklogHydration;
   initialSession?: BrowserSessionSnapshot;
+  initialReleaseReferenceEntry?: import("@/features/platform-releases/model/platform-release-model").PlatformReleaseReferenceEntry;
+  initialNotificationEntry?: import("../planning-notifications-state").NotificationEntryRead;
   initialServerHeaderRead?: import("../planning-server-header-read").PlanningServerHeaderRead;
   initialHeaderData?: PlanningHeaderData;
   initialDecisionLogResult?: import("@/lib/notion-decision-log").NotionDecisionLogResult;
@@ -361,6 +363,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     }
     releaseHeldReads();
     planningSourceEpoch++;
+    notifications.clearReleasePlanningReferences();
     invalidatedAt = adapter.now?.() ?? Date.now();
     sourceStatus = "changed";
     freshness = "stale";
@@ -681,7 +684,38 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const privateWorkweek = createPrivateWorkweekState({ adapter, active: isActive, generation: () => sessionGeneration, changed: () => { if (!googleWorkspace.privateContextChanged()) publish(); }, published: workweekCalendars.invalidatePublishedWorkweeks, publicationBlocked: () => googleWorkspace.blocksPublication() });
   const googleWorkspace = createGoogleWorkspaceState({ adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidate: workweekCalendars.invalidatePublishedWorkweeks, privateBusy: privateWorkweek.publicationBusy, privateContext: privateWorkweek.disconnectBinding, privateChanged: privateWorkweek.connectionChanged });
   const administration = createAdministrationPersonState({ actorRole: () => confirmed.profiles.find(profile => profile.id === administrationActorProfileId)?.platformRole || null, active: isActive, generation: () => sessionGeneration, changed: publish, now: () => adapter.now?.() ?? Date.now(), profiles: () => visible.profiles, nextSequence: () => ++sequence, acceptCommonPeople: (people, started) => profileSettings.acceptAdministrationPeople(people, started), invalidateDeliveryEffects: () => notifications.deliveryStarted(), refreshDeliveryEffects: () => notifications.refreshDeliveryEffects(), commonProject: () => confirmed.project, acceptCommonProject: project => { confirmed = {...confirmed,project:{...confirmed.project,githubProjectOwner:project.owner,githubProjectNumber:project.number}}; }, initialAuthority: initialAdministrationAuthority, read: adapter.readAdministration, adapter });
-  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, serverRead: initialServerHeaderRead, acceptsReadAuthority: read => isActive() && read.userId === userId && read.deadline > (adapter.now?.() ?? Date.now()), acceptsServerRead: read => isActive() && read.userId === userId && read.sessionRevision === sessionRevision && read.deadline > (adapter.now?.() ?? Date.now()) && Number.isFinite(read.timeoutAt) && read.timeoutAt > (adapter.now?.() ?? Date.now()), notificationsLoaded: initialWorkspace === "notifications", adapter, isActive, generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
+  const acceptsNotificationSource = (read: import("../planning-notifications-state").NotificationSourceObservation) => {
+    const now = adapter.now?.() ?? Date.now();
+    return isActive() && !!actorIdentity && read.readActor?.profileId === actorIdentity.id && read.readActor.platformRole === actorIdentity.platformRole
+      && read.readAuthority?.userId === userId && Number.isFinite(read.readAuthority.deadline) && read.readAuthority.deadline > now
+      && (sessionExpiresAt === undefined || read.readAuthority.deadline <= sessionExpiresAt * 1000)
+      && typeof read.sourceRevision === "string" && !!read.sourceRevision;
+  };
+  const acceptsNotificationReceipt = (read: import("../planning-notifications-state").NotificationReadReceipt) => {
+    const now = adapter.now?.() ?? Date.now(), observed = Date.parse(read.observedAt), until = Date.parse(read.validUntil);
+    return acceptsNotificationSource(read) && Number.isFinite(observed) && observed <= now && Number.isFinite(until) && until > now;
+  };
+  const notifications = createHeaderNotificationsState({ initialData: active ? initialData : emptyPlanningShellState, initialHeaderData: active ? initialHeaderData : undefined, serverRead: initialServerHeaderRead, acceptsReadAuthority: read => isActive() && read.userId === userId && read.deadline > (adapter.now?.() ?? Date.now()), acceptsServerRead: read => isActive() && read.userId === userId && read.sessionRevision === sessionRevision && read.deadline > (adapter.now?.() ?? Date.now()) && Number.isFinite(read.timeoutAt) && read.timeoutAt > (adapter.now?.() ?? Date.now()),
+    notificationEntry: initialWorkspace === "notifications" ? initialNotificationEntry : undefined,
+    acceptsNotificationEntry: read => {
+      const now = adapter.now?.() ?? Date.now();
+      return isActive() && read.session.userId === userId && read.session.revision === sessionRevision
+        && read.session.expiresAt === sessionExpiresAt && read.session.expiresAt * 1000 > now
+        && read.readAuthority.userId === userId && read.readAuthority.deadline > now
+        && read.readAuthority.deadline <= read.session.expiresAt * 1000 && read.timeoutAt > now;
+    },
+    releaseReferenceEntry: initialReleaseReferenceEntry,
+    acceptsReleaseReferenceEntry: read => {
+      const now = adapter.now?.() ?? Date.now();
+      return isActive() && read.session.userId === userId && read.session.revision === sessionRevision
+        && read.session.expiresAt === sessionExpiresAt && read.session.expiresAt * 1_000 > now
+        && read.readActor.profileId === actorIdentity?.id && read.readActor.platformRole === actorIdentity.platformRole
+        && read.readAuthority.userId === userId && Number.isFinite(read.readAuthority.deadline) && read.readAuthority.deadline > now
+        && read.readAuthority.deadline <= read.session.expiresAt * 1_000 && Number.isFinite(read.timeoutAt)
+        && read.timeoutAt > now && read.timeoutAt <= read.readAuthority.deadline;
+    },
+    acceptsNotificationSource, acceptsNotificationReceipt, acceptsNotificationCount: read => acceptsNotificationReceipt(read) && Number.isSafeInteger(read.unreadCount) && read.unreadCount >= 0,
+    notificationsLoaded: initialWorkspace === "notifications" && !adapter.readNotificationInbox, adapter, isActive, now: () => adapter.now?.() ?? Date.now(), generation: () => sessionGeneration, changed: publish, refreshNotifications: () => planning.refreshWorkspace("notifications") });
   const events = createEventsState({ initial: active ? initialData.events : [], loaded: initialWorkspace === "events", adapter, active: isActive, generation: () => sessionGeneration, changed: publish, invalidateCalendar: () => notifications.invalidateHeader(["calendarEvents"]), refreshWorkspace: () => planning.refreshWorkspace("events"), endSession,
     beginHeaderRead: () => notifications.beginWorkspaceRead("events"),
     acceptHeaderRead: (data, started) => notifications.acceptWorkspaceRead("events", confirmed, { ...emptyPlanningHeaderData, calendarEvents: notifications.publicState.header().slots.calendarEvents.readStatus === "not-loaded" ? emptyPlanningHeaderData.calendarEvents : data.calendarEvents }, started),
@@ -1718,6 +1752,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     },
     refreshWorkspace(workspace) {
       if (!isActive()) return Promise.resolve(false);
+      if (workspace === "notifications" && adapter.readNotificationInbox) return notifications.publicState.loadNotificationPage();
       if (workspace === "planning" && ganttMounts && ganttQuery) return Promise.all([loadGantt(ganttQuery, { refresh: true }), structureReads.refresh(true)]).then(results => results.every(Boolean));
       if (workspace === "planning" && structureReads.mounted()) return structureReads.refresh();
       if (workspace === "backlog" && backlogSelectionQuery) {
@@ -2918,6 +2953,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     userId = account;
     active = Boolean(account);
     if (!isActive()) return;
+    // The Notifications workspace page carries only its authenticated shell. The
+    // existing owner accepts its content through the separately bound receipts.
+    if (workspace === "notifications" && adapter.readNotificationInbox && !read) return;
     const boundRead = read && read.workspace === workspace && (read.queryKey === "workspace" || (read.query && planningBoardQueryKey(read.query) === read.queryKey) || read.board?.queryKey === read.queryKey) && read.session.userId === userId
       && read.session.revision === sessionRevision && read.session.expiresAt === sessionExpiresAt
       && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now())
@@ -3036,6 +3074,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { ganttPending?.controller.abort(); ganttReceipt = undefined; for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear(); administration.clear(); unsubscribeSession?.(); },
+    dispose: () => { ganttPending?.controller.abort(); ganttReceipt = undefined; for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear(); administration.clear(); notifications.dispose(); unsubscribeSession?.(); },
   } };
 }

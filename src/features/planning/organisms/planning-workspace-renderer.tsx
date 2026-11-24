@@ -12,6 +12,7 @@ import type { BacklogModel } from "@/features/backlog/model/backlog-read-model";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 import type { AuthorityCapabilities } from "@/features/administrator-access/model/administrator-access";
 import type { AdministrationWorkspaceModel } from "@/features/administration/model/administration-read-model";
+import { notificationCountSlot } from "@/features/notifications/model/notification-count-slot";
 
 const GenericWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="generic" />;
 const BacklogWorkspacePanelLoading = () => <WorkspaceContentSkeleton variant="backlog" />;
@@ -204,6 +205,16 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
       )}
       {workspace === "notifications" && (
         <NotificationsOverview
+          count={notificationCountSlot(planningState.notificationCount())}
+          onRetryCount={() => { void planningState.refreshNotificationCount(); }}
+          continuation={planningState.notifications().continuation}
+          loadingMore={planningState.notifications().furtherReadStatus === "loading"}
+          pageError={planningState.notifications().furtherReadStatus === "unavailable"}
+          onLoadMore={() => { const cursor = planningState.notifications().continuation; if (cursor) void planningState.loadNotificationPage(cursor); }}
+          onRetryInbox={() => { void planningState.refreshNotifications(); }}
+          references={planningState.notifications().references}
+          referenceCoverage={planningState.notifications().referenceCoverage}
+          onInteractionChange={active => planningState.setNotificationInteraction(active)}
           completeness={planningState.notifications().completeness}
           readStatus={planningState.notifications().readStatus}
           pendingEventIds={planningState.notifications().operations.filter(operation => operation.phase === "saving" || operation.phase === "unconfirmed").flatMap(operation => operation.eventId || [])}

@@ -65,7 +65,7 @@ export async function mockItemPageBrowser({ administrator = false, headerData = 
     if (path === `/api/tasks/${detailModel.item.id}/detail-data`) return scopedDetail(Response.json({ taskDetail: detailModel, unavailable: [] }));
     if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true } });
     if (path === "/api/team-workweek/team") return Response.json({ currentWorkweeks: [], calendarWorkweeks: [], calendarCoverage: "complete", referenceDate: "2026-11-02" });
-    if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });
+    if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()], readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, readAuthority: { userId: itemPageUser.id, deadline: Date.now() + 60_000 } });
     return Response.json({ error: "Unscripted local fixture request" }, { status: 503 });
   });
   await createBrowserSessionAdapter().refresh();

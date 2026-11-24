@@ -25,13 +25,18 @@ import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
 import { planningPublicationSource, planningService } from "./planning-service";
 import { createSupabaseTeamReadModel, loadSupabaseTeamPeople } from "@/features/team/server/team-read-model-supabase";
-import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
-import { emptyPlanningHeaderData, loadPlanningHeaderData } from "../../planning-header-data";
+import { createSupabaseNotificationsReadModel, hydrateNotificationInbox, projectNotificationPreview } from "@/features/notifications/server/notifications-read-model-supabase";
+import { emptyPlanningHeaderData, loadPlanningHeaderData, maxHeaderNotifications } from "../../planning-header-data";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
+import { reconcileNotificationEvents } from "../../notification-resolution";
+import { notificationReconciliationKey, shareNotificationReconciliation } from "./notification-reconciliation-flight";
+import { createNotificationContinuation, readNotificationContinuation } from "@/features/notifications/server/notification-inbox-continuation";
+import { resolveSessionRequest } from "./session-request";
 
 const actions = new Set(["events.read", "tools.read", "strategic.read", "team.read", "notifications.read", "events.create", "events.update", "tools.create", "tools.update", "tools.metadata", "notification.status.write", "connection.github.read", "connection.github.disconnect", "assets.github.read", "connection.google.read", "connection.google.disconnect.preview", "connection.google.disconnect"]);
 export const isResourceAction = (value: string) => actions.has(value);
 const eventFields = ["title", "category", "starts_at", "ends_at", "location", "description", "audience_mode", "participant_profile_ids", "reminder_days_before", "reminder_generated_at", "status", "updated_at"] as const;
+const notificationInboxPageSize = 40;
 const denied = () => ({ data: null, error: { code: "42501", message: "Keine Berechtigung für diese Aktion." } });
 
 export async function authorizeResource(input: ResourceCredentialInput) {
@@ -41,13 +46,13 @@ export async function authorizeResource(input: ResourceCredentialInput) {
   if (!context.ok) return context;
   const { profile, service, followup, correction, userData } = context;
   const bound = context;
-  async function load<M>(readModel: { load(context: { authorized: boolean; actorProfileId: string | null }): Promise<{ status: "ready"; model: M } | { status: "forbidden" } | { status: "unavailable" } | { status: "staleContinuation" }> }) {
+  async function load<M>(readModel: { load(context: { authorized: boolean; actorProfileId: string | null }): Promise<{ status: "ready"; model: M } | { status: "forbidden" } | { status: "unavailable" } | { status: "staleContinuation" }> }, headerSlots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[]) {
       // Admission runs outside the shared data cache on hits and misses.
       try { await bound.current(); bound.assertCurrent(); }
       catch { return { status: "unavailable" as const }; }
       const [result, headerData] = await Promise.all([
         readModel.load({ authorized: true, actorProfileId: profile?.id || null }),
-        loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(service) }),
+        loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, slots: headerSlots, sharedSlotLoaders: planningHeaderSlotLoaders(service) }),
       ]);
       return result.status === "ready" ? { ...result, headerData } : result.status === "staleContinuation" ? { status: "unavailable" as const } : result;
   }
@@ -90,10 +95,169 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
     }
   }
+  async function observeNotificationPublication(signal: AbortSignal) {
+    const readAuthority = bound.readAuthority;
+    if (!profile || !userData || !readAuthority || readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+    const result = await userData.rpc("notification_publication_context").abortSignal(signal);
+    if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+    if (result.error) return { status: result.status === 401 || result.status === 403 ? "forbidden" as const : "unavailable" as const };
+    if (!result.data || result.data.profile_id !== profile.id || result.data.platform_role !== profile.platformRole) return { status: "forbidden" as const };
+    if (typeof result.data.source_revision !== "string" || !result.data.source_revision) return { status: "unavailable" as const };
+    return { status: "ready" as const, revision: result.data.source_revision as string };
+  }
   let observedNotification: { id: number; recipient_profile_id: string | null; status: string; seen_at: string | null; dismissed_at: string | null } | null = null;
   let observedTool: DbFmdTool | null = null;
   let observedEvent: DbFounderEvent | null = null;
-  return { ok: true as const, profile, resource: {
+  return { ok: true as const, profile, readAuthority: bound.readAuthority, readSession: bound.readSession, resource: {
+    async observeNotificationSource(options?: { signal?: AbortSignal }) {
+      if (action !== "notifications.read" || !profile || !userData) return { status: "forbidden" as const };
+      const readAuthority = bound.readAuthority;
+      if (!readAuthority || readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+      const deadline = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+      if (signal.aborted) return { status: "unavailable" as const };
+      try {
+        const observation = await observeNotificationPublication(signal);
+        if (observation.status !== "ready") return observation;
+        bound.assertCurrent();
+        if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        if (signal.aborted) return { status: "unavailable" as const };
+        return { status: "ready" as const, sourceRevision: observation.revision, readAuthority,
+          readActor: { profileId: profile.id, platformRole: profile.platformRole } };
+      } catch (error) {
+        return { status: readAuthority.deadline <= Date.now() || error instanceof Error && "status" in error && (error.status === 401 || error.status === 403)
+          ? "forbidden" as const : "unavailable" as const };
+      }
+    },
+    async loadNotificationScope(area: "preview" | "count" | "inbox", options?: { signal?: AbortSignal; continuation?: string }) {
+      if (action !== "notifications.read" || !profile || !userData) return { status: "forbidden" as const };
+      const readAuthority = bound.readAuthority;
+      if (!readAuthority) return { status: "unavailable" as const };
+      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      const token = resolveSessionRequest(bound.request).token;
+      const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || token;
+      const binding = token && secret ? { token, secret, userId: readAuthority.userId, profileId: profile.id, platformRole: profile.platformRole } : null;
+      if (area === "inbox" && !binding) return { status: "unavailable" as const };
+      const publication = () => observeNotificationPublication(signal);
+      try {
+        if (area === "inbox" && options?.continuation) {
+          const before = await publication();
+          if (before.status !== "ready") return before;
+          const cursor = readNotificationContinuation(binding!, options.continuation);
+          if (!cursor) return { status: "staleContinuation" as const };
+          if (before.revision !== cursor.source) return { status: "staleContinuation" as const };
+          const result = await createSupabaseNotificationsReadModel(service).loadInbox({ authorized: true, actorProfileId: profile.id, platformRole: profile.platformRole, limit: notificationInboxPageSize, position: cursor, signal });
+          if (result.status !== "ready") return result;
+          const after = await publication();
+          if (after.status !== "ready") return after;
+          if (after.revision !== cursor.source) return { status: "staleContinuation" as const };
+          bound.assertCurrent();
+          const deadline = Math.min(readAuthority.deadline, cursor.deadline);
+          if (signal.aborted || Date.now() >= Math.min(deadline, Date.parse(cursor.validUntil))) return { status: "staleContinuation" as const };
+          const { next, ...page } = result;
+          return { ...page, continuation: next ? createNotificationContinuation(binding!, { ...cursor, ...next, deadline }) : null,
+            readAuthority: { ...readAuthority, deadline }, readActor: { profileId: profile.id, platformRole: profile.platformRole },
+            sourceRevision: cursor.source, observedAt: cursor.observedAt, validUntil: cursor.validUntil };
+        }
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+          if (signal.aborted) return { status: "unavailable" as const };
+          const before = await publication();
+          if (before.status !== "ready") return before;
+          if (bound.strictService && bound.readSessionId) {
+            const identity = {
+              p_user_id: readAuthority.userId,
+              p_session_id: bound.readSessionId,
+              p_profile_id: profile.id,
+              p_platform_role: profile.platformRole,
+              p_deadline: new Date(readAuthority.deadline).toISOString(),
+            };
+            const readContext = { authorized: true, actorProfileId: profile.id, platformRole: profile.platformRole, signal };
+            const fast = await (area === "count"
+              ? bound.strictService.rpc("notification_count_fast_path", identity)
+              : bound.strictService.rpc("notification_content_fast_path", { ...identity, p_area: area,
+                p_limit: area === "preview" ? maxHeaderNotifications : notificationInboxPageSize })).abortSignal(signal);
+            if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+            if (signal.aborted) return { status: "unavailable" as const };
+            if (fast.status === 401 || fast.status === 403 || fast.data?.status === "forbidden") return { status: "forbidden" as const };
+            if (fast.error || !fast.data || (fast.data.status !== "ready" && fast.data.status !== "needs_reconcile")
+              || typeof fast.data.source_revision !== "string" || !fast.data.source_revision) return { status: "unavailable" as const };
+            if (fast.data.source_revision !== before.revision) continue;
+            const payload = fast.data.status === "ready" && area !== "count"
+              ? area === "preview" ? projectNotificationPreview(fast.data.rows, readContext)
+                : await hydrateNotificationInbox(service, fast.data.rows, { ...readContext, limit: notificationInboxPageSize })
+              : null;
+            if (payload && payload.status !== "ready") return payload;
+            const current = await publication();
+            if (current.status !== "ready") return current;
+            if (current.revision !== before.revision) continue;
+            bound.assertCurrent();
+            if (signal.aborted) return { status: "unavailable" as const };
+            if (fast.data.status === "ready") {
+              const observedAt = fast.data.observed_at, validUntil = fast.data.valid_until;
+              if (typeof observedAt !== "string" || typeof validUntil !== "string"
+                || !Number.isFinite(Date.parse(observedAt)) || !(Date.parse(validUntil) > Math.max(Date.now(), Date.parse(observedAt)))) return { status: "unavailable" as const };
+              const receipt = { readAuthority, readActor: { profileId: profile.id, platformRole: profile.platformRole },
+                sourceRevision: current.revision, observedAt, validUntil };
+              if (payload && "events" in payload) {
+                const { next, ...page } = payload;
+                return { ...page, ...receipt, continuation: next ? createNotificationContinuation(binding!, {
+                  ...next, source: current.revision, observedAt, validUntil, deadline: readAuthority.deadline,
+                }) : null };
+              }
+              if (payload) return { ...payload, ...receipt };
+              const unreadCount = fast.data.unread_count;
+              if (!Number.isSafeInteger(unreadCount) || unreadCount < 0) return { status: "unavailable" as const };
+              return { status: "ready" as const, unreadCount, ...receipt };
+            }
+          }
+          const runReconciliation = (runSignal: AbortSignal, readOnlyShared = false) => reconcileNotificationEvents(service, { currentProfileId: profile.id, platformRole: profile.platformRole, requireCompleteBasis: true, readOnlyShared, signal: runSignal });
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "";
+          const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+          const flightKey = token && serviceKey && serviceUrl ? notificationReconciliationKey(token, serviceKey, serviceUrl, profile.id, profile.platformRole, readAuthority.deadline, before.revision) : null;
+          let reconciliation;
+          let retried = false;
+          try {
+            reconciliation = flightKey ? await shareNotificationReconciliation(flightKey, signal, sharedSignal => runReconciliation(sharedSignal, true)) : await runReconciliation(signal);
+          } catch (error) {
+            if (!flightKey || signal.aborted) throw error;
+            retried = true;
+            reconciliation = await runReconciliation(signal);
+          }
+          if (!reconciliation.ok && flightKey && !retried && !signal.aborted) reconciliation = await runReconciliation(signal);
+          if (!reconciliation.ok) {
+            const current = await publication();
+            return current.status === "forbidden" ? current : { status: "unavailable" as const };
+          }
+          if (!("observedAt" in reconciliation) || !("validUntil" in reconciliation) || typeof reconciliation.observedAt !== "string" || !reconciliation.observedAt || typeof reconciliation.validUntil !== "string" || !reconciliation.validUntil) return { status: "unavailable" as const };
+          const after = await publication();
+          if (after.status !== "ready") return after;
+          if (after.revision !== before.revision) continue;
+          const model = createSupabaseNotificationsReadModel(service);
+          const readContext = { authorized: true, actorProfileId: profile.id, platformRole: profile.platformRole, signal };
+          const result = area === "preview" ? await model.loadPreview(readContext) : area === "count" ? await model.loadUnreadCount(readContext) : await model.loadInbox({ ...readContext, limit: notificationInboxPageSize });
+          if (result.status !== "ready") return result;
+          const final = await publication();
+          if (final.status !== "ready") return final;
+          if (final.revision !== after.revision) continue;
+          bound.assertCurrent();
+          if (signal.aborted || Date.now() >= Math.min(readAuthority.deadline, Date.parse(reconciliation.validUntil))) return { status: "unavailable" as const };
+          if ("events" in result) {
+            const { next, ...page } = result;
+            return { ...page, continuation: next ? createNotificationContinuation(binding!, { ...next, source: final.revision, observedAt: reconciliation.observedAt,
+              validUntil: reconciliation.validUntil, deadline: readAuthority.deadline }) : null, readAuthority,
+              readActor: { profileId: profile.id, platformRole: profile.platformRole }, sourceRevision: final.revision,
+              observedAt: reconciliation.observedAt, validUntil: reconciliation.validUntil };
+          }
+          return { ...result, readAuthority, readActor: { profileId: profile.id, platformRole: profile.platformRole }, sourceRevision: final.revision,
+            observedAt: reconciliation.observedAt, validUntil: reconciliation.validUntil };
+        }
+      } catch (error) {
+        return { status: readAuthority.deadline <= Date.now() || error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+      }
+      return { status: "unavailable" as const };
+    },
     loadTeamPeople(options?: { signal?: AbortSignal }) { return loadTeamPeopleRead(options); },
     async loadTeamPeoplePage(options?: { signal?: AbortSignal }) {
       if (action !== "team.read" || !profile) return { status: "forbidden" as const };
@@ -168,16 +332,16 @@ export async function authorizeResource(input: ResourceCredentialInput) {
         return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
       }
     },
-    loadStrategic() {
+    loadStrategic(options?: { headerSlots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[] }) {
       if (action !== "strategic.read") return Promise.resolve({ status: "forbidden" as const });
-      return load(createSupabaseStrategicPlanningReadModel(service));
+      return load(createSupabaseStrategicPlanningReadModel(service), options?.headerSlots);
     },
-    loadWorkspace(options?: { eventsRange?: import("@/features/events/model/event-state").EventRange | null }) {
-      if (action === "events.read") return load(createSupabaseEventsReadModel(service, options?.eventsRange));
-      if (action === "tools.read") return load(createSupabaseToolsReadModel(service));
-      if (action === "strategic.read") return load(createSupabaseStrategicPlanningReadModel(service));
-      if (action === "team.read") return load(createSupabaseTeamReadModel(service));
-      if (action === "notifications.read") return load(createSupabaseNotificationsReadModel(service));
+    loadWorkspace(options?: { eventsRange?: import("@/features/events/model/event-state").EventRange | null; headerSlots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[] }) {
+      if (action === "events.read") return load(createSupabaseEventsReadModel(service, options?.eventsRange), options?.headerSlots);
+      if (action === "tools.read") return load(createSupabaseToolsReadModel(service), options?.headerSlots);
+      if (action === "strategic.read") return load(createSupabaseStrategicPlanningReadModel(service), options?.headerSlots);
+      if (action === "team.read") return load(createSupabaseTeamReadModel(service), options?.headerSlots);
+      if (action === "notifications.read") return load(createSupabaseNotificationsReadModel(service), options?.headerSlots);
       return Promise.resolve({ status: "forbidden" as const });
     },
     async readGoogleConnection() {

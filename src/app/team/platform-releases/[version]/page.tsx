@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { PlanningApp } from "@/features/planning/PlanningApp";
-import { PlatformReleaseDetail } from "@/features/platform-releases/organisms/platform-release-detail";
+import { PlatformReleaseOwnedDetail } from "@/features/platform-releases/organisms/platform-release-owned-detail";
+import { isReleaseDocumentRequest, startPlatformReleaseReferenceEntry, PlatformReleaseServerReferenceEntry } from "@/features/platform-releases/server/platform-release-server-reference-entry";
 import { PlatformReleasesShell } from "@/features/platform-releases/templates/platform-releases-shell";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
@@ -30,13 +32,23 @@ export default async function PlatformReleaseDetailPage({ params, searchParams }
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "releases.read" });
   const sameActor = permission.ok && (permission.profile?.id || null) === (profile?.id || null)
     && (permission.profile?.platformRole || null) === (profile?.platformRole || null);
-  const [result, header] = permission.ok && sameActor ? await Promise.all([
-    permission.account.readReleases(), permission.account.loadReleaseHeader(),
-  ]) : [{ available: false, releases: [] }, { available: false, headerData: emptyPlanningHeaderData, calendarProfiles: { state: "error" as const, data: [], error: "Kein Zugriff auf Kalenderprofile." } }];
-  const releases = result.releases;
-  const headerData = header.headerData;
-  const release = releases.find(item => item.version === version) || null;
+  const admitted = permission.ok && sameActor ? permission : undefined;
+  const headerResult = admitted?.account.loadReleaseHeader({ headerSlots: ["quickLinks", "calendarEvents"] });
+  const result = await admitted?.account.readReleaseContent({ version });
+  const release = result?.status === "ready" ? result.releases.find(item => item.version === version) : null;
   if (!release) notFound();
+  const readSession = admitted?.readSession;
+  const entry = result?.status === "ready" && result.readAuthority && result.readActor && admitted
+    && auth?.ok && readSession && auth.user.id === readSession.userId && auth.session?.userId === readSession.userId
+    && auth.session.revision === readSession.revision && auth.session.expiresAt === readSession.expiresAt
+    && isReleaseDocumentRequest(await headers())
+    ? startPlatformReleaseReferenceEntry({ version, manifestDigest: release.manifestDigest }, readSession, result.readActor, result.readAuthority, admitted.account.readReleaseReferences)
+    : undefined;
+  const header = await headerResult;
   const { technical } = await searchParams;
-  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} initialCurrentProfile={profile} initialAdministratorAccess={auth?.ok ? auth.authority?.administratorAccess : undefined} headerData={headerData} calendarProfiles={header.calendarProfiles} returnToArchive><PlatformReleaseDetail release={release} technicalInitiallyOpen={technical === "open"} /></PlatformReleasesShell>;
+  return <PlatformReleasesShell authUser={auth?.ok ? auth.user : null} currentPlatformRole={profile?.platformRole} initialCurrentProfile={profile} initialAdministratorAccess={auth?.ok ? auth.authority?.administratorAccess : undefined} headerData={header?.headerData || emptyPlanningHeaderData} calendarProfiles={header?.calendarProfiles} returnToArchive initialReleaseReferenceEntry={entry?.read}>
+    <PlatformReleaseOwnedDetail release={release} technicalInitiallyOpen={technical === "open"} serverEntryId={entry?.read.id}>
+      {entry ? <PlatformReleaseServerReferenceEntry read={entry.read} result={entry.result} /> : null}
+    </PlatformReleaseOwnedDetail>
+  </PlatformReleasesShell>;
 }

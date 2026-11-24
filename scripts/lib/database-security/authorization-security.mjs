@@ -35,6 +35,59 @@ export async function verifyAuthorizationSecurity(client, failures) {
     prosecdef as definer, proconfig from pg_proc where oid=to_regprocedure('public.planning_board_publication_context()')`)).rows[0];
   if (!publication?.present || publication.anonymous_execute || !publication.user_execute || publication.server_execute
     || !publication.definer || !publication.proconfig?.includes('search_path=""')) failures.push("Planning publication context must remain a fixed user-bound fence with an empty search path");
+  for (const [signature, userAllowed, definer] of [
+    ["public.planning_release_reference_snapshot(uuid,uuid,text,text,timestamptz,jsonb)", false, true],
+    ["public.platform_release_reference_publication_context()", true, true],
+    ["workspace_private.release_reference_pr_number(jsonb)", null, false],
+    ["workspace_private.advance_release_reference_revision()", null, true],
+  ]) {
+    const entry = (await client.query(`select
+      has_function_privilege('anon', procedure.oid, 'EXECUTE') as anonymous_execute,
+      has_function_privilege('authenticated', procedure.oid, 'EXECUTE') as user_execute,
+      has_function_privilege('service_role', procedure.oid, 'EXECUTE') as server_execute,
+      not exists(select 1 from aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner)))
+        where grantee = 0 and privilege_type = 'EXECUTE') as public_denied,
+      procedure.prosecdef as definer, procedure.proconfig
+      from pg_proc procedure where procedure.oid = to_regprocedure($1)`, [signature])).rows[0];
+    if (!entry || entry.anonymous_execute || !entry.public_denied || entry.user_execute !== (userAllowed === true)
+      || entry.server_execute !== (userAllowed === false) || entry.definer !== definer || !entry.proconfig?.includes('search_path=""')) {
+      failures.push(`Release reference function violates its fixed execution boundary: ${signature}`);
+    }
+  }
+  const releaseRevision = (await client.query(`select relation.relrowsecurity as rls,
+    exists(select 1 from pg_roles as role where role.rolname in ('anon','authenticated','service_role')
+      and has_table_privilege(role.oid, relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) as exposed
+    from pg_class as relation where relation.oid=to_regclass('workspace_private.release_reference_revision')`)).rows[0];
+  if (!releaseRevision?.rls || releaseRevision.exposed) failures.push("Release reference revision must remain private with RLS and no client or service table grants");
+  const notificationPublication = (await client.query(`select to_regprocedure('public.notification_publication_context()') is not null as present,
+    has_function_privilege('anon',to_regprocedure('public.notification_publication_context()'),'EXECUTE') as anonymous_execute,
+    has_function_privilege('authenticated',to_regprocedure('public.notification_publication_context()'),'EXECUTE') as user_execute,
+    has_function_privilege('service_role',to_regprocedure('public.notification_publication_context()'),'EXECUTE') as server_execute,
+    prosecdef as definer, proconfig from pg_proc where oid=to_regprocedure('public.notification_publication_context()')`)).rows[0];
+  if (!notificationPublication?.present || notificationPublication.anonymous_execute || !notificationPublication.user_execute || notificationPublication.server_execute
+    || !notificationPublication.definer || !notificationPublication.proconfig?.includes('search_path=""')) failures.push("Notification publication context must remain a fixed user-bound fence with an empty search path");
+  for (const [label, signature, serviceAllowed] of [
+    ["count fast path", "public.notification_count_fast_path(uuid,uuid,text,text,timestamptz)", true],
+    ["content fast path", "public.notification_content_fast_path(uuid,uuid,text,text,timestamptz,text,integer)", true],
+    ["shared snapshot", "workspace_private.notification_scope_snapshot(uuid,uuid,text,text,timestamptz,text,integer)", false],
+  ]) {
+    const snapshot = (await client.query(`select
+      has_function_privilege('anon', procedure.oid, 'EXECUTE') as anonymous_execute,
+      has_function_privilege('authenticated', procedure.oid, 'EXECUTE') as user_execute,
+      has_function_privilege('service_role', procedure.oid, 'EXECUTE') as server_execute,
+      not exists(select 1 from aclexplode(coalesce(procedure.proacl, acldefault('f', procedure.proowner)))
+        where grantee = 0 and privilege_type = 'EXECUTE') as public_denied,
+      procedure.prosecdef as definer, procedure.proconfig, procedure.provolatile
+      from pg_proc procedure where procedure.oid = to_regprocedure($1)`, [signature])).rows[0];
+    if (!snapshot || snapshot.anonymous_execute || snapshot.user_execute || snapshot.server_execute !== serviceAllowed
+      || !snapshot.public_denied || snapshot.definer !== serviceAllowed || snapshot.provolatile !== "s"
+      || !snapshot.proconfig?.includes('search_path=""')) failures.push(`Notification ${label} must remain read-only with restricted execution`);
+  }
+  const notificationRevision = (await client.query(`select relation.relrowsecurity as rls,
+    exists(select 1 from pg_roles as role where role.rolname in ('anon','authenticated','service_role')
+      and has_table_privilege(role.oid, relation.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) as exposed
+    from pg_class as relation where relation.oid=to_regclass('workspace_private.notification_scope_revision')`)).rows[0];
+  if (!notificationRevision?.rls || notificationRevision.exposed) failures.push("Notification source revision must remain private with RLS and no client or service table grants");
   for (const [signature, userAllowed] of [
     ["public.planning_detail_source(text,text)", false],
     ["public.planning_detail_publication_context(text,text)", true],

@@ -3,14 +3,17 @@
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import { CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
 import { platformReleaseReferenceUrl } from "../model/platform-release-manifest";
-import { formatReleaseDate, highlightedChanges, releaseKindLabel, releaseTitle, type PlatformReleasePlanningLink, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { formatReleaseDate, highlightedChanges, releaseKindLabel, releaseTitle, type PlatformReleaseContent, type PlatformReleasePlanningLink, type PlatformReleasePlanningReference, type PlatformReleaseRecord, type PlatformReleaseReferenceState } from "../model/platform-release-model";
 import { taskDetailHrefWithReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
 
 type Props = {
-  release: PlatformReleaseRecord;
+  release: PlatformReleaseContent | PlatformReleaseRecord;
+  referenceState?: PlatformReleaseReferenceState;
+  onRetryReferences?: () => void;
+  onReloadRelease?: () => void;
   technicalInitiallyOpen?: boolean;
 };
 
@@ -18,9 +21,17 @@ function ExternalAnchor({ href, children, className = "" }: { href: string; chil
   return <a href={href} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-blue-700 hover:text-blue-900 hover:underline ${className}`}>{children}<ExternalLink size={13} aria-hidden="true" /></a>;
 }
 
-function PlanningLinks({ release }: { release: PlatformReleaseRecord }) {
-  const returnTo = `/team/platform-releases/${encodeURIComponent(release.version)}`;
-  const links = [...new Map(release.planningReferences.flatMap((reference) => reference.taskLinks).map((link) => [link.id, link])).values()];
+function PlanningLinks({ version, state, onRetry, onReload }: {
+  version: string; state: PlatformReleaseReferenceState; onRetry?: () => void; onReload?: () => void;
+}) {
+  const statusHeading = useRef<HTMLHeadingElement>(null);
+  const returnTo = `/team/platform-releases/${encodeURIComponent(version)}`;
+  const references = state.status === "ready" ? state.planningReferences : [];
+  const retry = (read: () => void) => {
+    statusHeading.current?.focus();
+    read();
+  };
+  const links = [...new Map(references.flatMap((reference) => reference.taskLinks).map((link) => [link.id, link])).values()];
   const initiatives = links.filter((link) => link.type === "initiative");
   const deliverables = links.filter((link) => link.type === "deliverable");
   const subIssues = links.filter((link) => link.type === "sub_issue");
@@ -34,7 +45,17 @@ function PlanningLinks({ release }: { release: PlatformReleaseRecord }) {
   ) : null;
   return (
     <div className="space-y-5 border-t border-slate-200 pt-5">
-      <div className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Verknüpfte Planung</div>
+      <h2 ref={statusHeading} tabIndex={-1} className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Verknüpfte Planung</h2>
+      {state.status === "not-loaded" || state.status === "loading" ? <p role="status" className="text-sm leading-6 text-slate-500">Planungszuordnungen werden geprüft.</p> : null}
+      {state.status === "unavailable" ? <div role="status" className="text-sm leading-6 text-slate-600">
+        <p>Planungszuordnungen konnten nicht geladen werden.</p>
+        {onRetry ? <button type="button" onClick={() => retry(onRetry)} className="min-h-11 text-left font-semibold text-blue-700 hover:underline">Planungszuordnungen erneut laden</button> : null}
+      </div> : null}
+      {state.status === "forbidden" ? <p role="status" className="text-sm leading-6 text-slate-600">Kein Zugriff auf die Planungszuordnungen.</p> : null}
+      {state.status === "stale-manifest" ? <div role="status" className="text-sm leading-6 text-slate-600">
+        <p>Die Release-Daten haben sich geändert.</p>
+        {onReload ? <button type="button" onClick={() => retry(onReload)} className="min-h-11 text-left font-semibold text-blue-700 hover:underline">Release neu laden</button> : null}
+      </div> : null}
       {group("Initiative", initiatives)}
       {group("Deliverable", deliverables)}
       {subIssues.length ? (
@@ -43,13 +64,13 @@ function PlanningLinks({ release }: { release: PlatformReleaseRecord }) {
           <div className="mt-2 space-y-1.5">{subIssues.map((link) => <Link key={link.id} href={taskDetailHrefWithReturnTo(link.href, returnTo)} className="block text-xs font-medium leading-5 text-blue-700 hover:underline">#{link.issueNumber || link.id} {link.title}</Link>)}</div>
         </details>
       ) : null}
-      {!links.length ? <p className="text-sm leading-6 text-slate-500">Noch keine Planungszuordnung erkannt.</p> : null}
-      <p className="text-xs leading-5 text-slate-500">Über Pull Requests und Issues automatisch zugeordnet</p>
+      {state.status === "ready" && !links.length ? <p className="text-sm leading-6 text-slate-500">Noch keine Planungszuordnung erkannt.</p> : null}
+      {state.status === "ready" ? <p className="text-xs leading-5 text-slate-500">Über Pull Requests und Issues automatisch zugeordnet</p> : null}
     </div>
   );
 }
 
-function ChangeEntry({ release, change }: { release: PlatformReleaseRecord; change: PlatformReleaseRecord["manifest"]["changes"][number] }) {
+function ChangeEntry({ release, change }: { release: PlatformReleaseContent; change: PlatformReleaseContent["manifest"]["changes"][number] }) {
   const visual = change.visualUrls[0];
   const visualMeta = release.manifest.visuals.find((item) => item.url === visual);
   return (
@@ -69,14 +90,14 @@ function ChangeEntry({ release, change }: { release: PlatformReleaseRecord; chan
   );
 }
 
-function TechnicalDetails({ release }: { release: PlatformReleaseRecord }) {
+function TechnicalDetails({ release, planningReferences }: { release: PlatformReleaseContent; planningReferences: PlatformReleasePlanningReference[] }) {
   const [showAllPullRequests, setShowAllPullRequests] = useState(false);
   const [showCommits, setShowCommits] = useState(false);
   const pullRequests = release.manifest.components.flatMap((component) => component.pullRequests.map((pullRequest) => ({ ...pullRequest, application: component.displayName })));
   const commits = release.manifest.components.flatMap((component) => component.commits.map((commit) => ({ ...commit, application: component.displayName })));
   const visiblePullRequests = showAllPullRequests ? pullRequests : pullRequests.slice(0, 3);
   const boardLink = (repository: string, number: number) => {
-    const reference = release.planningReferences.find((item) => item.repository.toLowerCase() === repository.toLowerCase() && item.pullRequestNumber === number);
+    const reference = planningReferences.find((item) => item.repository.toLowerCase() === repository.toLowerCase() && item.pullRequestNumber === number);
     return reference?.taskLinks.find((link) => link.type === "sub_issue") || reference?.taskLinks.find((link) => link.type === "deliverable") || null;
   };
   const downloadManifest = () => {
@@ -143,7 +164,10 @@ function TechnicalDetails({ release }: { release: PlatformReleaseRecord }) {
   );
 }
 
-export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false }: Props) {
+export function PlatformReleaseDetail({ release, referenceState, onRetryReferences, onReloadRelease, technicalInitiallyOpen = false }: Props) {
+  const references: PlatformReleaseReferenceState = referenceState ?? ("planningReferences" in release
+    ? { status: "ready", planningReferences: release.planningReferences } : { status: "not-loaded" });
+
   const planningState = usePlanningBusinessState();
   const [allChangesOpen, setAllChangesOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(technicalInitiallyOpen);
@@ -160,19 +184,7 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
   return (
     <div className="mx-auto max-w-[1190px] px-4 py-6 sm:px-8 lg:py-8">
       <div className="grid gap-10 lg:grid-cols-[215px_minmax(0,1fr)]">
-        <aside aria-label="Release-Metadaten" className="hidden border-r border-slate-200 pr-6 lg:block">
-          <div className="text-xs font-medium text-slate-500">Version</div>
-          <div className="mt-1 text-xl font-semibold text-slate-950">{release.version}</div>
-          <div className="mt-7 text-xs font-medium text-slate-500">Veröffentlicht am</div>
-          <div className="mt-1 text-sm font-semibold text-slate-800">{formatReleaseDate(release.publishedAt)}</div>
-          <div className="mt-7 space-y-3 border-t border-slate-200 pt-5">
-            <div className="text-xs font-medium text-slate-500">Betroffene Anwendungen</div>
-            {release.manifest.components.map((component) => <div key={component.key}><ExternalAnchor href={component.productionUrl} className="text-sm font-semibold">{component.displayName}</ExternalAnchor><div className="mt-0.5 truncate text-xs text-slate-500">{new URL(component.productionUrl).host}</div></div>)}
-          </div>
-          <div className="mt-7"><PlanningLinks release={release} /></div>
-        </aside>
-
-        <article className="min-w-0">
+        <article className="min-w-0 lg:col-start-2 lg:row-start-1">
           <header className="border-b border-slate-200 pb-8">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-blue-700">
               <span>{releaseKindLabel(release)} {release.version}</span><span className="text-slate-400">•</span><span className="normal-case tracking-normal text-slate-500">{formatReleaseDate(release.publishedAt)}</span>
@@ -202,9 +214,22 @@ export function PlatformReleaseDetail({ release, technicalInitiallyOpen = false 
               <span className="flex min-w-0 items-start gap-3"><Code2 size={18} className="mt-0.5 shrink-0 text-blue-700" /><span><span className="block text-sm font-semibold text-slate-950">Technische Details &amp; GitHub</span><span className="mt-1 block text-xs text-slate-500">PRs, Commits, Releases und Deployment-Nachweise</span></span></span>
               <ChevronDown size={18} className={`shrink-0 text-blue-700 transition ${technicalOpen ? "rotate-180" : ""}`} />
             </button>
-            {technicalOpen ? <TechnicalDetails release={release} /> : null}
+            {technicalOpen ? <TechnicalDetails release={release} planningReferences={references.status === "ready" ? references.planningReferences : []} /> : null}
           </div>
         </article>
+        <aside aria-label="Release-Metadaten und Planung" className="min-w-0 lg:col-start-1 lg:row-start-1 lg:border-r lg:border-slate-200 lg:pr-6">
+          <div className="hidden lg:block">
+            <div className="text-xs font-medium text-slate-500">Version</div>
+            <div className="mt-1 text-xl font-semibold text-slate-950">{release.version}</div>
+            <div className="mt-7 text-xs font-medium text-slate-500">Veröffentlicht am</div>
+            <div className="mt-1 text-sm font-semibold text-slate-800">{formatReleaseDate(release.publishedAt)}</div>
+            <div className="mt-7 space-y-3 border-t border-slate-200 pt-5">
+              <div className="text-xs font-medium text-slate-500">Betroffene Anwendungen</div>
+              {release.manifest.components.map((component) => <div key={component.key}><ExternalAnchor href={component.productionUrl} className="text-sm font-semibold">{component.displayName}</ExternalAnchor><div className="mt-0.5 truncate text-xs text-slate-500">{new URL(component.productionUrl).host}</div></div>)}
+            </div>
+          </div>
+          <div className="lg:mt-7"><PlanningLinks version={release.version} state={references} onRetry={onRetryReferences} onReload={onReloadRelease} /></div>
+        </aside>
       </div>
     </div>
   );

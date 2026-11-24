@@ -13,6 +13,7 @@ import type {
   PlatformRole,
 } from "@/lib/types";
 import { reconcileNotificationEvents } from "@/lib/notification-resolution";
+import { notificationLeadRecipientFilter } from "@/lib/notification-recipient-filter";
 import { isOperationalLeadRole } from "@/lib/platform";
 import { protectedToolPreviewUrl } from "@/lib/tool-preview-image";
 
@@ -371,7 +372,7 @@ async function loadHeaderNotifications(
     .order("created_at", { ascending: false })
     .limit(maxHeaderNotifications);
   query = platformRole && isOperationalLeadRole(platformRole)
-    ? query.or(`recipient_profile_id.eq.${currentProfileId},recipient_profile_id.is.null`)
+    ? query.or(notificationLeadRecipientFilter(currentProfileId))
     : query.eq("recipient_profile_id", currentProfileId);
   const result = await query;
   if (result.error) return errorHeaderSlot(emptyPlanningHeaderData.notifications, "Benachrichtigungen konnten nicht geladen werden.");

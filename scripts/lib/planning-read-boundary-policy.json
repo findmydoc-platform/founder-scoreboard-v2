@@ -14,7 +14,9 @@
     "src/features/planning-items/server/planning-structure-read-source.ts",
     "src/features/planning-items/server/planning-structure-controls-read-source.ts",
     "src/features/planning-items/server/planning-gantt-read-source.ts",
-    "src/features/planning-items/server/planning-team-metrics-read-source.ts"
+    "src/features/planning-items/server/planning-team-metrics-read-source.ts",
+    "src/features/planning-items/server/planning-notification-targets.ts",
+    "src/features/planning-items/server/planning-release-reference-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
@@ -69,9 +71,9 @@
     "NOTIFICATIONS": {
       "consumer": "NOTIFICATIONS",
       "owner": "Notifications feature owner",
-      "reason": "Retain the established inbox item and lifecycle basis separately from Board membership.",
-      "evidence": "tests/unit/shared/supporting-read-coverage.test.mjs; docs/planning-item-read-contracts.md",
-      "expiresWhen": "Remove on accepted NOTIFICATIONS migration #656."
+      "reason": "Notification lifecycle reconciliation retains targeted active Item and blocker reads; Inbox reference hydration uses the shared Item module and never infers deleted targets from missing references.",
+      "evidence": "tests/unit/notifications/notification-lifecycle.test.mjs; tests/integration/notification-preview-count-credential.test.ts; docs/planning-item-read-contracts.md",
+      "expiresWhen": "Revalidate when Notification lifecycle, targeted reference scope or authorization changes."
     },
     "RELEASE": {
       "consumer": "RELEASE",
@@ -222,6 +224,21 @@
     },
     {
       "from": "src/features/notifications/server/notifications-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
+      "contract": "NOTIFICATIONS"
+    },
+    {
+      "from": "src/features/notifications/server/notifications-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-notification-targets.ts",
+      "contract": "NOTIFICATIONS"
+    },
+    {
+      "from": "src/lib/credentials/internal/account.ts",
+      "to": "src/features/planning-items/server/planning-release-reference-read-source.ts",
+      "contract": "RELEASE"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-notification-targets.ts",
       "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
       "contract": "NOTIFICATIONS"
     },
@@ -776,18 +793,10 @@
       "references": 1
     },
     {
-      "from": "src/features/platform-releases/server/platform-release-read-model-supabase.ts",
-      "kind": "from",
-      "target": "active_tasks",
-      "fingerprint": "98ea1806900ceebb368e80aaa03774be082aba6f9fe4ba55d790e2c82e1c38c8",
-      "contract": "RELEASE",
-      "references": 1
-    },
-    {
-      "from": "src/features/platform-releases/server/platform-release-read-model-supabase.ts",
-      "kind": "from",
-      "target": "task_links",
-      "fingerprint": "16f5f0abbddc3cea3d1fa13f6b946e4087619e4062f1852a020199f46e707ef4",
+      "from": "src/features/planning-items/server/planning-release-reference-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_release_reference_snapshot",
+      "fingerprint": "ae8f685901f39e8811564a9e1b302b6034a8d87a0eaa76397539d8f13db0d9b8",
       "contract": "RELEASE",
       "references": 1
     },
@@ -928,10 +937,18 @@
       "references": 1
     },
     {
+      "from": "src/features/planning-items/server/planning-notification-targets.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "d7bbe83a754e871c2e53eb03448ed7119874272d52e320665eb3e72cd1a44684",
+      "contract": "NOTIFICATIONS",
+      "references": 1
+    },
+    {
       "from": "src/lib/notification-resolution.ts",
       "kind": "from",
       "target": "active_tasks",
-      "fingerprint": "bb7d122b7a6944ed05a2b09d4465d12e68f92ac5352718dd3d62bead8368125b",
+      "fingerprint": "07d414249da1de6a1384063f0e900f35bf0150e9477309eddadfdcfe291c6743",
       "contract": "NOTIFICATIONS",
       "references": 1
     },
@@ -939,7 +956,7 @@
       "from": "src/lib/notification-resolution.ts",
       "kind": "from",
       "target": "task_blockers",
-      "fingerprint": "1c69f6b97fadb987dc418ffe018672fc60dc785e14207ac6dc6ed0f3af8c58a7",
+      "fingerprint": "f39491627f7f67d83fb79512a89708f0d7192a86604c314559aee22781e2a3c2",
       "contract": "NOTIFICATIONS",
       "references": 1
     },

@@ -19,6 +19,12 @@ beforeEach(() => {
     if (url.pathname === "/rest/v1/rpc/administrator_access_snapshot" && protocol.state.rebindAfterShell) {
       const response = await authFetch(request); protocol.state.rebound = true; return response;
     }
+    if (url.pathname === "/rest/v1/rpc/platform_release_reference_publication_context") return Response.json({ profile_id: "synthetic-profile", platform_role: "viewer", source_revision: "source-1" });
+    if (url.pathname === "/rest/v1/rpc/planning_release_reference_snapshot") {
+      resources.push({ table: "planning_release_reference_snapshot", method: request.method, credential: request.headers.get("authorization"), body: await request.json() });
+      return Response.json({ status: "ready", source_revision: "source-1",
+        releases: [{ version: release.version, manifestDigest: release.manifestDigest, planningReferences: [] }] });
+    }
     if (url.pathname.startsWith("/rest/v1/") && !url.pathname.startsWith("/rest/v1/rpc/")) {
       const table = url.pathname.split("/").at(-1);
       resources.push({ table, method: request.method, query: url.searchParams, credential: request.headers.get("authorization"), body: request.method === "GET" ? null : await request.json() });
@@ -44,7 +50,10 @@ it("admits an existing viewer to bounded human release reads with the original r
   const releases = resources.find(resource => resource.table === "platform_releases");
   expect(releases.query.get("limit")).toBe("200");
   expect(releases.query.get("order")).toBe("published_at.desc");
-  expect(resources.find(resource => resource.table === "task_links").query.get("type")).toBe("eq.github_pull_request");
+  expect(resources.find(resource => resource.table === "planning_release_reference_snapshot").body.p_release_keys)
+    .toEqual([{ version: release.version, manifestDigest: release.manifestDigest }]);
+  expect(resources.map(resource => resource.table)).not.toContain("active_tasks");
+  expect(resources.map(resource => resource.table)).not.toContain("task_links");
   const notifications = resources.find(resource => resource.table === "notification_events");
   expect(notifications.query.get("recipient_profile_id")).toBe("eq.synthetic-profile");
   expect(notifications.query.get("entity_type")).toBe("eq.platform_release");

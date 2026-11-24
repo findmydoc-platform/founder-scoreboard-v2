@@ -12,5 +12,5 @@ export type DecisionLogCredentialResult = Extract<AuthzResult, { ok: false }> | 
   ok: true;
   profile: Readonly<AuthenticatedProfile> | null;
   notion: NotionDecisionLogCapability | null;
-  loadHeader(): Promise<PlanningHeaderData>;
+  loadHeader(slots?: readonly import("../planning-header-data").PlanningHeaderSlotKey[]): Promise<PlanningHeaderData>;
 };

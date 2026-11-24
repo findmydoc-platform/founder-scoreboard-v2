@@ -8,7 +8,7 @@ async function handleGET(request: NextRequest) {
   if (!apiContext.ok) return apiContext.response;
   const currentProfile = apiContext.permission.profile;
   const [result, header] = await Promise.all([
-    apiContext.planning.loadSprint(), apiContext.planning.loadHeader(),
+    apiContext.planning.loadSprint(), apiContext.planning.loadHeader(request.nextUrl.searchParams.get("header") === "independent" ? ["quickLinks", "calendarEvents"] : undefined),
   ]);
   if (!header.ok) return authzError(header);
   if (result.status === "forbidden") return apiError("Sprint darf nicht geladen werden.", 403);

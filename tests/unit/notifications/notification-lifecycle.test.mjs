@@ -161,19 +161,22 @@ test("pure reconciliation rules process more than one hundred open events", () =
   assert.equal(resolved.length, 125);
 });
 
-function fakeReconciliationSupabase(rows, { taskError = false } = {}) {
+function fakeReconciliationSupabase(rows, { taskError = false, nullTasks = false, founderRows = [], onFilter = () => {}, onUpdate = () => {}, onRead = () => {}, failingTables = [] } = {}) {
   const updated = [];
   return {
     updated,
     from(table) {
       if (table !== "notification_events") {
+        onRead(table);
         return {
           select() { return this; },
           in() {
-            return Promise.resolve({
-              data: [],
-              error: table === "active_tasks" && taskError ? { message: "source unavailable" } : null,
+            const response = Promise.resolve({
+              data: table === "active_tasks" && nullTasks ? null : table === "founder_events" ? founderRows : [],
+              error: table === "active_tasks" && taskError || failingTables.includes(table) ? { message: "source unavailable" } : null,
             });
+            response.abortSignal = () => response;
+            return response;
           },
         };
       }
@@ -192,14 +195,16 @@ function fakeReconciliationSupabase(rows, { taskError = false } = {}) {
               Object.assign(row, payload);
               updated.push(row.id);
             }
+            onUpdate();
             return Promise.resolve({ data: null, error: null });
           }
           return query;
         },
         gt(_column, value) { cursor = value; return query; },
         order() { return query; },
+        abortSignal() { return query; },
         limit(value) { limit = value; return query; },
-        or() { return query; },
+        or(value) { onFilter(value); return query; },
         in(_column, value) { ids = value; return query; },
         then(resolve) {
           const data = rows.filter((row) => row.status === "pending" && row.id > cursor).slice(0, limit);
@@ -240,6 +245,116 @@ test("server reconciliation paginates beyond one hundred and fails safe on sourc
   assert.equal(failingDatabase.updated.length, 0);
 });
 
+test("reconciliation only reads blocker and role basis for notification types that need them", async () => {
+  const makeRow = (id, type, entityType, entityId, recipient = "recipient") => ({ id, type, entity_type: entityType,
+    entity_id: entityId, recipient_profile_id: recipient, actor_profile_id: null, title: type, body: null, status: "pending",
+    seen_at: null, dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() });
+  const reads = [];
+  const database = fakeReconciliationSupabase([makeRow(1, "task.mention", "task", "t1"), makeRow(2, "meeting.attendance_updated", "meeting", "2")], { onRead: table => reads.push(table) });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, true);
+  assert.equal(reads.includes("task_blockers"), false);
+  assert.equal(reads.includes("profiles"), false);
+  assert.ok(reads.includes("active_tasks"));
+  assert.ok(reads.includes("meetings"));
+});
+
+test.each(["task.review_requested", "task.blocker_reported", "task.proposed", "event.upcoming"])("%s requires its recipient role basis", async type => {
+  const row = { id: 1, type, entity_type: type === "event.upcoming" ? "founder_event" : "task", entity_id: "7", recipient_profile_id: "recipient", actor_profile_id: null, title: type, body: null, status: "pending", seen_at: null, dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() };
+  const reads = [];
+  const database = fakeReconciliationSupabase([row], { onRead: table => reads.push(table), failingTables: ["profiles"] });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, false);
+  assert.ok(reads.includes("profiles"));
+  assert.equal(database.updated.length, 0);
+});
+
+test("a reported blocker requires the blocker basis", async () => {
+  const row = { id: 1, type: "task.blocker_reported", entity_type: "task", entity_id: "t1", recipient_profile_id: "recipient", actor_profile_id: null, title: "Blocker", body: null, status: "pending", seen_at: null, dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() };
+  const reads = [];
+  const database = fakeReconciliationSupabase([row], { onRead: table => reads.push(table), failingTables: ["task_blockers"] });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, false);
+  assert.ok(reads.includes("task_blockers"));
+  assert.equal(database.updated.length, 0);
+});
+
+test("a complete notification count cannot certify reconciliation when a required target read fails", async () => {
+  const rows = [{ id: 1, type: "task.comment", actor_profile_id: null, recipient_profile_id: null,
+    entity_type: "task", entity_id: "unavailable-target", title: "Target", body: null, status: "pending", seen_at: null,
+    dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() }];
+  const database = fakeReconciliationSupabase(rows, { taskError: true });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, false);
+  assert.equal(database.updated.length, 0);
+});
+
+test("a missing target response is unknown, not evidence of a deleted target", async () => {
+  const rows = [{ id: 1, type: "task.comment", actor_profile_id: null, recipient_profile_id: null,
+    entity_type: "task", entity_id: "unknown-target", title: "Target", body: null, status: "pending", seen_at: null,
+    dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() }];
+  const database = fakeReconciliationSupabase(rows, { nullTasks: true });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, false);
+  assert.equal(database.updated.length, 0);
+});
+
+test("a reconciled notification receipt expires by the next event time boundary", async () => {
+  const rows = [{ id: 1, type: "event.upcoming", actor_profile_id: null, recipient_profile_id: null,
+    entity_type: "founder_event", entity_id: "7", title: "Event", body: null, status: "pending", seen_at: null,
+    dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() }];
+  const database = fakeReconciliationSupabase(rows, { founderRows: [{ id: 7, status: "planned", starts_at: "2026-07-11T10:10:00.000Z", audience_mode: "all", participant_profile_ids: [], reminder_days_before: 1 }] });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.validUntil, "2026-07-11T10:10:00.000Z");
+});
+
+test("team reconciliation keeps an unusual actor identity inside its recipient filter", async () => {
+  let filter;
+  const database = fakeReconciliationSupabase([], { onFilter: value => { filter = value; } });
+  const result = await resolution.reconcileNotificationEvents(database, { currentProfileId: 'lead),recipient_profile_id.eq.other"\\', platformRole: "ceo" });
+  assert.equal(result.ok, true);
+  assert.equal(filter, 'recipient_profile_id.eq."lead),recipient_profile_id.eq.other\\"\\\\",recipient_profile_id.is.null');
+});
+
+test("a cancelled notification reconciliation does not begin protected reads", async () => {
+  let reads = 0;
+  const controller = new AbortController(); controller.abort();
+  const database = { from() { reads++; throw new Error("Unexpected read"); } };
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true, signal: controller.signal });
+  assert.equal(result.ok, false);
+  assert.equal(reads, 0);
+});
+
+test("cancellation during a notification-page read stops target reads before any status write", async () => {
+  const controller = new AbortController();
+  const tables = [];
+  const row = { id: 1, type: "task.comment", actor_profile_id: null, recipient_profile_id: null,
+    entity_type: "task", entity_id: "target", title: "Target", body: null, status: "pending", seen_at: null,
+    dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() };
+  const query = {
+    select() { return query; }, eq() { return query; }, gt() { return query; }, order() { return query; }, limit() { return query; },
+    abortSignal(signal) { assert.equal(signal, controller.signal); return query; },
+    then(resolve) { controller.abort(); return Promise.resolve(resolve({ data: [row], error: null })); },
+  };
+  const database = { from(table) { tables.push(table); if (table !== "notification_events") throw new Error("Unexpected target read"); return query; } };
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true, signal: controller.signal });
+  assert.equal(result.ok, false);
+  assert.deepEqual(tables, ["notification_events"]);
+});
+
+test("cancelling the caller does not cancel a notification status write already dispatched", async () => {
+  const controller = new AbortController();
+  const rows = [{ id: 1, type: "task.comment", actor_profile_id: null, recipient_profile_id: null,
+    entity_type: "task", entity_id: "deleted-target", title: "Target", body: null, status: "pending", seen_at: null,
+    dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() }];
+  const database = fakeReconciliationSupabase(rows, { onUpdate: () => controller.abort() });
+  const result = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true, signal: controller.signal });
+  assert.equal(result.ok, true);
+  assert.deepEqual(database.updated, [1]);
+  assert.equal(rows[0].status, "resolved");
+});
+
 test("user lifecycle actions keep seen open and reserve team notifications for operational leads", () => {
   assert.equal(lifecycle.canManageNotificationEvent({ id: "viewer-1", platformRole: "viewer" }, "viewer-1"), true);
   assert.equal(lifecycle.canManageNotificationEvent({ id: "ceo-1", platformRole: "ceo" }, "viewer-1"), false);
@@ -252,4 +367,15 @@ test("user lifecycle actions keep seen open and reserve team notifications for o
   const dismissed = lifecycle.applyLocalNotificationAction(seen, "dismiss", now);
   assert.equal(dismissed.status, "dismissed");
   assert.equal(dismissed.dismissedAt, now.toISOString());
+});
+
+test("shared read-only reconciliation never performs required lifecycle writes", async () => {
+  const row = { id: 1, type: "task.mention", entity_type: "task", entity_id: "deleted-target", recipient_profile_id: "recipient", actor_profile_id: null, title: "Mention", body: null, status: "pending", seen_at: null, dismissed_at: null, resolved_at: null, resolution_reason: null, created_at: now.toISOString() };
+  const database = fakeReconciliationSupabase([row]);
+  const shared = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true, readOnlyShared: true });
+  assert.equal(shared.ok, false);
+  assert.equal(database.updated.length, 0);
+  const independent = await resolution.reconcileNotificationEvents(database, { now, requireCompleteBasis: true });
+  assert.equal(independent.ok, true);
+  assert.deepEqual(database.updated, [1]);
 });

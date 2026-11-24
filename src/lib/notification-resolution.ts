@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { notificationDefinition } from "./notification-catalog";
 import { ACTIVE_TASKS_TABLE } from "./planning-read-model";
 import { isOperationalLeadRole } from "./platform";
+import { notificationLeadRecipientFilter } from "./notification-recipient-filter";
 import { normalizeStatus } from "./status";
 import type { FounderEvent, NotificationEvent, PlanningShellState, PlatformRole, Sprint, Task, TaskBlocker } from "./types";
 
@@ -191,6 +192,9 @@ type ReconciliationOptions = {
   platformRole?: PlatformRole | null;
   pageSize?: number;
   now?: Date;
+  requireCompleteBasis?: boolean;
+  readOnlyShared?: boolean;
+  signal?: AbortSignal;
 };
 
 type NotificationRow = {
@@ -233,23 +237,25 @@ function mapRow(row: NotificationRow): NotificationEvent {
   };
 }
 
-async function loadResolutionContext(supabase: SupabaseClient, events: NotificationEvent[]): Promise<NotificationResolutionContext> {
+async function loadResolutionContext(supabase: SupabaseClient, events: NotificationEvent[], signal?: AbortSignal): Promise<NotificationResolutionContext> {
   const taskIds = [...new Set(events.filter((event) => event.entityType === "task").map((event) => event.entityId))];
+  const blockerTaskIds = [...new Set(events.filter((event) => event.entityType === "task" && event.type === "task.blocker_reported").map((event) => event.entityId))];
   const sprintIds = [...new Set(events.filter((event) => event.entityType === "sprint").map((event) => event.entityId))];
   const founderEventIds = [...new Set(events.filter((event) => event.entityType === "founder_event").map((event) => Number(event.entityId)).filter(Number.isInteger))];
   const meetingIds = [...new Set(events.filter((event) => event.entityType === "meeting").map((event) => Number(event.entityId)).filter(Number.isInteger))];
-  const profileIds = [...new Set(events.map((event) => event.recipientProfileId).filter(Boolean))];
+  const profileIds = [...new Set(events.filter((event) => ["task.review_requested", "task.blocker_reported", "task.proposed", "event.upcoming"].includes(event.type)).map((event) => event.recipientProfileId).filter(Boolean))];
 
+  const cancellable = <T extends { abortSignal(signal: AbortSignal): T }>(query: T) => signal ? query.abortSignal(signal) : query;
   const [tasks, blockers, sprints, founderEvents, meetings, profiles] = await Promise.all([
-    taskIds.length ? supabase.from(ACTIVE_TASKS_TABLE).select("id,status,assignee,owner,review_owner_profile_id,review_status,score_final,task_type,approval_status,fixed_date").in("id", taskIds) : Promise.resolve({ data: [], error: null }),
-    taskIds.length ? supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").in("task_id", taskIds) : Promise.resolve({ data: [], error: null }),
-    sprintIds.length ? supabase.from("sprints").select("id,status,score_locked,review_due_at").in("id", sprintIds) : Promise.resolve({ data: [], error: null }),
-    founderEventIds.length ? supabase.from("founder_events").select("id,status,starts_at,audience_mode,participant_profile_ids,reminder_days_before").in("id", founderEventIds) : Promise.resolve({ data: [], error: null }),
-    meetingIds.length ? supabase.from("meetings").select("id").in("id", meetingIds) : Promise.resolve({ data: [], error: null }),
-    profileIds.length ? supabase.from("profiles").select("id,platform_role").in("id", profileIds) : Promise.resolve({ data: [], error: null }),
+    taskIds.length ? cancellable(supabase.from(ACTIVE_TASKS_TABLE).select("id,status,assignee,owner,review_owner_profile_id,review_status,score_final,task_type,approval_status,fixed_date").in("id", taskIds)) : Promise.resolve({ data: [], error: null }),
+    blockerTaskIds.length ? cancellable(supabase.from("task_blockers").select("id,task_id,profile_id,reason,impact,needs_help_from,status,created_at,resolved_at").in("id", blockerTaskIds)) : Promise.resolve({ data: [], error: null }),
+    sprintIds.length ? cancellable(supabase.from("sprints").select("id,status,score_locked,review_due_at").in("id", sprintIds)) : Promise.resolve({ data: [], error: null }),
+    founderEventIds.length ? cancellable(supabase.from("founder_events").select("id,status,starts_at,audience_mode,participant_profile_ids,reminder_days_before").in("id", founderEventIds)) : Promise.resolve({ data: [], error: null }),
+    meetingIds.length ? cancellable(supabase.from("meetings").select("id").in("id", meetingIds)) : Promise.resolve({ data: [], error: null }),
+    profileIds.length ? cancellable(supabase.from("profiles").select("id,platform_role").in("id", profileIds)) : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const taskRows = tasks.error ? undefined : new Map((tasks.data || []).map((row) => [row.id, {
+  const taskRows = tasks.error || !Array.isArray(tasks.data) ? undefined : new Map(tasks.data.map((row) => [row.id, {
     id: row.id,
     status: row.status,
     assignee: row.assignee || "",
@@ -261,7 +267,7 @@ async function loadResolutionContext(supabase: SupabaseClient, events: Notificat
     approvalStatus: row.approval_status,
     fixedDate: row.fixed_date || "",
   }]));
-  const blockerMap = blockers.error ? undefined : new Map<string, TaskBlocker[]>();
+  const blockerMap = blockers.error || !Array.isArray(blockers.data) ? undefined : new Map<string, TaskBlocker[]>();
   if (blockerMap) {
     for (const row of blockers.data || []) {
       const current = blockerMap.get(row.task_id) || [];
@@ -273,10 +279,10 @@ async function loadResolutionContext(supabase: SupabaseClient, events: Notificat
   return {
     tasks: taskRows,
     blockers: blockerMap,
-    sprints: sprints.error ? undefined : new Map((sprints.data || []).map((row) => [row.id, { id: row.id, status: row.status, scoreLocked: Boolean(row.score_locked), reviewDueAt: row.review_due_at || "" }])),
-    events: founderEvents.error ? undefined : new Map((founderEvents.data || []).map((row) => [String(row.id), { id: row.id, status: row.status, startsAt: row.starts_at, audienceMode: row.audience_mode, participantProfileIds: row.participant_profile_ids || [], reminderDaysBefore: Number(row.reminder_days_before || 0) }])),
-    meetings: meetings.error ? undefined : new Set((meetings.data || []).map((row) => String(row.id))),
-    profileRoles: profiles.error ? undefined : new Map((profiles.data || []).map((row) => [row.id, row.platform_role as PlatformRole])),
+    sprints: sprints.error || !Array.isArray(sprints.data) ? undefined : new Map(sprints.data.map((row) => [row.id, { id: row.id, status: row.status, scoreLocked: Boolean(row.score_locked), reviewDueAt: row.review_due_at || "" }])),
+    events: founderEvents.error || !Array.isArray(founderEvents.data) ? undefined : new Map(founderEvents.data.map((row) => [String(row.id), { id: row.id, status: row.status, startsAt: row.starts_at, audienceMode: row.audience_mode, participantProfileIds: row.participant_profile_ids || [], reminderDaysBefore: Number(row.reminder_days_before || 0) }])),
+    meetings: meetings.error || !Array.isArray(meetings.data) ? undefined : new Set(meetings.data.map((row) => String(row.id))),
+    profileRoles: profiles.error || !Array.isArray(profiles.data) ? undefined : new Map(profiles.data.map((row) => [row.id, row.platform_role as PlatformRole])),
   };
 }
 
@@ -286,8 +292,14 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
   let cursor = 0;
   let checked = 0;
   let resolved = 0;
+  let durable = false;
+  // Berlin day transitions occur on UTC hour boundaries. Expiring each hour is
+  // conservative and also bounds results that have no time-sensitive rows.
+  let validUntil = (Math.floor(now.getTime() / 3_600_000) + 1) * 3_600_000;
+  const success = () => ({ ok: true as const, checked, resolved, error: "", ...(options.requireCompleteBasis ? { observedAt: now.toISOString(), validUntil: new Date(validUntil).toISOString() } : {}) });
 
   while (true) {
+    if (!durable && options.signal?.aborted) return { ok: false, checked, resolved, error: "Notification reconciliation was cancelled." };
     let query = supabase
       .from("notification_events")
       .select("id,type,actor_profile_id,actor_label,recipient_profile_id,entity_type,entity_id,title,body,target_path,status,seen_at,dismissed_at,resolved_at,resolution_reason,created_at")
@@ -297,18 +309,39 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
       .limit(pageSize);
     if (options.currentProfileId) {
       query = options.platformRole && isOperationalLeadRole(options.platformRole)
-        ? query.or(`recipient_profile_id.eq.${options.currentProfileId},recipient_profile_id.is.null`)
+        ? query.or(notificationLeadRecipientFilter(options.currentProfileId))
         : query.eq("recipient_profile_id", options.currentProfileId);
     }
+    if (!durable && options.signal) query = query.abortSignal(options.signal);
 
     const result = await query;
     if (result.error) return { ok: false, checked, resolved, error: result.error.message };
+    if (!durable && options.signal?.aborted) return { ok: false, checked, resolved, error: "Notification reconciliation was cancelled." };
     const rows = (result.data || []) as NotificationRow[];
-    if (!rows.length) return { ok: true, checked, resolved, error: "" };
+    if (!rows.length) return success();
     cursor = rows[rows.length - 1].id;
     const events = rows.map(mapRow);
     checked += events.length;
-    const context = await loadResolutionContext(supabase, events);
+    const context = await loadResolutionContext(supabase, events, durable ? undefined : options.signal);
+    if (!durable && options.signal?.aborted) return { ok: false, checked, resolved, error: "Notification reconciliation was cancelled." };
+    if (options.requireCompleteBasis && events.some(event =>
+      event.entityType === "task" && !context.tasks
+      || event.type === "task.blocker_reported" && !context.blockers
+      || event.type === "sprint.review_due" && !context.sprints
+      || event.type === "event.upcoming" && !context.events
+      || event.type === "meeting.attendance_updated" && !context.meetings
+      || Boolean(event.recipientProfileId) && ["task.review_requested", "task.blocker_reported", "task.proposed", "event.upcoming"].includes(event.type) && !context.profileRoles
+    )) return { ok: false, checked, resolved, error: "Notification resolution basis is unavailable." };
+    if (options.requireCompleteBasis) {
+      for (const event of events) {
+        if (event.type !== "event.upcoming") continue;
+        const source = context.events?.get(event.entityId);
+        if (!source) continue;
+        const boundary = Date.parse(source.startsAt);
+        if (!Number.isFinite(boundary)) return { ok: false, checked, resolved, error: "Notification temporal basis is unavailable." };
+        if (boundary >= now.getTime()) validUntil = Math.min(validUntil, boundary);
+      }
+    }
     const byReason = new Map<string, number[]>();
     for (const event of events) {
       const resolution = notificationResolution(event, context, now);
@@ -316,7 +349,11 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
       byReason.set(resolution.reason, [...(byReason.get(resolution.reason) || []), event.id]);
     }
 
+    if (options.readOnlyShared && byReason.size) return { ok: false as const, checked, resolved, error: "Independent reconciliation required." };
+
     for (const [reason, ids] of byReason) {
+      if (!durable && options.signal?.aborted) return { ok: false, checked, resolved, error: "Notification reconciliation was cancelled." };
+      durable = true;
       const update = await supabase
         .from("notification_events")
         .update({ status: "resolved", resolved_at: now.toISOString(), resolution_reason: reason })
@@ -325,7 +362,7 @@ export async function reconcileNotificationEvents(supabase: SupabaseClient, opti
       if (update.error) return { ok: false, checked, resolved, error: update.error.message };
       resolved += ids.length;
     }
-    if (rows.length < pageSize) return { ok: true, checked, resolved, error: "" };
+    if (rows.length < pageSize) return success();
   }
 }
 

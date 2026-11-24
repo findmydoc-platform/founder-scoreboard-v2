@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { verifyPlanningReadBoundary } from "../../scripts/lib/planning-read-boundary.mjs";
@@ -72,6 +72,20 @@ test("an exact accounted read remains allowed while a second neighboring read is
     assert.deepEqual(verifyPlanningReadBoundary({ root, policy: accounted }), []);
     writeFileSync(path.join(root, "src/legacy.ts"), `${source}\nclient.from('tasks').select('*');`);
     assert.ok(verifyPlanningReadBoundary({ root, policy: accounted }).some(value => /competing/.test(value)));
+  });
+});
+
+test("the scoped Notification reference reader is allowed while a neighboring full Item read is rejected", () => {
+  const notificationPolicy = JSON.parse(readFileSync(new URL("../../scripts/lib/planning-read-boundary-policy.json", import.meta.url), "utf8"));
+  const reader = "src/features/planning-items/server/planning-notification-targets.ts";
+  const adapter = "src/features/notifications/server/notifications-read-model-supabase.ts";
+  fixture({
+    [reader]: 'const ACTIVE_TASKS_TABLE = "active_tasks"; let query = supabase.from(ACTIVE_TASKS_TABLE).select("id,title,task_type").eq("project_id", planningProjectId).in("id", ids);',
+    [adapter]: 'import { readPlanningNotificationTargets } from "../../planning-items/server/planning-notification-targets"; readPlanningNotificationTargets();',
+  }, root => {
+    assert.deepEqual(verifyPlanningReadBoundary({ root, policy: notificationPolicy }), []);
+    writeFileSync(path.join(root, adapter), 'import { readPlanningNotificationTargets } from "../../planning-items/server/planning-notification-targets"; readPlanningNotificationTargets(); client.from("active_tasks").select("*");');
+    assert.ok(verifyPlanningReadBoundary({ root, policy: notificationPolicy }).some(value => /competing.*active_tasks/.test(value)));
   });
 });
 

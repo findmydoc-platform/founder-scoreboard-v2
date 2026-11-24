@@ -92,14 +92,74 @@ test("local Planning without authentication retains its immediately ready empty 
   }
 });
 
-test("Notification Center still loads its own notification data and ready header", async () => {
+test("Notification Center admits its actor without eagerly loading Planning or claiming empty notifications", async () => {
   const { notificationRead } = planningProtocol(false);
   context.authRequired = true;
   const page = await renderWorkspacePage("notifications");
   expect(page.props.initialWorkspace).toBe("notifications");
   expect(page.props.initialData.notificationEvents).toEqual([]);
-  expect(page.props.initialHeaderData.notifications.state).toBe("ready");
-  expect(notificationRead).toHaveBeenCalled();
+  expect(page.props.initialHeaderData.notifications.state).toBe("idle");
+  expect(page.props.initialProtectedDataLoaded).toBe(true);
+  expect(page.props.initialCurrentProfile).toMatchObject({ id: "synthetic-profile", platformRole: "founder" });
+  expect(notificationRead).not.toHaveBeenCalled();
+});
+
+test("a direct Notification Center document reserves independent Inbox and Count before hydration", async () => {
+  const { notificationRead } = planningProtocol(false);
+  context.requestHeaders = { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" };
+  const original = globalThis.fetch;
+  const admission = vi.fn();
+  const unblock: Array<() => void> = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname.endsWith("/notification_publication_context")) {
+      admission();
+      await new Promise<void>(resolve => unblock.push(resolve));
+      return Response.json({ profile_id: "synthetic-profile", platform_role: "founder", source_revision: "42" });
+    }
+    return original(request);
+  });
+  try {
+    const page = await renderWorkspacePage("notifications");
+    expect(page.props.initialNotificationEntry).toMatchObject({
+      session: { userId: "synthetic-user" }, readAuthority: { userId: "synthetic-user" },
+    });
+    expect(page.props.children.props.results).toHaveProperty("inbox");
+    expect(page.props.children.props.results).toHaveProperty("count");
+    await vi.waitFor(() => expect(admission).toHaveBeenCalledTimes(2));
+    expect(notificationRead).not.toHaveBeenCalled();
+  } finally {
+    context.afterCallbacks.forEach(callback => callback());
+    for (const resolve of unblock) resolve();
+  }
+});
+
+test.each<Record<string, string>>([
+  { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "next-router-prefetch": "1" },
+  { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "next-router-segment-prefetch": "segment" },
+  { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-purpose": "prefetch" },
+  { "sec-fetch-dest": "empty", "sec-fetch-mode": "cors", rsc: "1" },
+])("Notification Center keeps prefetch and RSC shell delivery free of content admission (%o)", async headers => {
+  planningProtocol(false);
+  context.requestHeaders = headers;
+  const original = globalThis.fetch, notificationAdmission = vi.fn();
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (new URL(request.url).pathname.endsWith("/notification_publication_context")) notificationAdmission();
+    return original(request);
+  });
+  const page = await renderWorkspacePage("notifications");
+  expect(page.props.initialProtectedDataLoaded).toBe(true);
+  expect(page.props.initialNotificationEntry).toBeUndefined();
+  expect(notificationAdmission).not.toHaveBeenCalled();
+});
+
+test("supporting workspace SSR leaves notification preview to its independent client read", async () => {
+  const { notificationRead } = planningProtocol(false);
+  const page = await renderWorkspacePage("events");
+  expect(page.props.initialWorkspace).toBe("events");
+  expect(page.props.initialHeaderData.notifications.state).toBe("idle");
+  expect(notificationRead).not.toHaveBeenCalled();
 });
 
 
@@ -137,7 +197,7 @@ test.each(["projects", "events", "tools", "team", "notifications"] as const)("%s
 });
 
 test("Backlog SSR admits the shell without enumerating capped domain rows or certifying empty membership", async () => {
-  const { protocol } = planningProtocol();
+  const { protocol, notificationRead } = planningProtocol();
   const original = globalThis.fetch, broadReads: string[] = [], selfBindings: string[] = [];
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init), url = new URL(request.url);
@@ -157,7 +217,8 @@ test("Backlog SSR admits the shell without enumerating capped domain rows or cer
   expect(page.props.initialData.profiles).toEqual([{ id: "synthetic-profile", name: "Synthetic Founder", platformRole: "founder", orgRole: "Founder", githubLogin: "", weeklyCapacity: 6 }]);
   expect(page.props.initialBacklogModel).toMatchObject({ items: [], coverage: { items: "partial", people: "partial", sprints: "partial", commitments: "partial" } });
   expect(page.props.initialBacklogModel.selection).toBeUndefined();
-  expect(page.props.initialHeaderData.notifications.state).toBe("error");
+  expect(page.props.initialHeaderData.notifications.state).toBe("idle");
+  expect(notificationRead).not.toHaveBeenCalled();
 });
 
 
