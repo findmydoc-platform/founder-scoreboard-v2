@@ -6,7 +6,7 @@ import { observeRuntimeHandler, observeRuntimePreparation } from "@/lib/runtime-
 async function handleGET(request: NextRequest) {
   const permission = await authorizeCredentialAction({ credential: { kind: "session-request", request }, action: "planning.revision.read" });
   if (!permission.ok) return authzError(permission);
-  const result = await permission.planning.readSourceVersion();
+  const result = await permission.planning.readSourceVersion({ signal: request.signal });
   if (result.error || result.version === null) return apiError("Planungsänderungen konnten nicht geprüft werden.", "status" in result ? result.status : 503);
   return observeRuntimePreparation(() => NextResponse.json({ version: result.version }, { headers: { "Cache-Control": "private, no-store" } }));
 }

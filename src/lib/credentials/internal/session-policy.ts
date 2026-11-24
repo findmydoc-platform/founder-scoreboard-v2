@@ -65,7 +65,7 @@ export async function authorizeSessionPolicy(request: NextRequest, action: Sessi
   const roleAllowed = rolePermitsAction(action, profile.platformRole);
   if (!administratorCapability && (!correction || request.headers.has("x-fmd-dev-profile-id"))) {
     if (!roleAllowed) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
-    return { ...context, profile };
+    return { ...context, profile, localProfileOverride: profile.id !== context.profile.id };
   }
   const result = await context.data.rpc("administrator_access_snapshot");
   if (result.error) return roleAllowed && correction ? { ...context, profile }

@@ -314,7 +314,7 @@ export const ReviewChildrenProtectUnsavedInput: Story = {
     await userEvent.click(canvas.getByRole("link", { name: openChild.title }));
     await userEvent.click(within(await canvas.findByRole("alertdialog")).getByRole("button", { name: "Änderungen verwerfen" }));
     const openPanel = await canvas.findByRole("dialog", { name: openChild.title });
-    await expect(await within(openPanel).findByRole("button", { name: "Bearbeiten" })).toBeEnabled();
+    await waitFor(() => expect(within(openPanel).getByRole("button", { name: "Bearbeiten" })).toBeEnabled());
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(canvas.queryByRole("dialog", { name: openChild.title })).not.toBeInTheDocument());
     await userEvent.click(canvas.getByText("Erledigt 1", { selector: "summary" }));

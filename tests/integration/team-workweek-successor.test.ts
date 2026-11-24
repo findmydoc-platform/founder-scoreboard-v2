@@ -8,9 +8,15 @@ it("inserts a current correction before the prepared Monday without changing tha
     const user = "58000000-0000-4000-8000-000000000001";
     await client.query("insert into auth.users(id) values($1)", [user]);
     await client.query("insert into public.profiles(id,auth_user_id,name,platform_role) values('successor-owner',$1,'Owner','viewer')", [user]);
+    // Retain the unchanged Sunday 01:00–04:00 window before its successor.
+    // Once it expires at the +3 minute candidate, use the following Monday instead.
+    // This keeps at most one full Sunday/DST cohort and preserves an effect to compensate.
     const sources = await client.query(`insert into public.team_workweek_versions(owner_profile_id,effective_from)
       values('successor-owner',date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date-7),
-      ('successor-owner',date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+7) returning id,effective_from`);
+      ('successor-owner',date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+
+        case when (date_trunc('minute',clock_timestamp())+interval '3 minutes') at time zone 'Europe/Berlin'
+          < date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')+interval '6 days 4 hours'
+        then 7 else 14 end) returning id,effective_from`);
     const successor = await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,windows,status,sync_state,published_at,last_sync_at,publication_revision)
       values($1,'successor-owner',$2,'[{"weekday":1,"startMinute":600,"endMinute":960}]','published','confirmed',clock_timestamp(),clock_timestamp(),2) returning *`, [sources.rows[1].id, sources.rows[1].effective_from]);
     const current = await client.query(`insert into public.team_workweek_publications(source_version_id,owner_profile_id,effective_from,effective_to,superseded_by_publication_id,windows,status,sync_state,published_at,last_sync_at,publication_revision)
@@ -77,6 +83,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     const repeatedDraft = await asAuthenticated(client, user, () => client.query("select public.create_private_current_team_workweek_version('[]',$1,3) as version", [publication.id]));
     const repeated = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [repeatedDraft.rows[0].version.id]))).rows[0].publication;
     expect(repeated.successorPublicationId).toBe(successor.rows[0].id);
+    expect(repeated.effects.some((effect: { state: string }) => effect.state !== "cleaned")).toBe(true);
     expect(repeated.effects.every((effect: { googleEventId: string }) => effect.googleEventId !== futureSeries.rows[0].google_event_id)).toBe(true);
     const cutoff = repeated.effects.find((effect: { kind: string }) => effect.kind === "predecessor_cutoff");
     if (masters.length) expect(cutoff.expectedPayload).toEqual(masters[0].payload);
@@ -111,7 +118,7 @@ it("inserts a current correction before the prepared Monday without changing tha
     expect((await client.query("select * from public.team_workweek_google_series where id=$1", [futureSeries.rows[0].id])).rows[0]).toEqual(futureSeries.rows[0]);
     expect(writes.filter((write) => write.startsWith("POST:"))).toHaveLength(publication.effects.filter((effect: PreparedWorkweekEffect) => effect.operation === "create").length);
     expect(writes.some((write) => write.includes("fopsfuture001"))).toBe(false);
-    const laterMonday = (await client.query("select date_trunc('week',clock_timestamp() at time zone 'Europe/Berlin')::date+14 as day")).rows[0].day;
+    const laterMonday = (await client.query("select $1::date+7 as day", [sources.rows[1].effective_from])).rows[0].day;
     const laterDraft = (await asAuthenticated(client, user, () => client.query("select public.create_private_monday_team_workweek_version($1,'[]',$2,3) as version", [laterMonday, publication.id]))).rows[0].version;
     expect(laterDraft.basePublicationId).toBe(successor.rows[0].id);
     const later = (await asAuthenticated(client, user, () => client.query("select public.prepare_team_workweek_publication($1,1) as publication", [laterDraft.id]))).rows[0].publication;

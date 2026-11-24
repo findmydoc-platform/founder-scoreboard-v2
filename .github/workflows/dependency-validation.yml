@@ -135,6 +135,14 @@ jobs:
         if: needs.changes.outputs.app_required == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Verify credential boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:credentials
+
+      - name: Verify Planning read boundaries
+        if: needs.changes.outputs.app_required == 'true'
+        run: pnpm run verify:planning-reads
+
       - name: Install Storybook browser
         if: needs.changes.outputs.app_required == 'true'
         run: pnpm exec playwright install --with-deps chromium

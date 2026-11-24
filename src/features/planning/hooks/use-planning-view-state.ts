@@ -43,18 +43,27 @@ const planningBoardUrlSchema: TableUrlSchema<PlanningBoardUrlState> = {
 };
 
 type UsePlanningViewStateOptions = {
+  planningState: import("../model/planning-state").PlanningState;
+  workspace: import("../model/workspace-routes").AppWorkspace;
   initialData: PlanningShellState;
   initialView?: ViewMode;
   initialQuery?: import("../model/planning-board-query").PlanningBoardQuery;
 };
 
 export function usePlanningViewState({
+  planningState,
+  workspace,
   initialData,
   initialQuery,
   initialView,
 }: UsePlanningViewStateOptions) {
   const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "complete" ? initialView || "table" : "board");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [localSelectedTaskId, setLocalSelectedTaskId] = useState<string | null>(null);
+  const selectedTaskId = workspace === "planning" ? planningState.planningInteraction().selectedTaskId : localSelectedTaskId;
+  const setSelectedTaskId = useCallback((taskId: string | null) => {
+    if (workspace === "planning") planningState.rememberPlanningInteraction({ selectedTaskId: taskId });
+    else setLocalSelectedTaskId(taskId);
+  }, [planningState, workspace]);
   const [taskDialogDefaults, setTaskDialogDefaults] = useState<Partial<NewTaskDraft> | null>(null);
   const [initiativeDialogDefaults, setInitiativeDialogDefaults] = useState<Partial<InitiativeDraft> | null>(null);
   const [epicDialogDefaults, setEpicDialogDefaults] = useState<Partial<EpicDraft> | null>(null);

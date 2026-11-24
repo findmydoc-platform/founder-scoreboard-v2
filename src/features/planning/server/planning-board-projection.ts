@@ -13,17 +13,7 @@ import { isTaskPlanningActive } from "../model/approval-domain";
 import { hasOpenWaitingRelation } from "@/lib/platform";
 import { normalizeStatus, taskStatuses } from "@/lib/status";
 import type { Task, TaskStatus } from "@/lib/types";
-
-// Omission is explicit so a later Board page cannot clear loaded detail content.
-const cardOmittedFields: readonly (keyof Task)[] = [
-  "description", "problemStatement", "intendedOutcome", "scopeConstraints", "acceptanceCriteria", "evidenceRequired", "definitionOfDone", "note",
-  "strategy", "raciAssignments", "evidenceLinks", "linkedPullRequests", "reviewEvidenceExceptionNote", "githubIssueSyncError", "decisionNote", "carryoverReason",
-];
-function compactPlanningCard(task: Task): Task {
-  const summary = { ...task, detailAvailability: "summary" as const };
-  for (const field of cardOmittedFields) delete summary[field];
-  return summary;
-}
+import { compactPlanningCard, planningCardOmittedFields as cardOmittedFields } from "@/features/planning-items/server/planning-card-summary";
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function compareCompletedPlanningCards(left: Task, right: Task) {
@@ -88,7 +78,7 @@ export function projectPlanningBoard(model: PlanningWorkspaceModel, context: Pla
     ...model, query, queryRevision: revision,
     coverage: { ...model.coverage, items: "partial", relationships: "partial", blockers: "partial" },
     taskOmittedFields: cardOmittedFields,
-    items: model.items.filter(task => contextIds.has(task.id)).map(compactPlanningCard), relationships,
+    items: model.items.filter(task => contextIds.has(task.id)).map(task => compactPlanningCard(task)), relationships,
     blockers: model.blockers?.filter(blocker => contextIds.has(blocker.taskId)),
     board: { query, column, queryKey, revision, observedAt: new Date().toISOString(), cardIds: [...cardIds], childProgressById, columns,
       workstreams: [...new Set(model.items.map(item => item.workstream).filter(Boolean))].sort((left, right) => left.localeCompare(right, "de")),
