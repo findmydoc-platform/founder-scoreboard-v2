@@ -1,6 +1,6 @@
 # Runtime logging contract
 
-The central module covers 25 registered method/route pairs, their existing session proxy, and the private Supabase Auth, Supabase database, Google Workspace and GitHub transports they reach. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
+The central module covers 26 registered method/route pairs, their existing session proxy, and the private Supabase Auth, Supabase database, Google Workspace and GitHub transports they reach. One route completion links the response ID to the safe proxy summary, membership evidence, actual HTTP-attempt counts, and bounded local phase intervals. It preserves the credential and cookie chain.
 
 ## Registered HTTP scope
 
@@ -9,7 +9,7 @@ The central module covers 25 registered method/route pairs, their existing sessi
 | Area | Registered method and route |
 | --- | --- |
 | Calendar | GET `/api/team-workweek/team` |
-| Planning | GET `/api/planning-header-data`, `/api/planning-board-data`, `/api/planning-revision`, `/api/sprint-data`, `/api/strategic-planning-data` |
+| Planning | GET `/api/planning-header-data`, `/api/planning-board-data`, `/api/planning-source-version`, `/api/planning-revision`, `/api/sprint-data`, `/api/strategic-planning-data` |
 | Task | GET `/api/tasks/[id]/detail-data`; POST `/api/tasks/[id]/comments`, `/api/tasks/[id]/github-comments`, `/api/tasks/[id]/sync-github` |
 | GitHub connection | GET `/api/github-app/status`; DELETE `/api/github-app/connection` |
 | Workweek | GET and POST `/api/team-workweek/private-draft` and `/api/team-workweek/conflict`; POST `/api/team-workweek/publish`, `/api/team-workweek/reconcile`, `/api/team-workweek/restart` |
@@ -79,7 +79,9 @@ Projection visits those paths in rank order and emits each shared ancestor once,
 
 Proxy aggregates and slowest spans remain in the proxy's own `request.completed` event. The existing forwarded summary stays below 1 KiB and does not carry these new fields. Correlate both completion events using `requestId` and preserve their stage boundaries. Route `externalCalls` still merges proxy counters as before; do not add the proxy counters again when using that merged field. Missing proxy correlation remains explicit.
 
-The Board route adds static `board.authorization`, `board.load` and `board.header` spans. Its nine parallel model reads use `board.project`, `board.profiles`, `board.items`, `board.strategy`, `board.raci`, `board.links`, `board.sprints`, `board.relationships` and `board.preferences`. Each read duration includes its existing live checks, dispatch, response handling and permit cleanup. `board.avatars` measures profile mapping and avatar enrichment; `board.map` measures the subsequent model mapping. These spans change no queries, authority checks, scheduling or cache behavior. Shared model callers can produce the same model labels within their own observed request.
+The Board route adds static `board.authorization` and `board.load` spans. Optional header slots run through their independent `/api/planning-header-data` requests; their work is absent from the Board completion. Its nine parallel model reads use `board.project`, `board.profiles`, `board.items`, `board.strategy`, `board.raci`, `board.links`, `board.sprints`, `board.relationships` and `board.preferences`. Each read duration includes its existing live checks, dispatch, response handling and permit cleanup. `board.avatars` measures profile mapping and avatar enrichment; `board.map` measures the subsequent model mapping. These spans change no queries, authority checks, scheduling or cache behavior. Shared model callers can produce the same model labels within their own observed request.
+
+The `planning.source-version` route observes the scalar transactional revision for the current Board/complete-view reader through the existing `planning.revision.read` credential action. It performs no Item enumeration, hydration, exact aggregate or model hashing. This clock does not cover Backlog, Sprint assessment, Team, discussion or other consumers. Its source dependencies and retained authority guarantees are defined in the [entry read contract](planning-item-read-contracts.md#entry-source-observation). The legacy `/api/planning-revision` route retains its count/timestamp response contract.
 
 The existing `response.prepare` span measures the Board's original `NextResponse.json` execution once. It does not include later network transfer. Server diagnostics do not read, clone or serialize the response body to count bytes. A client measurement may record received body bytes separately.
 

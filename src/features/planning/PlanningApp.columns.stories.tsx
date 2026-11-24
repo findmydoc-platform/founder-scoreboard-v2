@@ -53,10 +53,10 @@ function ActiveColumnsFlow({ holdColumnPage = false, failRefresh = false }: { ho
         setReads(value => value + 1);
         const query = JSON.parse(url.searchParams.get("scope") || "{}");
         if (failRefresh && query.column && !query.continuation && ++refreshAttempts === 1) return Response.json({ error: "Refresh unavailable" }, { status: 503 });
-        if (query.view === "complete") return Response.json({ model: { ...page(query), board: undefined, items: [active, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
+        if (query.view === "complete") return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...page(query), board: undefined, items: [active, ...completed], coverage: { ...initial.coverage, items: "complete" } }, currentProfile: profile });
         if (query.column === "Offen" && query.continuation && ++attempts === 1) return Response.json({ error: "History unavailable" }, { status: 503 });
-        if (holdColumnPage && query.column === "Review" && query.continuation) return new Promise<Response>(resolve => setReleasePage(() => () => { resolve(Response.json({ model: page(query), currentProfile: profile })); setReleasePage(null); }));
-        return Response.json({ model: page(query), currentProfile: profile });
+        if (holdColumnPage && query.column === "Review" && query.continuation) return new Promise<Response>(resolve => setReleasePage(() => () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query), currentProfile: profile })); setReleasePage(null); }));
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: page(query), currentProfile: profile });
       }
       if (url.pathname === `/api/tasks/${active.id}` && init?.method === "PATCH") return Response.json({ task: { ...active, ...JSON.parse(String(init.body)), updatedAt: "saved-status-r2" } });
       if (url.pathname === "/api/planning-revision") return Response.json({ revision: initial.board.workspaceRevision });
@@ -67,7 +67,7 @@ function ActiveColumnsFlow({ holdColumnPage = false, failRefresh = false }: { ho
     queueMicrotask(() => setReady(true));
     return () => { restore(); if (previous === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previous); };
   }, [holdColumnPage, failRefresh]);
-  return <>{releasePage ? <button type="button" onClick={releasePage}>Seitenantwort fortsetzen</button> : null}<output aria-label="Column reads">{reads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session)} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
+  return <>{releasePage ? <button type="button" onClick={releasePage}>Seitenantwort fortsetzen</button> : null}<output aria-label="Column reads">{reads}</output>{ready ? <PlanningStateProvider><PlanningApp initialWorkspace="planning" initialWorkspaceRead={planningWorkspaceHydration("planning", initial, session, { userId: session.userId, deadline: session.expiresAt * 1000 })} initialData={{ ...emptyPlanningShellState, tasks: initial.items, profiles: [profile] }} initialHeaderData={emptyPlanningHeaderData} initialAuthUser={user} initialCurrentProfile={profile} initialProtectedDataLoaded authRequired source="supabase" /></PlanningStateProvider> : null}</>;
 }
 const meta = { title: "Planning/Active columns flow", component: ActiveColumnsFlow, parameters: { layout: "fullscreen", nextjs: { appDirectory: true, navigation: { pathname: "/planning" } } } } satisfies Meta<typeof ActiveColumnsFlow>;
 export default meta;

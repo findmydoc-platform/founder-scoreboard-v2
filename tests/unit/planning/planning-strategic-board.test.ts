@@ -107,7 +107,7 @@ test("a late Epic page cannot populate a newly selected Initiative scope", async
   if (first.status !== "ready") throw new Error("Expected Epic Board");
   const session = { userId: "reader", user: { id: "reader" }, revision: "strategic-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
   let release: (() => void) | undefined;
-  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session), adapter: {
+  const owner = createPlanningState({ userId: session.userId, initialData: planningWorkspaceModelToPlanningShellState(first.model), initialSession: session, initialWorkspaceRead: planningWorkspaceHydration("planning", first.model, session, { userId: session.userId, deadline: session.expiresAt * 1000 }), adapter: {
     saveTask: async task => ({ task }),
     readWorkspace: async (_, query) => {
       const result = await reader.load({ ...context, query });

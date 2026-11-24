@@ -12,6 +12,7 @@ type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialWorkspaceRead,
+  initialServerHeaderRead,
   initialDecisionLogResult,
   initialData,
   initialHeaderData,
@@ -28,6 +29,7 @@ export function usePlanningAppController({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialWorkspaceRead,
+    initialServerHeaderRead,
     initialDecisionLogResult,
     initialData,
     initialHeaderData,
@@ -79,6 +81,8 @@ export function usePlanningAppController({
     planningLevel,
     planningParentFilterId,
     planningRemoteChangesAvailable,
+    planningRemoteChangesUnverified,
+    checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     protectedDataLoaded,
     refreshCurrentWorkspaceModel,
@@ -247,6 +251,8 @@ export function usePlanningAppController({
     planningLevel,
     planningParentFilterId,
     planningRemoteChangesAvailable,
+    planningRemoteChangesUnverified,
+    checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     openTaskPanel,
     protectedDataLoaded,

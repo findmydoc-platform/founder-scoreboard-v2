@@ -1,11 +1,13 @@
 export async function verifyWorkspaceSecurity(client, failures) {
-  const planningSnapshot = await client.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
-    has_function_privilege('service_role',oid,'execute') as server_execute,
-    has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute') as client_execute
-    from pg_proc where oid=to_regprocedure('public.planning_workspace_snapshot()')`);
-  if (planningSnapshot.rowCount !== 1 || planningSnapshot.rows[0].owner !== "postgres" || !planningSnapshot.rows[0].prosecdef
-    || !planningSnapshot.rows[0].proconfig?.includes('search_path=""') || !planningSnapshot.rows[0].server_execute
-    || planningSnapshot.rows[0].client_execute) failures.push("Planning snapshot server contract missing or unsafe");
+  for (const signature of ["public.planning_workspace_snapshot()", "public.planning_source_version()"]) {
+    const planningSnapshot = await client.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
+      has_function_privilege('service_role',oid,'execute') as server_execute,
+      has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute') as client_execute
+      from pg_proc where oid=to_regprocedure($1)`, [signature]);
+    if (planningSnapshot.rowCount !== 1 || planningSnapshot.rows[0].owner !== "postgres" || !planningSnapshot.rows[0].prosecdef
+      || !planningSnapshot.rows[0].proconfig?.includes('search_path=""') || !planningSnapshot.rows[0].server_execute
+      || planningSnapshot.rows[0].client_execute) failures.push(`Planning source server contract missing or unsafe: ${signature}`);
+  }
   const hook = await client.query("select rolconfig from pg_roles where rolname='authenticator'");
   if (!hook.rows[0]?.rolconfig?.includes("pgrst.db_pre_request=public.workspace_check_request")) failures.push("Workspace Data API pre-request hook missing");
   const missing = await client.query(`select distinct tablename from pg_policies source

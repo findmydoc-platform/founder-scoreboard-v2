@@ -166,13 +166,18 @@ it("Planning revision detects older Item, relationship and Sprint changes and re
     await fixture.database.query("insert into public.profile_ui_preferences(profile_id,default_workspace) values($1,'planning')", [actor.profileId]);
     const beforePreferences = await read();
     await fixture.database.query("update public.profile_ui_preferences set default_task_view='table' where profile_id=$1", [actor.profileId]);
+    const afterPreferences = await read();
+    // Stored UI preferences contribute to the Board model's source evidence.
+    expect(afterPreferences.scopeRevision).not.toBe(beforePreferences.scopeRevision);
+    expect(afterPreferences.count).toBe(initial.count);
+    expect(afterPreferences.data).toEqual(initial.data);
     await fixture.database.query("update auth.sessions set refreshed_at=clock_timestamp() where id=$1", [actor.sessionId]);
     await fixture.database.query("update auth.identities set identity_data=jsonb_set(identity_data,'{private_other_field}','true') where user_id=$1 and provider='google'", [actor.userId]);
     await fixture.database.query("update workspace_private.identity_bindings set linked_at=clock_timestamp() where user_id=$1", [actor.userId]);
     await fixture.database.query("insert into public.projects(id,name) values('revision-other','Unrelated')");
     await fixture.database.query("insert into public.tasks(id,project_id,title,status,priority) values('revision-unrelated','revision-other','Unrelated','Offen','P2')");
     await fixture.database.query("insert into public.task_dependencies(task_id,note) values('revision-unrelated','Private unrelated activity')");
-    expect((await read()).scopeRevision).toBe(beforePreferences.scopeRevision);
+    expect((await read()).scopeRevision).toBe(afterPreferences.scopeRevision);
     const boardPermission = await authorize("planning.board.read");
     if (!boardPermission.ok) throw new Error("Expected mapped Board reader");
     const beforeModel = await read();

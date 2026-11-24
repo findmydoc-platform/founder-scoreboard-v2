@@ -2,6 +2,7 @@ import { observeRuntimeHandler, observeRuntimePhase, observeRuntimePreparation }
 import { NextResponse, type NextRequest } from "next/server";
 import { authorizeCredentialAction } from "@/lib/credentials";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
+import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { apiError, authzError } from "@/lib/api-response";
 
 async function handleGET(request: NextRequest) {
@@ -17,15 +18,11 @@ async function handleGET(request: NextRequest) {
     } catch { return apiError("Ungültiger Planungsbereich.", 400); }
   }
   const currentProfile = permission.profile;
-  const [result, header] = await Promise.all([
-    observeRuntimePhase("board.load", () => permission.planning.loadBoard(query)),
-    observeRuntimePhase("board.header", () => permission.planning.loadHeader(currentProfile ? ["quickLinks", "calendarEvents"] : undefined)),
-  ]);
-  if (!header.ok) return authzError(header);
+  const result = await observeRuntimePhase("board.load", () => permission.planning.loadBoard(query));
   if (result.status === "forbidden") return apiError("Planung darf nicht geladen werden.", 403);
   if (result.status === "staleContinuation") return NextResponse.json({ error: "Die Ergebnisliste hat sich geändert. Bitte erneut laden.", code: "stale_continuation" }, { status: 409 });
   if (result.status === "unavailable") return apiError("Planung konnte nicht geladen werden.", 503);
-  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: header.headerData, currentProfile }));
+  return observeRuntimePreparation(() => NextResponse.json({ model: result.model, readAuthority: permission.readAuthority, headerData: emptyPlanningHeaderData, currentProfile }));
 }
 
 export const GET = observeRuntimeHandler("planning.board", handleGET);

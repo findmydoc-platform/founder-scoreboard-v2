@@ -2,7 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { getRouter, usePathname } from "@storybook/nextjs-vite/navigation.mock";
 import { useEffect, useRef, useState } from "react";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import { PlanningApp } from "./PlanningApp";
 import { PlanningStateProvider } from "./organisms/planning-state-provider";
 import { emptyPlanningShellState } from "./model/planning-shell-state";
@@ -21,7 +21,7 @@ const task = taskDetailStoryTask({ id: "entry-task", title: "Planning entry task
 const headerData = { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]), calendarEvents: readyHeaderSlot([]) };
 const model = { revision: "entry-r1", scopeRevision: "scope-r1", project: emptyPlanningShellState.project, items: [task], people: [profile], sprints: [], relationships: [], preferences: [], coverage: { items: "complete", people: "complete", strategies: "complete", raci: "complete", links: "complete", sprints: "complete", relationships: "complete", preferences: "complete" } } as const;
 
-function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean }) {
+function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, changedPageOnReturn = false, revisionChanged = false, rotationRecovery = false, sourceFailureOnce = false, sourceRecoveryDelayed = false }: { startInEvents?: boolean; backgroundFailure?: boolean; changedPageOnReturn?: boolean; revisionChanged?: boolean; rotationRecovery?: boolean; sourceFailureOnce?: boolean; sourceRecoveryDelayed?: boolean }) {
   const navigationCalls = useRef(0);
   const [workspace, setWorkspace] = useState<"planning" | "events">(startInEvents ? "events" : "planning");
   const [reads, setReads] = useState(0);
@@ -29,6 +29,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
   const [pages, setPages] = useState(1);
   const [finished, setFinished] = useState(0);
   const finishRead = useRef<() => void>(() => {});
+  const finishSource = useRef<() => void>(() => {});
   const [ready, setReady] = useState(false);
   const currentSession = useRef(session);
   const [eventReads, setEventReads] = useState(0);
@@ -37,28 +38,34 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
-    let boardRequests = 0;
+    let boardRequests = 0, sourceRequests = 0;
     const restore = mockAccountLifecycle("google", { linked: true }, (input) => {
       const path = String(input).split("?")[0];
       if (path === "/api/auth/session") return Response.json({ session: currentSession.current });
       if (path === "/api/planning-board-data") {
         setReads(count => count + 1);
         if (rotationRecovery && ++boardRequests === 1) return new Promise<Response>(resolve => {
-          finishRead.current = () => { resolve(Response.json({ model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
+          finishRead.current = () => { resolve(Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { ...model, items: [{ ...task, title: "Late old-session task" }] }, currentProfile: profile })); setFinished(count => count + 1); };
         });
         if (backgroundFailure || changedPageOnReturn) return new Promise<Response>(resolve => {
           finishRead.current = () => {
-            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : Response.json({ model, currentProfile: profile }));
+            resolve(backgroundFailure ? Response.json({ error: "Board temporarily unavailable" }, { status: 503 }) : Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile }));
             setFinished(count => count + 1);
           };
         });
-        return Response.json({ model, currentProfile: profile });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model, currentProfile: profile });
+      }
+      if (path === "/api/planning-source-version") {
+        setRevisions(count => count + 1);
+        if (sourceFailureOnce && ++sourceRequests === 1) return Response.json({ error: "Source unavailable" }, { status: 503 });
+        if (sourceRecoveryDelayed) return new Promise<Response>(resolve => { finishSource.current = () => resolve(Response.json({ version: "scope-r1" })); });
+        return Response.json({ version: revisionChanged ? "scope-r2" : "scope-r1" });
       }
       if (path === "/api/planning-revision") { setRevisions(count => count + 1); return Response.json({ revision: { activeTaskCount: 1, latestUpdatedAt: task.updatedAt, scopeRevision: revisionChanged ? "scope-r2" : "scope-r1" } }); }
       if (path === "/api/events-data") {
         setEventReads(count => count + 1);
         setEventCredential(currentSession.current.revision);
-        return Response.json({ model: { revision: "events", people: [profile], events: rotationRecovery ? [{ id: 1, title: "Current-session event", category: "other", startsAt: "2099-01-10T10:00:00.000Z", endsAt: "", location: "", description: "", audienceMode: "all", participantProfileIds: [], reminderDaysBefore: 7, reminderGeneratedAt: "", status: "planned", createdBy: profile.id, createdAt: "r1", updatedAt: "r1" }] : [], coverage: { range: null, completeness: "complete" } } });
+        return Response.json({ readAuthority: { userId: session.userId, deadline: session.expiresAt * 1000 }, model: { revision: "events", people: [profile], events: rotationRecovery ? [{ id: 1, title: "Current-session event", category: "other", startsAt: "2099-01-10T10:00:00.000Z", endsAt: "", location: "", description: "", audienceMode: "all", participantProfileIds: [], reminderDaysBefore: 7, reminderGeneratedAt: "", status: "planned", createdBy: profile.id, createdAt: "r1", updatedAt: "r1" }] : [], coverage: { range: null, completeness: "complete" } } });
       }
       if (path === "/api/github-app/status") return Response.json({ installation: { available: false }, user: { connected: false } });
       if (path === "/api/administrator-access") return Response.json({ administratorAccess: { eligible: false, active: false, expiresAt: null } });
@@ -74,13 +81,15 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
         setPages(count => count + 1);
       }
     });
-    queueMicrotask(() => setReady(true));
+    let active = true;
+    void createBrowserSessionAdapter().refresh().then(() => { if (active) setReady(true); });
     return () => {
+      active = false;
       restore();
       push.mockReset();
       if (previousSeen === null) localStorage.removeItem(seenKey); else localStorage.setItem(seenKey, previousSeen);
     };
-  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery]);
+  }, [startInEvents, backgroundFailure, changedPageOnReturn, revisionChanged, rotationRecovery, sourceFailureOnce, sourceRecoveryDelayed]);
   const pageModel = changedPageOnReturn && pages > 1 ? { ...model, revision: "entry-r2", scopeRevision: "scope-r2", items: [{ ...task, title: "New page task", updatedAt: "entry-r2" }] } : model;
   return <div onClickCapture={() => { navigationCalls.current = getRouter().push.mock.calls.length; }} onClick={event => {
     const link = (event.target as Element).closest<HTMLAnchorElement>("a[href]");
@@ -89,6 +98,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
       getRouter().push(link.getAttribute("href")!);
     }
   }}>
+    {sourceRecoveryDelayed ? <><label>Independent draft<input defaultValue="" /></label><button onClick={() => finishSource.current()}>Finish source observation</button></> : null}
     <output aria-label="Complete Board API reads">{reads}</output>
     <output aria-label="Page results">{pages}</output>
     <output aria-label="Revision checks">{revisions}</output>
@@ -99,7 +109,7 @@ function PlanningEntryFlow({ startInEvents = false, backgroundFailure = false, c
     <button onClick={() => finishRead.current()}>Finish background Board response</button>
     {ready ? <PlanningStateProvider><PlanningApp key={workspace}
       initialWorkspace={workspace}
-      initialWorkspaceRead={workspace === "planning" ? planningWorkspaceHydration("planning", pageModel, session) : undefined}
+      initialWorkspaceRead={workspace === "planning" ? planningWorkspaceHydration("planning", pageModel, session, { userId: session.userId, deadline: session.expiresAt * 1000 }) : undefined}
       initialData={{ ...emptyPlanningShellState, profiles: [profile], tasks: workspace === "planning" ? [...pageModel.items] : [] }}
       initialHeaderData={headerData} initialAuthUser={user} initialCurrentProfile={profile}
       initialProtectedDataLoaded authRequired source="supabase"
@@ -185,5 +195,39 @@ export const TokenRotationThenVisibleEventsNavigationRecoversOnce: Story = {
     await expect(canvas.getByLabelText("Events API reads")).toHaveTextContent("1");
     await expect(canvas.getByLabelText("Events session revision")).toHaveTextContent("entry-rotated");
     await expect(canvas.queryByText("Late old-session task")).not.toBeInTheDocument();
+  },
+};
+
+
+export const KeyboardSourceRetryRestoresPlanningHeadingFocus: Story = {
+  args: { sourceFailureOnce: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const retry = await canvas.findByRole("button", { name: "Aktualität der Planung erneut prüfen" });
+    retry.focus();
+    await expect(retry).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "Aktualität der Planung erneut prüfen" })).not.toBeInTheDocument());
+    await expect(canvas.getByRole("heading", { name: "Planung", level: 1 })).toHaveFocus();
+    await expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("0");
+    await expect(canvas.getByLabelText("Revision checks")).toHaveTextContent("2");
+  },
+};
+
+export const SourceRecoveryDoesNotStealIndependentInputFocus: Story = {
+  args: { sourceFailureOnce: true, sourceRecoveryDelayed: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const retry = await canvas.findByRole("button", { name: "Aktualität der Planung erneut prüfen" });
+    retry.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(canvas.getByLabelText("Revision checks")).toHaveTextContent("2"));
+    const input = canvas.getByRole("textbox", { name: "Independent draft" });
+    await userEvent.type(input, "Keep this draft");
+    fireEvent.click(canvas.getByRole("button", { name: "Finish source observation" }));
+    await waitFor(() => expect(canvas.queryByRole("button", { name: "Aktualität der Planung erneut prüfen" })).not.toBeInTheDocument());
+    await expect(input).toHaveFocus();
+    await expect(input).toHaveValue("Keep this draft");
+    await expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("0");
   },
 };

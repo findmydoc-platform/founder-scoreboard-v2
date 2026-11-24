@@ -16,6 +16,7 @@ export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, worksp
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
   return apiClient.requestJson<{
     model?: PlanningWorkspaceModel;
+    readAuthority?: import("./planning-server-header-read").PlanningReadAuthority;
     headerData?: PlanningHeaderData;
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
@@ -58,7 +59,7 @@ export async function requestPlanningHeaderData(apiClient: BrowserApiClient, slo
   });
   try {
     return await Promise.race([
-      apiClient.requestJson<{ headerData?: PlanningHeaderData; error?: string }>(`/api/planning-header-data${query}`, { signal }),
+      apiClient.requestJson<{ headerData?: PlanningHeaderData; readAuthority?: import("./planning-server-header-read").PlanningReadAuthority; error?: string }>(`/api/planning-header-data${query}`, { signal }),
       aborted,
     ]);
   } finally {
