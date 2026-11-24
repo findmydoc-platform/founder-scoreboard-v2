@@ -12,6 +12,7 @@ type PlanningAppControllerOptions = PlanningBootstrapStateOptions;
 
 export function usePlanningAppController({
   initialWorkspaceRead,
+  initialTaskDetailRead,
   initialServerHeaderRead,
   initialDecisionLogResult,
   initialData,
@@ -29,6 +30,7 @@ export function usePlanningAppController({
   const sidebarRef = useRef<HTMLElement | null>(null);
   const bootstrap = usePlanningBootstrapState({
     initialWorkspaceRead,
+    initialTaskDetailRead,
     initialServerHeaderRead,
     initialDecisionLogResult,
     initialData,
@@ -150,6 +152,7 @@ export function usePlanningAppController({
     selectedTask,
   } = taskSelection;
   const taskDetailDataLoader = useTaskDetailDataLoader({
+    scoped: true,
     planningState,
     selectedTask,
     taskId: protectedDataLoaded && authUser ? selectedTaskId || undefined : undefined,
@@ -158,7 +161,7 @@ export function usePlanningAppController({
   });
 
   const planningBoard = planningState.board();
-  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
+  const planningQuery = useMemo(() => normalizePlanningBoardQuery({ view: view === "board" ? "board" : view === "table" ? "table" : "complete", level: planningLevel, parentId: planningParentFilterId, filters }), [view, planningLevel, planningParentFilterId, filters]);
   const planningQueryKey = planningBoardQueryKey(planningQuery);
   const usesScopedBoard = Boolean(planningBoard.queryKey) || planningBoard.requiresQueryRead === true;
   useEffect(() => {
@@ -172,13 +175,14 @@ export function usePlanningAppController({
     data,
     workspaceTasks: planningState.workspace(workspace).tasks,
     boardResult: workspace === "planning" ? planningBoard.result : undefined,
+    tableResult: workspace === "planning" ? planningBoard.table : undefined,
     filters: displayedPlanningQuery?.filters || filters,
     planningLevel: displayedPlanningQuery?.level || planningLevel,
     setInitiativeDialogDefaults,
     setEpicDialogDefaults,
     setTaskDialogDefaults,
     statusGuardTaskId,
-    view: displayedPlanningQuery?.view === "board" ? "board" : view,
+    view: displayedPlanningQuery && displayedPlanningQuery.view !== "complete" ? displayedPlanningQuery.view : view,
     workspace,
   });
   const commandRegistry = usePlanningCommandRegistry({
@@ -258,6 +262,7 @@ export function usePlanningAppController({
     checkForPlanningRemoteChanges,
     planningRemoteChangesRefreshing,
     openTaskPanel,
+    startTaskPanel: taskSelection.startTaskPanel,
     protectedDataLoaded,
     refreshCurrentWorkspaceModel,
     refreshPlanningRemoteChanges,

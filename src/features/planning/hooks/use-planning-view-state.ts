@@ -57,7 +57,7 @@ export function usePlanningViewState({
   initialQuery,
   initialView,
 }: UsePlanningViewStateOptions) {
-  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "complete" ? initialView || "table" : "board");
+  const [view, setView] = useState<ViewMode>(() => initialQuery?.view === "table" ? "table" : initialQuery?.view === "complete" ? initialView || "table" : "board");
   const [localSelectedTaskId, setLocalSelectedTaskId] = useState<string | null>(null);
   const selectedTaskId = workspace === "planning" ? planningState.planningInteraction().selectedTaskId : localSelectedTaskId;
   const setSelectedTaskId = useCallback((taskId: string | null) => {

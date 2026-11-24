@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { subIssueEvidenceSummary } from "@/features/tasks/model/sub-issue-evidence";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
-import { taskHasValidReviewEvidence } from "@/features/reviews/model/review-evidence";
+import { taskHasValidReviewEvidence, taskReviewEvidenceStatus } from "@/features/reviews/model/review-evidence";
 
 it("groups unique evidence by direct active Sub-Issue and retains every source", () => {
   const parent = taskDetailStoryTask({ id: "parent" });
@@ -36,4 +36,53 @@ it("does not inherit evidence through unrelated, trashed or strategic items", ()
   expect(taskHasValidReviewEvidence(parent, [{ ...child, parentTaskId: parent.id, trashedAt: "2026-10-13" }])).toBe(false);
   expect(subIssueEvidenceSummary({ ...parent, taskType: "initiative" }, [{ ...child, parentTaskId: parent.id }])).toEqual({ count: 0, groups: [] });
   expect(subIssueEvidenceSummary(parent, [{ ...child, parentTaskId: parent.id, evidenceLinks: ["javascript:alert(1)"] }])).toEqual({ count: 0, groups: [] });
+});
+
+it.each(["summary", "absent"] as const)("evidence availability remains unknown for %s supporting arrays", availability => {
+  const parent = taskDetailStoryTask({ id: "unknown-parent" });
+  const child = taskDetailStoryTask({ id: "unknown-child", taskType: "sub_issue", parentTaskId: parent.id,
+    ...(availability === "summary" ? { detailAvailability: "summary" as const } : {}) });
+  Reflect.deleteProperty(child, "evidenceLinks");
+  Reflect.deleteProperty(child, "linkedPullRequests");
+  expect(subIssueEvidenceSummary(parent, [child])).toMatchObject({ count: null, coverage: "unknown", knownCount: 0, groups: [] });
+});
+
+it("evidence availability preserves retained stale links without certifying current review evidence", () => {
+  const parent = taskDetailStoryTask({ id: "retained-parent" });
+  const child = taskDetailStoryTask({ id: "retained-child", taskType: "sub_issue", parentTaskId: parent.id,
+    detailAvailability: "stale", evidenceLinks: ["https://example.com/retained-proof"] });
+  const summary = subIssueEvidenceSummary(parent, [child]);
+  expect(summary).toMatchObject({ count: null, coverage: "unknown", knownCount: 0, groups: [] });
+  expect(summary).toHaveProperty("retainedGroups.0.entries.0.url", "https://example.com/retained-proof");
+  expect(taskHasValidReviewEvidence(parent, [child])).toBe(false);
+});
+
+it("evidence availability never certifies an unloaded empty membership as zero", () => {
+  const parent = taskDetailStoryTask({ id: "unloaded-parent" });
+  const summary = Reflect.apply(subIssueEvidenceSummary, undefined, [parent, [], { membershipComplete: false }]);
+  expect(summary).toMatchObject({ count: null, coverage: "unknown", knownCount: 0, groups: [] });
+});
+
+it("evidence availability keeps current positive evidence while other direct children remain unknown", () => {
+  const parent = taskDetailStoryTask({ id: "partial-parent" });
+  const known = taskDetailStoryTask({ id: "known-child", taskType: "sub_issue", parentTaskId: parent.id,
+    evidenceLinks: ["https://example.com/current-proof"] });
+  const compact = taskDetailStoryTask({ id: "compact-child", taskType: "sub_issue", parentTaskId: parent.id, detailAvailability: "summary" });
+  Reflect.deleteProperty(compact, "evidenceLinks"); Reflect.deleteProperty(compact, "linkedPullRequests");
+  const summary = subIssueEvidenceSummary(parent, [known, compact]);
+  expect(summary).toMatchObject({ count: null, coverage: "partial", knownCount: 1 });
+  expect(summary.groups[0].entries[0].url).toBe("https://example.com/current-proof");
+  expect(taskHasValidReviewEvidence(parent, [known, compact])).toBe(true);
+});
+
+
+it("review evidence status separates current positive, confirmed absence and unknown supporting data", () => {
+  const parent = taskDetailStoryTask({ id: "review-state-parent" });
+  const compact = taskDetailStoryTask({ id: "review-state-child", taskType: "sub_issue", parentTaskId: parent.id, detailAvailability: "summary" });
+  Reflect.deleteProperty(compact, "evidenceLinks"); Reflect.deleteProperty(compact, "linkedPullRequests");
+  expect(taskReviewEvidenceStatus(parent, [])).toBe("absent");
+  expect(taskReviewEvidenceStatus(parent, [], { membershipComplete: false })).toBe("unknown");
+  expect(taskReviewEvidenceStatus(parent, [compact])).toBe("unknown");
+  expect(taskReviewEvidenceStatus({ ...parent, evidenceLinks: ["https://example.com/current-root"] }, [compact])).toBe("present");
+  expect(taskReviewEvidenceStatus({ ...parent, detailAvailability: "stale", evidenceLinks: ["https://example.com/retained-root"] }, [compact])).toBe("unknown");
 });

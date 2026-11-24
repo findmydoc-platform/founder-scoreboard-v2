@@ -283,9 +283,9 @@ export const NewQueryRevealsStableFirstCard: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole("region", { name: "Board nach Status" });
     const search = canvas.getByRole("searchbox", { name: "Aufgaben durchsuchen" });
-    await userEvent.clear(search);
-    await userEvent.type(search, "needle");
-    await userEvent.keyboard("{Enter}");
+    search.focus();
+    fireEvent.change(search, { target: { value: "needle" } });
+    fireEvent.keyDown(search, { key: "Enter", code: "Enter" });
     await waitFor(() => expect(canvas.getByLabelText("Complete Board API reads")).toHaveTextContent("1"));
     fireEvent.click(canvas.getByRole("button", { name: "Finish background Board response" }));
     const card = await canvas.findByRole("link", { name: "Replacement needle card" });

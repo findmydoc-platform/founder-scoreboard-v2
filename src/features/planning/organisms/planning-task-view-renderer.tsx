@@ -47,7 +47,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     expandedInitiatives,
     filters: requestedFilters,
     filtersAvailable,
-    openTaskPanel,
+    startTaskPanel: openTaskPanel,
     planningLevel: requestedLevel,
     planningParentFilterId: requestedParentId,
     selectedTaskId,
@@ -70,7 +70,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
   const filters = controller.displayedPlanningQuery?.filters || requestedFilters;
   const planningLevel = controller.displayedPlanningQuery?.level || requestedLevel;
   const planningParentFilterId = controller.displayedPlanningQuery?.parentId || requestedParentId;
-  const view = controller.displayedPlanningQuery?.view === "board" ? "board" : requestedView;
+  const view = controller.displayedPlanningQuery && controller.displayedPlanningQuery.view !== "complete" ? controller.displayedPlanningQuery.view : requestedView;
   const resultsRef = useRef<HTMLElement>(null);
   const focusInteraction = useRef<(() => void) | undefined>(undefined);
   const pointerInteraction = useRef<(() => void) | undefined>(undefined);
@@ -132,6 +132,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       : controller.planningBoard?.result?.cardIds.every(id => controller.planningBoard.result!.attentionById?.[id] != null)
         ? "Fortschritt und Signale aktuell." : "Kindfortschritt aktuell. Signale unbekannt.";
 
+  const tableRiskRequests = controller.planningBoard?.table?.summaryRequests;
+  const tableRiskStatus = tableRiskRequests?.some(request => request.status === "unavailable") ? "unavailable"
+    : tableRiskRequests?.some(request => request.status === "loading") ? "loading" : "current";
+  const tableRiskLabel = summariesStale ? "Risiken veraltet." : tableRiskStatus === "loading" ? "Risiken werden geladen …"
+    : tableRiskStatus === "unavailable" ? "Risiken unbekannt." : "Risiken aktuell.";
+
   const canChangeTaskStatus = (task: (typeof data.tasks)[number]) => mayChangeTaskStatus(task) && controller.planningState.taskDetail(task.id).saveStatus !== "unconfirmed";
 
   // Table, Gantt and structure stay deliberately delivery-only in V1.  The
@@ -163,7 +169,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
     Kinder dürfen nicht geladen werden.
     <UiButton type="button" aria-disabled={deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")} onClick={() => {
       if (deniedChildListIds.some(id => controller.planningState.taskDetail(id).childrenReadStatus === "loading")) return;
-      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
+      void Promise.all(deniedChildListIds.map(id => controller.planningState.loadTaskDetail(id, { area: "children" }))).then(results => { if (results.every(result => result.ok)) void controller.retryPlanningQuery(); });
     }}>Kinder erneut laden</UiButton>
   </UiNotice>;
   if (controller.planningQueryReady === false && !controller.planningBoard.query) return <UiNotice role="status" tone="info">
@@ -193,6 +199,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
           className={summariesStale || summaryStatus === "current" ? "invisible min-h-11" : "min-h-11"}
           onClick={() => { void controller.planningState.refreshBoardSummaries(); }}>Erneut laden</UiButton>
       </div> : null}
+      {view === "table" && tableRiskRequests?.length ? <div role="status" aria-label={tableRiskLabel} className="mx-4 mb-3 flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-600 lg:mx-6">
+        <span className="min-w-0 flex-1">{tableRiskLabel}</span>
+        <UiButton type="button" aria-label="Risiken erneut laden" disabled={summariesStale || tableRiskStatus !== "unavailable"}
+          className={summariesStale || tableRiskStatus !== "unavailable" ? "invisible min-h-11" : "min-h-11"}
+          onClick={() => { void controller.planningState.refreshTableRisks(); }}>Erneut laden</UiButton>
+      </div> : null}
       {controller.planningBoard?.freshness === "stale" || controller.planningBoard?.readStatus === "loading" ? <span role="status" aria-label={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} title={controller.planningBoard.readStatus === "loading" ? "Planung wird aktualisiert" : "Planung veraltet"} className="mx-6 inline-flex text-slate-500">
         <RefreshCw size={14} aria-hidden="true" className={controller.planningBoard.readStatus === "loading" ? "animate-spin motion-reduce:animate-none" : undefined} />
       </span> : null}
@@ -202,7 +214,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
       </UiNotice> : null}
       {deniedChildListIds.length > 0 ? <UiNotice role="alert" tone="danger">
         Kinder dürfen nicht geladen werden.
-        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId); }}>Kinder erneut laden</UiButton>
+        <UiButton type="button" onClick={() => { for (const taskId of deniedChildListIds) void controller.planningState.loadTaskDetail(taskId, { area: "children" }); }}>Kinder erneut laden</UiButton>
       </UiNotice> : null}
       {controller.workspace === "planning" && controller.planningBoard?.readStatus === "unavailable" ? <UiNotice tone="info" role="alert">
         Der aktuelle Stand konnte nicht geladen werden. Deine geladenen Karten bleiben sichtbar.
@@ -228,7 +240,7 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
             attentionById={controller.planningBoard?.result?.attentionById}
             childListForTask={taskId => {
               const detail = controller.planningState.taskDetail(taskId);
-              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId); } };
+              return { items: detail.children, readStatus: detail.childrenReadStatus, load: () => { void controller.planningState.loadTaskDetail(taskId, { area: "children" }); } };
             }}
             columns={controller.planningBoard?.result ? Object.fromEntries(boardStatuses.map(status => [status, {
               ...controller.planningBoard.result!.columns[status],
@@ -281,6 +293,12 @@ export function PlanningTaskViewRenderer({ controller }: { controller: PlanningA
 
           {view === "table" && (
             <TaskTableView
+              availableStatuses={controller.planningBoard?.table?.statusOptions}
+              risksById={controller.planningBoard?.table?.risksById}
+              page={controller.planningBoard?.table?.page}
+              pageStatus={controller.planningBoard?.pageStatus}
+              onLoadMore={() => { void controller.planningState.loadTablePage(); }}
+              onRefresh={() => { void controller.planningState.refreshTablePage(); }}
               planningState={controller.planningState}
               visibleTasks={planningBoardTasks}
               profiles={data.profiles}

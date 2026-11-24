@@ -17,23 +17,36 @@ function configuration(strict: boolean) {
   return url && key ? { url, key } : null;
 }
 
-export function planningService(strict: boolean, beforeDispatch?: () => Promise<Denial | null>, assertCurrent?: () => void) {
+export function planningServiceEnvironmentGuard(strict: boolean) {
+  const captured = configuration(strict);
+  return () => {
+    const active = configuration(strict);
+    return Boolean(captured && active && captured.url === active.url && captured.key === active.key);
+  };
+}
+
+export function planningService(strict: boolean, beforeDispatch?: () => Promise<Denial | null>, assertCurrent?: () => void, operationSignal?: AbortSignal) {
   const captured = configuration(strict);
   if (!captured) return null;
   return createClient(captured.url, captured.key, { db: { retry: false }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async (input, init) => {
       const request = new Request(input, init);
+      const signal = operationSignal ? AbortSignal.any([operationSignal, request.signal]) : undefined;
       try {
+        signal?.throwIfAborted();
         const denial = beforeDispatch ? await beforeDispatch() : null;
         if (denial) return Response.json({ code: denial.code || "42501", message: denial.message }, { status: denial.status || (denial.code === "workspace_access_unavailable" ? 503 : 403) });
         assertCurrent?.();
+        signal?.throwIfAborted();
         const active = configuration(strict);
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
         const url = new URL(request.url), expected = new URL(captured.url);
         if (url.origin !== expected.origin || !url.pathname.startsWith("/rest/v1/")) throw new WorkspaceAccessError(403, "workspace_access_denied");
         // Keep the SDK's explicit operation signal through framework fetch wrappers.
         // Request inputs still use the normalized request because construction can transfer their body.
-        return input instanceof Request ? observedSupabaseFetch(request) : observedSupabaseFetch(input, init);
+        return input instanceof Request
+          ? signal ? observedSupabaseFetch(request, { signal }) : observedSupabaseFetch(request)
+          : observedSupabaseFetch(input, signal ? { ...init, signal } : init);
       } catch (error) {
         if (error instanceof WorkspaceAccessError || error instanceof PlanningDispatchError) return Response.json({ code: error.code, message: error.message }, { status: error.status });
         return Response.json({ code: "workspace_access_unavailable", message: "Berechtigung konnte nicht geprüft werden." }, { status: 503 });
@@ -45,7 +58,7 @@ export function planningService(strict: boolean, beforeDispatch?: () => Promise<
 // The user-bound dispatch already checks the original JWT, Workspace binding
 // and permit. Read its live profile and source together instead of following
 // the profile check with another privileged source-only dispatch.
-export function planningPublicationSource(data: SupabaseClient | null, profile: { id: string; platformRole: string } | null, assertCurrent: () => void) {
+export function planningPublicationSource(data: SupabaseClient | null, profile: { id: string; platformRole: string } | null, assertCurrent: () => void, detail?: { itemId: string; area: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea }) {
   const captured = configuration(false);
   if (!data || !profile || !captured) return undefined;
   return { async read(signal?: AbortSignal) {
@@ -57,7 +70,7 @@ export function planningPublicationSource(data: SupabaseClient | null, profile: 
         if (active?.url !== captured.url || active.key !== captured.key) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
       };
       assertEnvironment();
-      const read = data.rpc("planning_board_publication_context");
+      const read = detail ? data.rpc("planning_detail_publication_context", { p_item_id: detail.itemId, p_area: detail.area }) : data.rpc("planning_board_publication_context");
       const result = await (signal ? read.abortSignal(signal) : read);
       assertCurrent();
       assertEnvironment();

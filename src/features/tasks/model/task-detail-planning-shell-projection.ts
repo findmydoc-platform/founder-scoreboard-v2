@@ -20,6 +20,7 @@ function replaceTasks<T extends { id: string }>(current: readonly T[], replaceme
 }
 
 export function taskDetailModelToPlanningShellState(model: TaskDetailModel): PlanningShellState {
+  if (model.supportingData === "omitted") throw new Error("Independent children cannot bootstrap canonical detail context.");
   const tasks = modelTasks(model);
   return {
     project: model.project,
@@ -63,8 +64,8 @@ export function applyTaskDetailModel(current: PlanningShellState, model: TaskDet
   return {
     ...current,
     tasks: replaceTasks(current.tasks, modelTasks(model)),
-    profiles: replaceTasks(current.profiles, model.people),
-    sprints: replaceTasks(current.sprints, model.sprints),
+    profiles: model.supportingData === "omitted" ? current.profiles : replaceTasks(current.profiles, model.people),
+    sprints: model.supportingData === "omitted" ? current.sprints : replaceTasks(current.sprints, model.sprints),
     taskComments: collection("discussion", current.taskComments, model.discussion.comments, selected),
     taskExternalComments: collection("discussion", current.taskExternalComments, model.discussion.externalComments, selected),
     taskBlockers: collection("relationships", current.taskBlockers, model.blockers, selected),

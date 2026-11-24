@@ -74,9 +74,8 @@ test("real Deliverable selection preserves the frozen complete reference and ind
   });
 }, 120_000);
 
-test("real SQL selects before all card and provider boundaries and traverses stable completed ties without omissions", async () => {
+test.each([19, 20, 21, 999, 1000, 1001, 1027])("real SQL selects before all card and provider boundaries and traverses stable completed ties without omissions (%i rows)", async (size) => {
   await withPlanningCredentialDatabase(async ({ db, prefix, initiativeId, actors }) => {
-    for (const size of [19, 20, 21, 999, 1000, 1001, 1027]) {
       await db.query("begin");
       try {
         const key = `${prefix}-boundary`;
@@ -107,7 +106,6 @@ test("real SQL selects before all card and provider boundaries and traverses sta
         await db.query("update public.tasks set sort_order=10000 where id=$1", [`${key}-0000`]);
         expect((await select(20, first.source_revision, first.evaluated_at)).status).toBe("staleContinuation");
       } finally { await db.query("rollback"); }
-    }
   });
 }, 120_000);
 
