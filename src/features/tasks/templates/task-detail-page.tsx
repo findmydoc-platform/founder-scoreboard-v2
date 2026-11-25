@@ -35,7 +35,10 @@ import type { AuthenticatedProfile, PlanningHeaderData } from "@/lib/types";
 type Props = {
   taskId: string;
   initialModel: TaskDetailModel;
+  initialTaskDetailRead?: Omit<import("@/features/tasks/model/task-detail-read-model").TaskDetailHydration, "model">;
   headerData: PlanningHeaderData;
+  initialServerHeaderRead?: import("@/features/planning/model/planning-server-header-read").PlanningServerHeaderRead;
+  children?: import("react").ReactNode;
   source: "supabase";
   authRequired?: boolean;
   initialAuthUser?: User | null;
@@ -50,7 +53,10 @@ type Props = {
 export function TaskDetailPage({
   taskId,
   initialModel,
+  initialTaskDetailRead,
   headerData,
+  initialServerHeaderRead,
+  children,
   source,
   authRequired = false,
   initialAuthUser = null,
@@ -69,7 +75,10 @@ export function TaskDetailPage({
     initialAccess: initialAdministratorAccess,
     platformRole: initialCurrentProfile?.platformRole || null,
   });
+  const detailHydration = useMemo(() => initialTaskDetailRead ? { ...initialTaskDetailRead, model: initialModel } : undefined, [initialTaskDetailRead, initialModel]);
   const controller = usePlanningAppController({
+    initialServerHeaderRead,
+    initialTaskDetailRead: detailHydration,
     initialData,
     initialHeaderData: headerData,
     initialWorkspace: "planning",
@@ -83,6 +92,8 @@ export function TaskDetailPage({
   const task = controller.data.tasks.find((item) => item.id === taskId) || null;
   const [, startDetailTransition] = useTransition();
   const detailLoader = useTaskDetailDataLoader({
+    scoped: Boolean(detailHydration),
+    initiallyCurrent: Boolean(detailHydration && controller.planningState.taskDetail(taskId).readStatus === "current"),
     planningState: controller.planningState,
     selectedTask: task,
     taskId: controller.authUser && controller.protectedDataLoaded ? taskId : undefined,
@@ -124,7 +135,7 @@ export function TaskDetailPage({
   };
 
   return (
-    <PlanningBusinessStateContext.Provider value={controller.planningState}><main className="app-sidebar-main min-h-screen bg-white text-slate-950">
+    <PlanningBusinessStateContext.Provider value={controller.planningState}>{children}<main className="app-sidebar-main min-h-screen bg-white text-slate-950">
       <AppSidebar
         activeWorkspace="planning"
         source={source}
@@ -163,6 +174,7 @@ export function TaskDetailPage({
         {controller.planningState.taskGitHubSync(task.id)?<TaskGitHubSyncNotice view={controller.planningState.taskGitHubSync(task.id)!} onCheck={()=>{void controller.planningState.checkTaskGitHubSync(task.id);}} onRetry={()=>controller.syncTaskToGitHub(task,{createIfMissing:!hasGitHubIssue(task)})}/>:null}
         {controller.planningState.taskReviewOperations(task.id).map(operation=><TaskReviewOperationNotice profiles={controller.data.profiles} key={operation.id} operation={operation} onCheck={id=>{void controller.planningState.checkTaskReview(id);}} />)}
         <TaskDetailSurface
+          detailReadMode={detailHydration ? "scoped" : "complete"}
           surface="page"
           task={task}
           comments={controller.data.taskComments.filter((comment) => comment.taskId === task.id)}

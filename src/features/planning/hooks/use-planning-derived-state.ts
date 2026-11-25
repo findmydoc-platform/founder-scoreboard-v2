@@ -11,6 +11,7 @@ import type { PlanningShellState, Profile, Task, ViewMode } from "@/lib/types";
 type PlanningViewState = ReturnType<typeof usePlanningViewState>;
 
 type UsePlanningDerivedStateOptions = {
+  tableResult?: import("../model/planning-table-result").PlanningTableResult;
   boardResult?: import("../model/planning-board-query").PlanningBoardResult;
   currentProfile: Profile | null;
   data: PlanningShellState;
@@ -28,6 +29,7 @@ type UsePlanningDerivedStateOptions = {
 export function usePlanningDerivedState({
   currentProfile,
   boardResult,
+  tableResult,
   data,
   workspaceTasks,
   filters,
@@ -65,9 +67,9 @@ export function usePlanningDerivedState({
   return {
     filtersAvailable,
     headerActions,
-    metrics: boardResult?.metrics || metrics,
+    metrics: tableResult?.metrics || boardResult?.metrics || metrics,
     statusGuardTask,
     viewerOpenSubIssueIdsByDeliverableId: boardResult?.viewerOpenSubIssueIdsByDeliverableId || viewerOpenSubIssueIdsByDeliverableId,
-    visibleTasks: boardResult ? sortTasks(data.tasks.filter(task => boardResult.cardIds.includes(task.id)).sort((left, right) => left.id.localeCompare(right.id, "en"))) : visibleTasks,
+    visibleTasks: tableResult ? tableResult.rowIds.flatMap(id => data.tasks.find(task => task.id === id) || []) : boardResult ? sortTasks(data.tasks.filter(task => boardResult.cardIds.includes(task.id)).sort((left, right) => left.id.localeCompare(right.id, "en"))) : visibleTasks,
   };
 }

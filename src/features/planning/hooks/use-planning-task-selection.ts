@@ -40,18 +40,26 @@ export function usePlanningTaskSelection({
   const selectedTaskActivity = selectedTask ? data.taskActivity.filter((activity) => activity.taskId === selectedTask.id) : [];
   const selectedTaskBlockers = selectedTask ? data.taskBlockers.filter((blocker) => blocker.taskId === selectedTask.id) : [];
 
-  const openTaskPanel = useCallback((taskId: string, mode: TaskPanelOpenMode = "start") => {
+  const startTaskPanel = useCallback((taskId: string) => {
     if (planningState.taskDetail(taskId).removed) return;
-    if (mode === "start") taskPanelReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const normalizedHistory = normalizeTaskPanelHistory(taskPanelHistory, new Set(taskPanelHistory.filter(taskId => planningState.taskDetail(taskId).removed)));
-    const nextHistory = mode === "push"
-      ? pushTaskPanelHistory(normalizedHistory, taskId)
-      : startTaskPanelHistory(taskId);
+    taskPanelReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const nextHistory = startTaskPanelHistory(taskId);
     const nextTaskId = currentTaskPanelId(nextHistory);
     if (!nextTaskId) return;
     setTaskPanelHistory(nextHistory);
     setSelectedTaskId(nextTaskId);
-  }, [planningState, setSelectedTaskId, taskPanelHistory]);
+  }, [planningState, setSelectedTaskId]);
+
+  const openTaskPanel = useCallback((taskId: string, mode: TaskPanelOpenMode = "start") => {
+    if (mode !== "push") return startTaskPanel(taskId);
+    if (planningState.taskDetail(taskId).removed) return;
+    const normalizedHistory = normalizeTaskPanelHistory(taskPanelHistory, new Set(taskPanelHistory.filter(taskId => planningState.taskDetail(taskId).removed)));
+    const nextHistory = pushTaskPanelHistory(normalizedHistory, taskId);
+    const nextTaskId = currentTaskPanelId(nextHistory);
+    if (!nextTaskId) return;
+    setTaskPanelHistory(nextHistory);
+    setSelectedTaskId(nextTaskId);
+  }, [planningState, setSelectedTaskId, startTaskPanel, taskPanelHistory]);
 
   const closeTaskPanel = useCallback(() => {
     setTaskPanelHistory(closeTaskPanelHistory());
@@ -101,5 +109,6 @@ export function usePlanningTaskSelection({
     taskPanelPreviousTask: previousTask,
     taskPanelReturnFocusRef,
     selectedTaskSubIssues,
+    startTaskPanel,
   };
 }

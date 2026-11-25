@@ -48,7 +48,7 @@ export function RelationshipList({
                     {badge.label}
                   </span>
                 </div>
-                <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskAssigneeLabel(task)}` : "Aufgabe nicht gefunden"}</div>
+                <div className="mt-0.5 text-slate-500">{task ? `${normalizeStatus(task.status)} · ${taskAssigneeLabel(task)}` : "Aufgabenkontext nicht verfügbar"}</div>
                 {relation.note && <div className="mt-1 break-words text-slate-500">{relation.note}</div>}
               </div>
               {canRemove?.(relation) && onRemove && (

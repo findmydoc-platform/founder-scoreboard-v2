@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { PlanningReadStatus } from "@/features/planning/model/planning-state";
+import type { PlanningTablePage, PlanningTableRisk } from "@/features/planning/model/planning-table-result";
 import type { PlanningState } from "@/features/planning/model/planning-state";
 import type { BacklogAssignmentEditor } from "@/features/backlog/model/backlog-assignment";
 
@@ -21,6 +23,12 @@ import { buildTaskTableViewModel, type TaskTableSort } from "@/features/tasks/mo
 import { projectDeliverableSchedule } from "@/features/planning-items/model/deliverable-schedule";
 
 type TaskTableViewProps = {
+  availableStatuses?: readonly TaskStatus[];
+  risksById?: Record<string, PlanningTableRisk | null>;
+  page?: PlanningTablePage;
+  pageStatus?: PlanningReadStatus;
+  onLoadMore?: () => void;
+  onRefresh?: () => void;
   planningState: PlanningState;
   visibleTasks: Task[];
   profiles: Profile[];
@@ -55,29 +63,36 @@ function TaskTableRiskBadges({
   allTasks,
   blockers,
   maxVisible = 3,
+  scoped = false,
+  risk,
 }: {
   task: Task;
   relations: TaskRelation[];
   allTasks: Task[];
   blockers: TaskBlocker[];
   maxVisible?: number;
+  scoped?: boolean;
+  risk?: PlanningTableRisk | null;
 }) {
-  const relationGroups = taskRelationsFor(task.id, relations);
-  const hasOpenWait = hasOpenWaitingRelation(task.id, allTasks, relations);
+  if (scoped && !risk) return <div className="min-h-14 text-xs text-slate-500">Risiken unbekannt</div>;
+  const relationGroups = scoped ? null : taskRelationsFor(task.id, relations);
+  const waitsOn = scoped ? risk!.waitsOn : relationGroups!.waitsOn.length;
+  const blocks = scoped ? risk!.blocks : relationGroups!.blocks.length;
+  const hasOpenWait = scoped ? risk!.hasOpenWait : hasOpenWaitingRelation(task.id, allTasks, relations);
   const signals = [
-    ...taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks })
+    ...(scoped ? risk!.attention : taskPlanningAttentionSignals(task, { taskBlockers: blockers, taskRelations: relations, tasks: allTasks }))
       .map((signal) => ({ id: signal.id, label: signal.label, tone: attentionTone(signal) })),
-    relationGroups.waitsOn.length ? { id: "waits-on", label: `Wartet auf ${relationGroups.waitsOn.length}`, tone: hasOpenWait ? "amber" : "slate" } : null,
-    relationGroups.blocks.length ? { id: "blocks", label: `Blockiert ${relationGroups.blocks.length}`, tone: "blue" } : null,
+    waitsOn ? { id: "waits-on", label: `Wartet auf ${waitsOn}`, tone: hasOpenWait ? "amber" : "slate" } : null,
+    blocks ? { id: "blocks", label: `Blockiert ${blocks}`, tone: "blue" } : null,
   ].filter((signal): signal is TableRiskSignal => Boolean(signal));
 
-  if (!signals.length) return <span className="text-xs text-slate-400">-</span>;
+  if (!signals.length) return <div className={scoped ? "min-h-14 text-xs text-slate-400" : "text-xs text-slate-400"}>-</div>;
 
   const visibleSignals = signals.slice(0, maxVisible);
   const hiddenCount = signals.length - visibleSignals.length;
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={`flex flex-wrap gap-1.5 ${scoped ? "min-h-14 content-start items-start" : ""}`}>
       {visibleSignals.map((signal) => (
         <UiBadge key={signal.id} tone={signal.tone} size="xs" className="px-1.5 text-[10px]">
           {signal.label}
@@ -93,6 +108,7 @@ function TaskTableRiskBadges({
 }
 
 export function TaskTableView({
+  page, pageStatus, onLoadMore, onRefresh, risksById, availableStatuses,
   planningState,
   visibleTasks,
   profiles,
@@ -118,10 +134,10 @@ export function TaskTableView({
   const assignments=planningState.backlogAssignments().filter(view=>view.tasks.some(task=>allTasks.some(shown=>shown.id===task.id)) && ["conflict","unconfirmed","blocked","rejected"].includes(view.phase));
   const sortKeys: TaskTableSort[] = ["title", "status", "assignee", "priority", "sprint", "start", "fixedDate"];
   const sortKey: TaskTableSort = sortKeys.includes(filters.sort as TaskTableSort) ? filters.sort as TaskTableSort : "priority";
-  const { rows: sortedTasks } = buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } });
+  const sortedTasks = page ? visibleTasks : buildTaskTableViewModel({ tasks: visibleTasks, profiles, sprints, filters: { sort: sortKey, direction: filters.direction } }).rows;
   const toggleSort = (key: TaskTableSort) => onFiltersChange({ ...filters, sort: key, direction: sortKey === key && filters.direction === "asc" ? "desc" : "asc" });
   const directionFor = (key: TaskTableSort): SortDirection => sortKey === key ? filters.direction : null;
-  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status)))).map((status) => ({ value: status, label: status }))];
+  const statusOptions = [{ value: "Alle", label: "Alle Status" }, ...(page ? availableStatuses || [] : Array.from(new Set(allTasks.map((task) => normalizeStatus(task.status))))).map((status) => ({ value: status, label: status }))];
   const assigneeOptions = [{ value: "Alle", label: "Alle Zuständigen" }, ...profiles.map((profile) => ({ value: profile.id, label: profile.name }))];
   const priorityOptions = ["Alle", "P0", "P1", "P2", "P3", "P4"].map((priority) => ({ value: priority, label: priority === "Alle" ? "Alle Prioritäten" : priority }));
   const sprintOptions = [{ value: "Alle", label: "Alle Sprints" }, ...sprints.map((sprint) => ({ value: sprint.id, label: sprint.name }))];
@@ -135,7 +151,7 @@ export function TaskTableView({
       title="Aufgaben"
       description={`Sortiert nach ${sortKey === "priority" ? "Priorität" : sortKey === "title" ? "Aufgabe" : sortKey === "assignee" ? "Zuständigkeit" : sortKey === "sprint" ? "Sprint" : sortKey === "start" ? "Zeitraum" : sortKey === "fixedDate" ? "Fixtermin" : "Status"}`}
       caption="Gefilterte Planungsaufgaben"
-      results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
+      results={[{ id: "tasks", visibleCount: visibleTasks.length, totalCount: page?.total ?? allTasks.filter((task) => task.taskType !== "sub_issue").length }]}
       filtering={{ mode: "external", labelledBy: "planning-filters" }}
       minWidth={1040}
       mobileContentBreakpoint="xl"
@@ -180,7 +196,7 @@ export function TaskTableView({
                   <span><strong className="font-semibold text-slate-700">Sprint-Zeitraum:</strong> {schedule.sprint ? dateRange(schedule.sprint) : "–"}</span>
                   <span><strong className="font-semibold text-slate-700">Fixtermin:</strong> {schedule.fixedDate || "–"}</span>
                 </div>
-                <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
+                <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} scoped={Boolean(page)} risk={risksById?.[task.id]} />
               </article>
             );
           })}
@@ -195,7 +211,7 @@ export function TaskTableView({
         <DataTableHead>
           <tr>
             <DataColumnHeader label="Aufgabe" direction={directionFor("title")} onSort={() => toggleSort("title")} sticky />
-            <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Aufgaben nach Status filtern" activeCount={filters.status === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, status: "Alle" })}><CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} options={statusOptions} className="h-10" /></ColumnFilterPopover>} />
+            <DataColumnHeader label="Status" direction={directionFor("status")} onSort={() => toggleSort("status")} filter={<ColumnFilterPopover label="Aufgaben nach Status filtern" activeCount={filters.status === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, status: "Alle" })}>{page && !availableStatuses ? <p role="status">Statusoptionen unbekannt.</p> : <CustomSelect aria-label="Status wählen" value={filters.status} onChange={(status) => onFiltersChange({ ...filters, status })} options={statusOptions} className="h-10" />}</ColumnFilterPopover>} />
             <DataColumnHeader label="Zuständig" direction={directionFor("assignee")} onSort={() => toggleSort("assignee")} filter={<ColumnFilterPopover label="Aufgaben nach Zuständigkeit filtern" activeCount={filters.assignee === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, assignee: "Alle" })}><CustomSelect aria-label="Zuständigkeit wählen" value={filters.assignee} onChange={(assignee) => onFiltersChange({ ...filters, assignee })} options={assigneeOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Priorität" direction={directionFor("priority")} onSort={() => toggleSort("priority")} filter={<ColumnFilterPopover label="Aufgaben nach Priorität filtern" activeCount={filters.priority === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, priority: "Alle" })}><CustomSelect aria-label="Priorität wählen" value={filters.priority} onChange={(priority) => onFiltersChange({ ...filters, priority })} options={priorityOptions} className="h-10" /></ColumnFilterPopover>} />
             <DataColumnHeader label="Sprint" direction={directionFor("sprint")} onSort={() => toggleSort("sprint")} filter={<ColumnFilterPopover label="Aufgaben nach Sprint filtern" activeCount={filters.sprintId === "Alle" ? 0 : 1} onReset={() => onFiltersChange({ ...filters, sprintId: "Alle" })}><CustomSelect aria-label="Sprint wählen" value={filters.sprintId} onChange={(sprintId) => onFiltersChange({ ...filters, sprintId })} options={sprintOptions} className="h-10" /></ColumnFilterPopover>} />
@@ -237,7 +253,7 @@ export function TaskTableView({
                 <DataCell>{schedule.sprint ? dateRange(schedule.sprint) : "–"}</DataCell>
                 <DataCell>{schedule.fixedDate || "–"}</DataCell>
                 <DataCell className="max-w-52">
-                  <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} />
+                  <TaskTableRiskBadges task={task} relations={relations} allTasks={allTasks} blockers={blockers} scoped={Boolean(page)} risk={risksById?.[task.id]} />
                 </DataCell>
               </DataRow>
             );
@@ -249,6 +265,16 @@ export function TaskTableView({
           )}
         </tbody>
     </DataTableFrame>
+    {page && (page.continuation || pageStatus === "stale" || pageStatus === "unavailable") ? <div className="flex min-h-14 items-center px-4 py-2">
+      <button type="button" className="min-h-11 rounded border border-slate-300 px-4 text-sm font-semibold"
+        aria-disabled={pageStatus === "loading"}
+        onClick={() => {
+          if (pageStatus === "loading") return;
+          if (pageStatus === "stale" || !page.continuation) onRefresh?.(); else onLoadMore?.();
+        }}>
+        {pageStatus === "loading" ? "Weitere Aufgaben werden geladen …" : pageStatus === "stale" ? "Tabelle aktualisieren" : pageStatus === "unavailable" ? "Aufgaben erneut laden" : "Weitere Aufgaben laden"}
+      </button>
+    </div> : null}
     </>
   );
 }

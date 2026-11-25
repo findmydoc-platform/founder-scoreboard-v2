@@ -11,7 +11,7 @@ import {
   Ellipsis,
   ExternalLink,
 } from "lucide-react";
-import { useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { memo, useId, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import { TaskChildProgress } from "@/features/tasks/atoms/task-child-progress";
 import { TaskAssigneeAvatar } from "@/features/tasks/atoms/task-assignee-avatar";
 import { TaskCardSubIssueNotice } from "@/features/tasks/atoms/task-card-sub-issue-notice";
@@ -125,25 +125,29 @@ function childStatusPresentation(status: TaskStatus) {
   };
 }
 
-function TaskCardChildItem({
-  child,
+const TaskCardChildItem = memo(function TaskCardChildItem({
+  id,
+  title,
+  status: childStatus,
   isViewerChild,
   onOpenTask,
   showDoneDivider,
 }: {
-  child: Task;
+  id: string;
+  title: string;
+  status: string;
   isViewerChild: boolean;
   onOpenTask: (taskId: string) => void;
   showDoneDivider: boolean;
 }) {
-  const status = normalizeStatus(child.status);
+  const status = normalizeStatus(childStatus);
   const isDone = status === "Erledigt";
   const { Icon, iconClassName, labelClassName } = childStatusPresentation(status);
 
   return (
     <li className={showDoneDivider ? "mt-1 border-t border-slate-200 pt-1" : undefined}>
       <TaskReferenceLink
-        task={child}
+        task={{ id, title }}
         onOpenTask={onOpenTask}
         showIcon={false}
         layout="flex"
@@ -152,7 +156,7 @@ function TaskCardChildItem({
           event.preventDefault();
           event.stopPropagation();
         }}
-        aria-label={`${child.title}, Status ${status}`}
+        aria-label={`${title}, Status ${status}`}
         className={`group/direct-child min-w-0 items-center gap-2 rounded-sm px-1 py-1.5 hover:no-underline ${
           isViewerChild
             ? "bg-yellow-50 text-slate-800 hover:bg-yellow-100 hover:text-slate-900"
@@ -162,7 +166,7 @@ function TaskCardChildItem({
         }`}
       >
         <Icon size={13} className={`shrink-0 ${iconClassName}`} aria-hidden="true" />
-        <span title={child.title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{child.title}</span>
+        <span title={title} className="min-w-0 flex-1 truncate text-[11px] font-medium">{title}</span>
         {isViewerChild ? (
           <span className="shrink-0 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-800">
             Für dich
@@ -178,7 +182,7 @@ function TaskCardChildItem({
       </TaskReferenceLink>
     </li>
   );
-}
+});
 
 function TaskCardChildRollup({
   task,
@@ -285,7 +289,9 @@ function TaskCardChildRollup({
             return (
               <TaskCardChildItem
                 key={child.id}
-                child={child}
+                id={child.id}
+                title={child.title}
+                status={child.status}
                 isViewerChild={isViewerChild}
                 onOpenTask={onOpenTask}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}
@@ -303,7 +309,9 @@ function TaskCardChildRollup({
             return (
               <TaskCardChildItem
                 key={child.id}
-                child={child}
+                id={child.id}
+                title={child.title}
+                status={child.status}
                 isViewerChild={false}
                 onOpenTask={onOpenTask}
                 showDoneDivider={normalizeStatus(child.status) === "Erledigt" && previousStatus !== "Erledigt"}

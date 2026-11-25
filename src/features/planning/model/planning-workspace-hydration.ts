@@ -11,6 +11,7 @@ export type PlanningWorkspaceHydration = Readonly<{
   query?: import("./planning-board-query").PlanningBoardQuery;
   queryRevision?: string;
   scopeRevision?: string;
+  table?: import("./planning-table-result").PlanningTableResult;
   board?: import("./planning-board-query").PlanningBoardResult;
   session: ServerSessionView;
   readAuthority?: import("./planning-server-header-read").PlanningReadAuthority;
@@ -21,5 +22,5 @@ export type PlanningWorkspaceHydration = Readonly<{
 
 export function planningWorkspaceHydration(workspace: "planning" | "projects", model: PlanningWorkspaceModel, session?: ServerSessionView, readAuthority?: import("./planning-server-header-read").PlanningReadAuthority): PlanningWorkspaceHydration | undefined {
   if (!session) return undefined;
-  return { workspace, queryKey: model.query ? planningBoardQueryKey(model.query) : model.board?.queryKey || "workspace", query: model.query || model.board?.query, queryRevision: model.queryRevision || model.board?.revision, scopeRevision: model.scopeRevision, board: model.board, session, readAuthority, revision: model.revision, coverage: hierarchyReadCoverage(model), taskOmittedFields: hierarchyOmittedFields(model) };
+  return { workspace, queryKey: model.query ? planningBoardQueryKey(model.query) : model.board?.queryKey || model.table?.queryKey || "workspace", query: model.query || model.board?.query || model.table?.query, queryRevision: model.queryRevision || model.board?.revision || model.table?.revision, scopeRevision: model.scopeRevision, board: model.board, table: model.table, session, readAuthority, revision: model.revision, coverage: hierarchyReadCoverage(model), taskOmittedFields: hierarchyOmittedFields(model) };
 }

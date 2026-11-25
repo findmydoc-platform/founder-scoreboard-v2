@@ -17,3 +17,16 @@ it("falls back to an active Deliverable without inventing sample evidence", () =
   expect(selectSubIssueEvidenceTourTask([trashed, parent], trashed.id)?.id).toBe(parent.id);
   expect(selectSubIssueEvidenceTourTask([trashed], null)).toBeUndefined();
 });
+
+
+it("unknown and stale evidence never outrank current evidence and preserve the selected fallback", () => {
+  const selected = taskDetailStoryTask({ id: "selected-unknown" });
+  const unknownChild = taskDetailStoryTask({ id: "unknown-child", taskType: "sub_issue", parentTaskId: selected.id, detailAvailability: "summary" });
+  Reflect.deleteProperty(unknownChild, "evidenceLinks"); Reflect.deleteProperty(unknownChild, "linkedPullRequests");
+  const staleParent = taskDetailStoryTask({ id: "stale-parent" });
+  const staleChild = taskDetailStoryTask({ id: "stale-child", taskType: "sub_issue", parentTaskId: staleParent.id, detailAvailability: "stale", evidenceLinks: ["https://example.com/retained"] });
+  expect(selectSubIssueEvidenceTourTask([staleParent, staleChild, selected, unknownChild], selected.id)?.id).toBe(selected.id);
+  const current = taskDetailStoryTask({ id: "current-parent" });
+  const currentChild = taskDetailStoryTask({ id: "current-child", taskType: "sub_issue", parentTaskId: current.id, evidenceLinks: ["https://example.com/current"] });
+  expect(selectSubIssueEvidenceTourTask([staleParent, staleChild, selected, unknownChild, current, currentChild], selected.id)?.id).toBe(current.id);
+});

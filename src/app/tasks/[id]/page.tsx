@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
 import { notFound } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { PlanningApp } from "@/features/planning/PlanningApp";
@@ -42,10 +44,13 @@ export default async function TaskPage({ params, searchParams }: Props) {
 
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.task.read", targetId: id });
   if (!permission.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
-  const [taskDetailResult, header] = await Promise.all([permission.planning.loadDetail(), permission.planning.loadHeader()]);
-  if (!header.ok) return <WorkspaceDataUnavailablePage workspace="planning" />;
-  const headerData = header.headerData;
-  if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden") {
+  const lifetime = permission.readAuthority ? new AbortController() : undefined;
+  if (lifetime) after(() => lifetime.abort());
+  const headerSlots = permission.serverHeaderRead ? permission.planning.startServerHeaderSlots() : undefined;
+  const taskDetailResult = await permission.planning.loadDetail({ area: "target", signal: lifetime?.signal });
+  const headerData = emptyPlanningHeaderData;
+  if (permission.profile) authProfile = permission.profile;
+  if (taskDetailResult.status === "unavailable" || taskDetailResult.status === "forbidden" || taskDetailResult.status === "staleContinuation") {
     return <WorkspaceDataUnavailablePage workspace="planning" />;
   }
 
@@ -68,7 +73,9 @@ export default async function TaskPage({ params, searchParams }: Props) {
     <TaskDetailPage
       taskId={taskDetailResult.model.item.id}
       initialModel={taskDetailResult.model}
+      initialTaskDetailRead={permission.readAuthority && permission.readSession ? { itemId: id, readAuthority: permission.readAuthority, session: permission.readSession } : undefined}
       headerData={headerData}
+      initialServerHeaderRead={permission.serverHeaderRead}
       source="supabase"
       authRequired={authRequired}
       initialAuthUser={authUser}
@@ -80,6 +87,8 @@ export default async function TaskPage({ params, searchParams }: Props) {
       initialCommentTarget={requestedCommentTarget}
       returnHref={safeReturnTo || "/planning"}
       returnLabel={safeReturnTo ? "Zurück zum Release" : "Zur Planung"}
-    />
+    >
+      {permission.serverHeaderRead && headerSlots ? <PlanningServerHeaderSlots read={permission.serverHeaderRead} results={headerSlots} /> : null}
+    </TaskDetailPage>
   );
 }

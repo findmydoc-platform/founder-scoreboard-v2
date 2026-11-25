@@ -38,6 +38,7 @@ type PlanningFiltersProps = {
   levelTotals?: Partial<Record<PlanningLevel, number>>;
   profiles: Profile[];
   initiatives: readonly Pick<Task, "id" | "title">[];
+  epics?: readonly Pick<Task, "id" | "title">[];
   sprints: Sprint[];
   tasks: Task[];
   workstreams: string[];
@@ -60,6 +61,7 @@ export function PlanningFilters({
   levelTotals,
   profiles,
   initiatives,
+  epics,
   sprints,
   tasks,
   workstreams,
@@ -80,16 +82,20 @@ export function PlanningFilters({
     onClose: () => onExpandedChange(false),
   });
   const profileName = profiles.find((profile) => profile.id === filters.assignee)?.name || filters.assignee;
-  const initiativeName = initiatives.find((initiative) => initiative.id === filters.initiativeId)?.title || filters.initiativeId;
+  const selectedInitiative = initiatives.find((initiative) => initiative.id === filters.initiativeId);
+  const initiativeUnavailable = filters.initiativeId !== "Alle" && !selectedInitiative;
+  const initiativeName = selectedInitiative?.title || "nicht verfügbar";
   const sprintName = sprints.find((sprint) => sprint.id === filters.sprintId)?.name || filters.sprintId;
   const isStrategicBoard = showPlanningLevel && planningLevel !== "deliverable";
   const parentTasks = planningLevel === "initiative"
-    ? tasks.filter((task) => task.taskType === "epic")
+    ? epics || tasks.filter((task) => task.taskType === "epic")
     : planningLevel === "deliverable"
       ? initiatives
       : [];
   const parentLabel = planningLevel === "initiative" ? "Epic" : "Initiative";
-  const parentName = parentTasks.find((task) => task.id === planningParentFilterId)?.title || planningParentFilterId;
+  const selectedParent = parentTasks.find((task) => task.id === planningParentFilterId);
+  const parentUnavailable = planningParentFilterId !== "all" && !selectedParent;
+  const parentName = selectedParent?.title || "nicht verfügbar";
   const activeFilters: ActiveFilter[] = [
     ...(filters.assignee !== "Alle" ? [{ id: "assignee", label: `Zuständig: ${profileName}`, onRemove: () => onChange({ ...filters, assignee: "Alle" }) }] : []),
     ...(filters.status !== "Alle" ? [{ id: "status", label: `Status: ${filters.status}`, onRemove: () => onChange({ ...filters, status: "Alle" }) }] : []),
@@ -110,12 +116,12 @@ export function PlanningFilters({
   ];
   const isDirty = JSON.stringify(filters) !== JSON.stringify(DEFAULT_PLANNING_FILTERS)
     || planningParentFilterId !== "all";
-  const parentContext = showPlanningLevel && parentTasks.length > 0 ? (
+  const parentContext = showPlanningLevel && planningLevel !== "epic" && (parentTasks.length > 0 || parentUnavailable) ? (
     <div data-tour-id="planning-kanban-parent-filter" className="flex min-w-0 items-center gap-2">
       <span className="shrink-0 text-xs font-semibold text-slate-600">{parentLabel}</span>
       <CustomSelect
         aria-label={planningLevel === "initiative" ? "Nach Parent-Epic filtern" : "Nach Parent-Initiative filtern"}
-        value={planningParentFilterId}
+        value={parentUnavailable ? "" : planningParentFilterId}
         onChange={onPlanningParentFilterChange}
         options={[
           { value: "all", label: planningLevel === "initiative" ? "Alle Epics" : "Alle Initiativen" },
@@ -183,7 +189,7 @@ export function PlanningFilters({
           <FilterField label="Initiative">
             <CustomSelect
               aria-label="Nach Initiative filtern"
-              value={filters.initiativeId}
+              value={initiativeUnavailable ? "" : filters.initiativeId}
               onChange={(initiativeId) => onChange({ ...filters, initiativeId })}
               className="h-10 text-sm"
               options={[{ value: "Alle", label: "Alle Initiativen" }, ...initiatives.map((initiative) => ({ value: initiative.id, label: initiativeOptionLabel(initiative) }))]}

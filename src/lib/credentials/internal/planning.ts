@@ -8,7 +8,7 @@ import type { PlanningCredentialInput } from "../types";
 import type { SessionPolicyAction } from "./session-policy-types";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure, rolePermitsAction } from "./session-policy";
 import { planningWorkweekOperations } from "./planning-workweek";
-import { planningService, planningPublicationSource, PlanningDispatchError } from "./planning-service";
+import { planningService, planningServiceEnvironmentGuard, planningPublicationSource, PlanningDispatchError } from "./planning-service";
 import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { isLocalLoginRequestAllowed } from "../../local-development-auth";
 import { WorkspaceAccessError } from "../../workspace-identity";
@@ -23,6 +23,8 @@ import { createSupabaseBacklogReadModel } from "@/features/backlog/server/backlo
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
+import { loadPlanningItemCandidates } from "@/features/planning-items/server/planning-item-candidates-read-source";
+import type { PlanningItemCandidateQuery } from "@/features/planning-items/model/planning-item-candidates";
 import { loadPlanningTrashTaskDetail } from "../../planning-trash-detail";
 import type { Profile } from "../../types";
 import { loadPlanningHeaderData } from "../../planning-header-data";
@@ -81,6 +83,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   const readActions = ["planning.revision.read", "planning.board.read", "planning.header.read", "planning.backlog.read", "planning.sprint.read", "planning.task.read"];
   if (input.credential.kind !== "session-request" && !(input.credential.kind === "server-cookies" && readActions.includes(action))) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
   const strictService = action === "planning.approval.decide" || action.startsWith("planning.trash.") || action.startsWith("workweek.");
+  const detailEnvironmentCurrent = planningServiceEnvironmentGuard(strictService);
   const service = planningService(strictService, () => current(), () => assertKnown());
   const followup = planningService(strictService);
   if (!service && !strictService) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
@@ -161,7 +164,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
-  const serverHeaderRead = action === "planning.board.read" && readSession && readAuthority
+  const serverHeaderRead = (action === "planning.board.read" || action === "planning.task.read") && readSession && readAuthority
     ? { ...readAuthority, id: randomUUID(), timeoutAt: Math.min(readAuthority.deadline, Date.now() + 15_000), sessionRevision: readSession.revision } : undefined;
   return { ok: true as const, readAuthority, readSession, serverHeaderRead, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
     ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
@@ -325,9 +328,37 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };
       return createSupabaseSprintReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null });
     },
-    async loadDetail() {
+    async loadDetail(options?: { area?: import("@/features/tasks/model/task-detail-read-model").TaskDetailReadArea | "complete"; signal?: AbortSignal }) {
       if (action !== "planning.task.read" || !targetId || await current()) return { status: "forbidden" as const };
-      const result = await createSupabaseTaskDetailReadModel(service).load({ itemId: targetId }, { authorized: true, actorProfileId: profile?.id || null });
+      if (!detailEnvironmentCurrent()) return { status: "unavailable" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const assertDetailCurrent = () => {
+        if (!detailEnvironmentCurrent()) throw new PlanningDispatchError(503, "workspace_access_unavailable", "Die Detailkonfiguration wurde ersetzt.");
+        assertKnown();
+      };
+      const detailService = signal ? planningService(strictService, () => current(), assertDetailCurrent, signal) : service;
+      if (!detailService) return { status: "unavailable" as const };
+      const result = await createSupabaseTaskDetailReadModel(detailService).load({ itemId: targetId, area: options?.area }, { authorized: true, actorProfileId: profile?.id || null });
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (signal?.aborted) return { status: "unavailable" as const };
+      if (options?.area && options.area !== "complete") {
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        if (result.status !== "ready" && result.status !== "degraded") {
+          const denial = await current();
+          if (denial && !("status" in denial && denial.status === 503)) return { status: "forbidden" as const };
+          if (denial) return { status: "unavailable" as const };
+        }
+      }
+      if (options?.area && options.area !== "complete" && (result.status === "ready" || result.status === "degraded")) {
+        const detailPublication = !localProfileOverride ? planningPublicationSource(resourceData, profile, assertDetailCurrent, { itemId: targetId, area: options.area }) : undefined;
+        const publication = detailPublication ? await detailPublication.read(signal) : await current() ? { status: "forbidden" as const } : await service.rpc("planning_detail_source", { p_item_id: targetId, p_area: options.area }).then(value => value.error ? { status: "unavailable" as const } : { status: "ready" as const, revision: value.data?.source_revision });
+        if (publication.status === "forbidden") return { status: "forbidden" as const };
+        if (publication.status !== "ready") return { status: "unavailable" as const };
+        if (publication.revision !== result.model.sourceRevision || result.model.validUntil && Date.parse(result.model.validUntil) <= Date.now()) return { status: "staleContinuation" as const };
+        try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+        return { ...result, model: { ...result.model, authorityDeadline: readAuthority?.deadline, readActor: profile ? { profileId: profile.id, platformRole: profile.platformRole } : undefined } };
+      }
       if (result.status === "notFound") detailPeople = structuredClone([...result.people]);
       return result;
     },
@@ -344,8 +375,8 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       try { assertKnown(); } catch { if (result.status === "ready") result.delivery?.abort(); return { status: "forbidden" as const }; }
       if (result.status !== "ready" || !result.delivery) return result;
       const delivery = result.delivery;
-      return { ...result, delivery: { ...delivery, async checkPublication<T extends import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>(outcome: T): Promise<T | import("@/features/planning/model/planning-board-delivery").PlanningBoardFailureFrame> {
-        const frame = await delivery.checkPublication(outcome);
+      return { ...result, delivery: { ...delivery, async checkPublication<T extends import("@/features/planning/model/planning-board-delivery").PlanningBoardOutcome>(outcome: T, initialSummary?: import("@/features/planning/model/planning-board-summaries").PlanningBoardSummaryFrame): Promise<T | import("@/features/planning/model/planning-board-delivery").PlanningBoardFailureFrame> {
+        const frame = initialSummary ? await delivery.checkPublication(outcome, initialSummary) : await delivery.checkPublication(outcome);
         try { assertKnown(); return frame; } catch {
           delivery.abort();
           return { kind: "failure" as const, readId: delivery.id, status: 403 as const, error: "Planung darf nicht geladen werden." };
@@ -367,6 +398,21 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       }
       return result;
     },
+    async loadCandidates(query: PlanningItemCandidateQuery, options?: { signal?: AbortSignal }) {
+      const denial = action === "planning.board.read" ? await current() : forbidden();
+      if (denial) return { status: "forbidden" as const };
+      const deadlineSignal = readAuthority ? AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now()))) : undefined;
+      const signal = options?.signal && deadlineSignal ? AbortSignal.any([options.signal, deadlineSignal]) : options?.signal || deadlineSignal;
+      const result = await loadPlanningItemCandidates(service, { authorized: true, actorProfileId: profile?.id || null,
+        authorityDeadline: readAuthority?.deadline, signal, publicationSource,
+        authorityKey: createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || resolveSessionRequest(request).token || "local-planning")
+          .update(JSON.stringify(["planning-candidate-continuation-v1", resolveSessionRequest(request).token, profile?.id, profile?.platformRole])).digest("hex") }, query);
+      try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+      if (result.status === "ready") return readAuthority
+        ? { ...result, readAuthority: { ...readAuthority, deadline: Math.min(readAuthority.deadline, result.authorityDeadline) } }
+        : { status: "forbidden" as const };
+      return result;
+    },
     async loadBoard(query?: PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
       const denial = action === "planning.board.read" ? await current() : forbidden();
       if (denial) return { status: "forbidden" as const };
@@ -380,7 +426,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       return result;
     },
     startServerHeaderSlots() {
-      const admitted = action === "planning.board.read" && serverHeaderRead ? current() : Promise.resolve(forbidden());
+      const admitted = (action === "planning.board.read" || action === "planning.task.read") && serverHeaderRead ? current() : Promise.resolve(forbidden());
       const loaders = planningHeaderSlotLoaders(service);
       const start = (key: "quickLinks" | "calendarEvents") => {
         const execute = async () => {

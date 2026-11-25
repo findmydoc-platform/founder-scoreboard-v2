@@ -4,22 +4,25 @@
     "src/features/planning-items/server/planning-workspace-read-source.ts",
     "src/features/planning-items/server/planning-deliverable-read-source.ts",
     "src/features/planning-items/server/workspace-profile-avatars.ts",
-    "src/features/planning-items/server/planning-card-summary.ts"
+    "src/features/planning-items/server/planning-card-summary.ts",
+    "src/features/planning-items/server/planning-detail-source.ts",
+    "src/features/planning-items/server/planning-children-read-source.ts",
+    "src/features/planning-items/server/planning-item-candidates-read-source.ts"
   ],
   "contracts": {
     "BOARD": {
-      "consumer": "BOARD / PERSONAL",
+      "consumer": "BOARD / PERSONAL / TABLE selection",
       "owner": "Planning feature owner",
-      "reason": "The declared credential-bound Deliverable adapter owns one bounded query basis, selected-only column hydration, one independent selected-identity summary batch and fresh source/time checks at publication. Complete and JSON column consumers keep compatible contracts.",
-      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts",
+      "reason": "The declared credential-bound adapter owns bounded Board and Table selection and selected scalar content. All Board levels use independent column hydration and a separate complete direct-child/attention batch. Table pages use their own ordering, scalar discovery and the separately declared TABLE risk contract; no complete-read fallback or performance equivalence is implied.",
+      "evidence": "tests/unit/planning/planning-selected-deliverables.test.ts; tests/unit/planning/planning-query-delivery.test.ts; tests/unit/planning/planning-server-query-delivery.test.tsx; tests/integration/planning-deliverable-selection.test.ts; tests/integration/planning-board-query-delivery.test.ts; tests/unit/planning/planning-summary-delivery.test.ts; tests/integration/planning-board-aggregates.test.ts; tests/integration/planning-summary-consistency.test.ts; tests/integration/planning-summary-semantics.test.ts; tests/integration/planning-hierarchy-selection.test.ts; tests/integration/planning-epic-selection.test.ts; tests/integration/planning-strategic-query-delivery.test.ts; tests/integration/planning-strategic-parent-options.test.ts; tests/integration/planning-table-selection.test.ts; tests/integration/planning-table-ordering.test.ts; tests/integration/planning-table-unicode-ordering.test.ts",
       "expiresWhen": "Revalidate when the BOARD or PERSONAL contract changes under #641."
     },
     "COMPLETE": {
-      "consumer": "BOARD strategic / TABLE / STRATEGY / TEAM / PROFILE / NOTIFICATIONS / SPRINT / GANTT compatibility",
+      "consumer": "Explicit complete / legacy unscoped / STRATEGY / TEAM / PROFILE / NOTIFICATIONS / SPRINT / GANTT compatibility",
       "owner": "Owner of each named feature in the consumer inventory",
-      "reason": "Preserve the established complete shared source while each remaining consumer migrates. No new caller or changed SELECT is covered.",
+      "reason": "Preserve explicit complete and legacy unscoped contracts and the existing shared source for remaining consumers. Migrated Boards and Table use scoped reads; sufficient compatible complete cache reuse remains valid. No new caller or changed SELECT is covered.",
       "evidence": "tests/unit/planning/planning-compact-board.test.ts; tests/integration/planning-enumeration-consistency.test.ts; consumer-specific evidence in docs/planning-item-read-contracts.md",
-      "expiresWhen": "Remove each source statement after its last caller passes #648, #652, #653, #654, #655, #656 or #658."
+      "expiresWhen": "Remove each source statement only after its final named consumer and compatible machine path pass their governing #641 gate."
     },
     "BACKLOG": {
       "consumer": "BACKLOG",
@@ -29,11 +32,11 @@
       "expiresWhen": "Remove on accepted BACKLOG migration #652."
     },
     "DETAIL": {
-      "consumer": "DETAIL / CHILDREN / CANDIDATES",
+      "consumer": "DETAIL / DISCUSSION / TIMELINE identity reads, complete action evidence and retained CANDIDATES / structure compatibility",
       "owner": "Tasks feature owner",
-      "reason": "Retain target, ancestor, child, related and lifecycle reads until identity and child contracts migrate.",
-      "evidence": "tests/unit/tasks/task-detail-read-model.test.mjs; tests/unit/planning/planning-task-lifecycle.test.ts",
-      "expiresWhen": "Remove on the corresponding accepted migration #649, #650 or #651."
+      "reason": "Canonical target and required ancestors are selected by a service-only source descriptor and hydrated in one bounded, project-constrained batch. The adapter validates the complete ID set and parent chain, restores root-first order and excludes the descriptor from public models. User-bound publication certificates exclude descriptor fields in SQL and preserve original actor/source/deadline checks. Discussion and timeline remain independently requested. Independent Board/detail child navigation uses the declared CHILDREN operation. Explicit complete child/supporting evidence remains available to dependent actions and the separate structure migration; relationship, lifecycle and candidate compatibility readers retain their existing paths.",
+      "evidence": "tests/integration/task-detail-independent-areas.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/tasks/task-detail-server-page.test.tsx; tests/unit/tasks/task-detail-read-model.test.mjs; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
+      "expiresWhen": "Revalidate DETAIL area or authority changes; retire retained complete child/supporting statements only after their last required action or structure consumer migrates, and candidate statements on accepted #651."
     },
     "STRATEGY": {
       "consumer": "STRATEGY",
@@ -125,6 +128,27 @@
       "reason": "The exact public-resource capability probes only id presence on the fixed profiles/tasks tuple with limit 1 and returns a boolean. It does not return Planning Items or bypass the existing public-resource action binding.",
       "evidence": "tests/integration/resource-credential-closeout.test.ts; src/lib/credentials/internal/public-resources.ts",
       "expiresWhen": "Recheck on any material change to health.inspect or its fixed table tuple; remove when this exact probe is retired."
+    },
+    "TABLE": {
+      "consumer": "TABLE risks",
+      "owner": "Planning feature owner",
+      "reason": "One fixed service-only Table risk read supplies complete directed relation counts and Planning attention for the signed selected row batch on its original source/time/authority basis. It returns no child progress or Item content and does not authorize neighboring reads.",
+      "evidence": "tests/integration/planning-table-risk-delivery.test.ts; src/features/planning/PlanningApp.table-risks.stories.tsx; tests/architecture/planning-read-boundary.test.mjs",
+      "expiresWhen": "Revalidate when the TABLE risk contract changes under #641."
+    },
+    "CHILDREN": {
+      "consumer": "Independent direct-child lists and complete progress",
+      "owner": "Tasks feature owner",
+      "reason": "The fixed detail capability requests compact direct children independently. Counted enumeration covers the complete active direct-parent scope in stable manual/id order before progress is certified. Original actor/source/time/deadline checks remain at publication; complete dependent action readers retain their separate legacy basis.",
+      "evidence": "tests/integration/task-detail-children.test.ts; tests/integration/task-detail-authority.test.ts; tests/unit/planning/planning-detail-areas.test.ts; tests/unit/planning/planning-child-consistency.test.ts; src/features/planning/PlanningApp.children.stories.tsx; src/features/tasks/templates/task-detail-page.independent.stories.tsx",
+      "expiresWhen": "Revalidate whenever child membership, progress, compact field coverage or authority changes."
+    },
+    "CANDIDATES": {
+      "consumer": "Initiative and Epic parent candidate discovery",
+      "owner": "Planning and Tasks feature owners",
+      "reason": "The fixed credential-bound operation discovers nontrashed project Initiative or Epic identities and labels through one service-only SQL implementation. Literal title matching and existing sort_order/id semantics precede the page limit. Epic default selection uses the complete unfiltered eligible set before limits, independently of displayed matches. Fresh user-bound Actor/source publication and original authority limits remain required; candidate identity/default metadata never authorizes writes or certifies canonical Task fields.",
+      "evidence": "tests/integration/planning-item-candidates.test.ts; tests/integration/planning-epic-candidates.test.ts; tests/migrations/20261116170022_planning_initiative_candidates.test.mjs; tests/migrations/20261116182817_planning_parent_candidate_intents.test.mjs",
+      "expiresWhen": "Revalidate when candidate eligibility, selection, continuation or the declared credential-bound caller changes; each UI selector still needs its own migration evidence."
     }
   },
   "allowedEdges": [
@@ -146,7 +170,7 @@
     {
       "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
-      "contract": "BOARD"
+      "contract": "COMPLETE"
     },
     {
       "from": "src/features/planning/server/planning-board-read-model-supabase.ts",
@@ -197,6 +221,26 @@
       "from": "src/features/tools/server/tools-read-model-supabase.ts",
       "to": "src/features/planning-items/server/planning-workspace-read-source.ts",
       "contract": "DIRECTORY"
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-detail-source.ts",
+      "contract": "DETAIL"
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "to": "src/features/planning-items/server/planning-children-read-source.ts",
+      "contract": "CHILDREN"
+    },
+    {
+      "from": "src/features/planning-items/server/planning-children-read-source.ts",
+      "to": "src/features/planning-items/server/planning-card-summary.ts",
+      "contract": "CHILDREN"
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "to": "src/features/planning-items/server/planning-item-candidates-read-source.ts",
+      "contract": "CANDIDATES"
     }
   ],
   "readSites": [
@@ -477,7 +521,7 @@
       "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
       "kind": "rpc",
       "target": "planning_deliverable_selection",
-      "fingerprint": "5794f031ecbe809c88bd51608de5812dd2ec6997841e0f32ae05ff783ab4ad09",
+      "fingerprint": "592ce6dd499ebf7eff4d5311e4cd5b102a9e81752714a8694950a789923331b0",
       "contract": "BOARD",
       "references": 1
     },
@@ -614,7 +658,7 @@
       "kind": "from",
       "target": "active_tasks",
       "fingerprint": "41caf66a3c4c9594149c1f93475d17526af04bb59e73fb912abe89fdcdaa264e",
-      "contract": "DETAIL",
+      "contract": "CHILDREN",
       "references": 1
     },
     {
@@ -1033,6 +1077,69 @@
       "contract": "BOARD",
       "references": 1,
       "reason": "This fixed original-user RPC reads the live mapped actor, role and Planning source together at each publication boundary, retaining the original JWT, Workspace dispatch preparation and permit."
+    },
+    {
+      "from": "src/features/planning-items/server/planning-deliverable-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_table_risks",
+      "fingerprint": "e817cfeab997856831c3098cbefd579bd41452c009814ba9b6e68581a69f68d1",
+      "contract": "TABLE",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-detail-source.ts",
+      "kind": "rpc",
+      "target": "planning_detail_source",
+      "fingerprint": "b7c32da70ed6a4136e2280bc233ecd217e890873d8f5b07ba13f2f89fa9fa09f",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning-service.ts",
+      "kind": "rpc",
+      "target": "planning_detail_publication_context",
+      "fingerprint": "6439b169c7db347c8208dd791e2dfa5890dd47618b2c373c4d90080d0f6f214a",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/lib/credentials/internal/planning.ts",
+      "kind": "rpc",
+      "target": "planning_detail_source",
+      "fingerprint": "00fdac9f9a78ac37830e098ed8f951fab73349662e5e7bb442d0adc0b8b75f0d",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-children-read-source.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "2352065ea0e0f84ab95948ccc21593ccad7b89fbc536bc8be3497f879ab1a54d",
+      "contract": "CHILDREN",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "6395a92e1ba04490aebd4652d87680f5f224c829dee12b890e177dd6d34546c9",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/tasks/server/task-detail-read-model-supabase.ts",
+      "kind": "from",
+      "target": "active_tasks",
+      "fingerprint": "29681c8d9a2ed6aa7fd2571353db743079f919ac0dd612db087a649a76c16c0c",
+      "contract": "DETAIL",
+      "references": 1
+    },
+    {
+      "from": "src/features/planning-items/server/planning-item-candidates-read-source.ts",
+      "kind": "rpc",
+      "target": "planning_item_candidates",
+      "fingerprint": "858da37a93f4b15a545c38b3011b8f2047b6b647dd4c4a4df891d2ad313b5a41",
+      "contract": "CANDIDATES"
     }
   ]
 }
