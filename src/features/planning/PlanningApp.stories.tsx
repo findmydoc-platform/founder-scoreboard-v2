@@ -172,7 +172,7 @@ export const EventCreationFromContext: Story = {
     await userEvent.click(await context.findByRole("button", { name: "Event eintragen" }));
     await userEvent.type(canvas.getByRole("textbox", { name: "Titel" }), "Planungsrunde");
     await userEvent.click(canvas.getByRole("button", { name: "Event erstellen" }));
-    await expect(await canvas.findByRole("heading", { name: "Planungsrunde" })).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole("heading", { name: "Planungsrunde" })).toBeVisible());
     await expect(canvas.queryByRole("textbox", { name: "Titel" })).not.toBeInTheDocument();
   },
 };

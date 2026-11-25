@@ -212,6 +212,7 @@ export const ColumnsLoadAndRetryIndependently: Story = {
 
 export const StatusDragRemainsAvailableWhileAnotherColumnLoads: Story = {
   args: { holdColumnPage: true },
+  beforeEach: controlQuietRefreshClock,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const board = await canvas.findByRole("region", { name: "Board nach Status" });

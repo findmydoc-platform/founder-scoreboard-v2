@@ -40,7 +40,11 @@ export const StructureFiltersKeepCompleteOptionsOutsideRootAndChildPages:Story={
   await waitFor(()=>expect(canvas.getByLabelText("Scalar-Strukturabfragen roots")).toHaveTextContent("1"));
   await userEvent.click(canvas.getByRole("button",{name:"Filter"}));
   for(const [label,option] of [["Nach Zuständigkeit filtern","Offpage scalar person"],["Nach Initiative filtern","Offpage scalar Initiative"],["Nach Sprint filtern","Closed scalar Sprint"],["Nach Bereich filtern","Offpage scalar workstream"]]){
-    const control=canvas.getByRole("combobox",{name:label});await userEvent.click(control);await expect(await body.findByRole("option",{name:option})).toBeVisible();await userEvent.keyboard("{Escape}");await expect(control).toHaveFocus();
+    const control = canvas.getByRole("combobox", { name: label });
+    await userEvent.click(control);
+    await expect(await body.findByRole("option", { name: option })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(canvas.getByRole("combobox", { name: label })).toHaveFocus());
   }
   await expect(canvas.getByLabelText("Scalar-Strukturabfragen controls")).toHaveTextContent("1");await expect(canvas.getByLabelText("Scalar-Strukturabfragen roots")).toHaveTextContent("1");
  },
