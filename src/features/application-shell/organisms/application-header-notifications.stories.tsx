@@ -267,7 +267,7 @@ export const DismissKeepsTheAuthoritativeUnreadCount: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
     await waitFor(() => expect(inbox).toHaveTextContent("7"));
     await userEvent.click(inbox);
-    await expect(canvas.getByText("Keine neuen Hinweise.")).toBeVisible();
+    await expect(await canvas.findByText("Keine neuen Hinweise.")).toBeVisible();
     await expect(getRouter().push).not.toHaveBeenCalled();
     await expect(statusActions).toEqual(["dismiss"]);
   },
