@@ -54,10 +54,22 @@ it("the actual Decision Log page retains mapped-reader header restrictions with 
     });
     const viewer = await DecisionLogPage();
     expect(viewer.props.initialDecisionLogResult).toMatchObject({ ok: true, entries: [{ id: "decision-1" }] });
-    expect(viewer.props.initialHeaderData.notifications.data.items.map((item: { title: string }) => item.title)).toEqual(["Own"]);
+    expect(viewer.props.initialHeaderData.notifications.state).toBe("idle");
+    const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", {
+      "server-only": {}, "next/headers": { cookies: async () => jar, headers: async () => new Headers({ host: "localhost:3000" }) },
+      "next/cache": { unstable_cache: (fn: unknown) => fn, revalidateTag() {} },
+    });
+    const viewerPermission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "decision-log.read" });
+    expect(viewerPermission.ok).toBe(true);
+    const viewerHeader = await viewerPermission.loadHeader();
+    expect(viewerHeader.notifications.data.items.map((item: { title: string }) => item.title)).toEqual(["Own"]);
     await db.query("update public.profiles set platform_role='deputy' where id=$1", [id]);
     const deputy = await DecisionLogPage();
-    expect(deputy.props.initialHeaderData.notifications.data.items.map((item: { title: string }) => item.title).sort()).toEqual(["Lead only", "Own"]);
+    expect(deputy.props.initialHeaderData.notifications.state).toBe("idle");
+    const deputyPermission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "decision-log.read" });
+    expect(deputyPermission.ok).toBe(true);
+    const deputyHeader = await deputyPermission.loadHeader();
+    expect(deputyHeader.notifications.data.items.map((item: { title: string }) => item.title).sort()).toEqual(["Lead only", "Own"]);
     await db.query("update public.profiles set auth_user_id=null where id=$1", [id]);
     const denied = await DecisionLogPage();
     expect(denied.props.initialProtectedDataLoaded).not.toBe(true);

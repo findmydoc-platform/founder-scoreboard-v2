@@ -26,7 +26,7 @@ test("capped hierarchy summaries preserve outside membership and known detail/au
  complete = true; await state.planning.refreshWorkspace("projects");
  assert.equal(state.planning.hierarchy().completeness, "complete"); assert.deepEqual(state.planning.hierarchy().tasks, []);
  assert.equal(state.planning.taskDetail(task.id).task.title, "Known initiative");
- assert.deepEqual(calls, ["/api/strategic-planning-data", "/api/strategic-planning-data"]);
+ assert.deepEqual(calls, ["/api/strategic-planning-data?header=independent", "/api/strategic-planning-data?header=independent"]);
 });
 test("owned empty-Epic deletion sends the original opaque basis and accepts only the actual root receipt", async () => {
  const calls=[];const state=await owner({requestJson:async(path,options)=>{calls.push({path,options});return{response:new Response(null),body:{task:{id:task.id,taskType:"epic"}}};}});

@@ -4,6 +4,7 @@ import { normalizeBacklogSelection } from "@/features/backlog/model/backlog-sele
 import { backlogSelectionRead, type PlanningBacklogHydration } from "@/features/planning/model/planning-backlog-hydration";
 import type { PlanningBoardQueryInput } from "@/features/planning/model/planning-board-query";
 import { authorizeCredentialAction } from "@/lib/credentials";
+import { PlanningServerNotificationEntry, isNotificationDocumentRequest, startPlanningServerNotificationEntry } from "@/features/planning/server/planning-server-notification-entry";
 import { PlanningServerHeaderSlots } from "@/features/planning/server/planning-server-header-slots";
 import type { PlanningServerHeaderRead, PlanningServerHeaderResult, PlanningServerHeaderSlot } from "@/features/planning/model/planning-server-header-read";
 import { PlanningServerBoardColumns, preparePlanningServerBoardColumns } from "@/features/planning/server/planning-server-board-columns";
@@ -48,7 +49,7 @@ async function loadBacklogPageData(profile?: AuthenticatedProfile | null, params
   const documentRequest = requestHeaders.get("sec-fetch-dest") === "document" && requestHeaders.get("sec-fetch-mode") === "navigate"
     && requestHeaders.get("purpose") !== "prefetch" && !requestHeaders.get("sec-purpose")?.includes("prefetch");
   const query = normalizeBacklogSelection({ view: "backlog", filters: readBacklogUrlFilters(params), limit: 20 });
-  const [backlog, header, selected] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader(),
+  const [backlog, header, selected] = await Promise.all([permission.planning.loadBacklogBootstrap(), permission.planning.loadHeader(["quickLinks", "calendarEvents"]),
     documentRequest && query && permission.readSession ? permission.planning.loadBacklog(query) : undefined]);
   let initialBacklogRead: PlanningBacklogHydration | undefined;
   if (selected?.status === "ready" && selected.model.selection && "readAuthority" in selected && selected.readAuthority && permission.readSession && permission.profile && query) {
@@ -82,7 +83,7 @@ async function loadPlanningWorkspacePageData(
   }
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "strategic.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  return permission.resource.loadStrategic();
+  return permission.resource.loadStrategic({ headerSlots: ["quickLinks", "calendarEvents"] });
 }
 
 async function loadSupportingWorkspacePageData(
@@ -93,19 +94,19 @@ async function loadSupportingWorkspacePageData(
     const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "account.profile.read" });
     if (!permission.ok || (permission.profile?.id || null) !== (profile?.id || null)
       || (permission.profile?.platformRole || null) !== (profile?.platformRole || null)) return { status: "unavailable" as const };
-    return permission.account.loadProfile();
+    return permission.account.loadProfile({ headerSlots: ["quickLinks", "calendarEvents"] });
   }
   const action = workspace === "events" ? "events.read" : workspace === "tools" ? "tools.read" : workspace === "team" ? "team.read" : "notifications.read";
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
   if (workspace === "team") return permission.resource.loadTeamPeoplePage();
-  return permission.resource.loadWorkspace();
+  return permission.resource.loadWorkspace({ headerSlots: ["quickLinks", "calendarEvents"] });
 }
 
 async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.sprint.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader()]);
+  const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader(["quickLinks", "calendarEvents"])]);
   return sprint.status === "ready" && header.ok
     ? { status: "ready" as const, model: sprint.model, headerData: header.headerData }
     : { status: "unavailable" as const };
@@ -116,7 +117,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
   if (!permission.ok || permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole) return { status: "unavailable" as const };
   try {
     const [headerData, decisionLog] = await Promise.all([
-      permission.loadHeader(),
+      permission.loadHeader(["quickLinks", "calendarEvents"]),
       loadNotionDecisionLog(permission.notion),
     ]);
     return { status: "ready" as const, headerData, decisionLog };
@@ -214,7 +215,25 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
       );
     }
 
-    if (initialWorkspace === "events" || initialWorkspace === "tools" || initialWorkspace === "team" || initialWorkspace === "profile" || initialWorkspace === "notifications") {
+    if (initialWorkspace === "notifications") {
+      const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "notifications.read" });
+      if (!permission.ok || permission.profile?.id !== auth.profile?.id || permission.profile?.platformRole !== auth.profile?.platformRole) {
+        return <WorkspaceDataUnavailablePage workspace="notifications" authUserEmail={auth.user?.email || ""} />;
+      }
+      const { readSession, readAuthority } = permission;
+      const entry = isNotificationDocumentRequest(await headers()) && readSession && readAuthority
+        && readSession.userId === auth.user.id && auth.session?.revision === readSession.revision
+        && auth.session.expiresAt === readSession.expiresAt
+        ? startPlanningServerNotificationEntry(readSession, readAuthority, permission.resource.loadNotificationScope)
+        : undefined;
+      return <PlanningApp initialData={emptyPlanningShellState} initialHeaderData={emptyPlanningHeaderData} initialWorkspace="notifications"
+        source="supabase" authRequired initialAuthUser={auth.user} initialCurrentProfile={auth.profile}
+        initialAdministratorAccess={auth.authority?.administratorAccess} initialProtectedDataLoaded initialNotificationEntry={entry?.read}>
+        {entry ? <PlanningServerNotificationEntry {...entry} /> : null}
+      </PlanningApp>;
+    }
+
+    if (initialWorkspace === "events" || initialWorkspace === "tools" || initialWorkspace === "team" || initialWorkspace === "profile") {
       const supportingWorkspace = await loadSupportingWorkspacePageData(initialWorkspace, auth.profile);
       if (supportingWorkspace.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace={initialWorkspace} authUserEmail={auth.user?.email || ""} />;

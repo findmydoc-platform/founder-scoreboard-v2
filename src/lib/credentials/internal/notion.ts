@@ -109,10 +109,10 @@ export async function authorizeDecisionLog(input: DecisionLogCredentialInput): P
     const assertCurrent = await current();
     assertCurrent(); assertData(); assertNotion();
   } catch { return { ok: false, status: 503, error: "Decision Log ist gerade nicht verfügbar." }; }
-  return Object.freeze({ ok: true, profile: actor, notion, async loadHeader() {
+  return Object.freeze({ ok: true, profile: actor, notion, async loadHeader(slots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[]) {
     const assertCurrent = await current();
     assertCurrent(); assertData();
-    const result = await loadPlanningHeaderData(service, { currentProfileId: actor?.id || null, platformRole: actor?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(service) });
+    const result = await loadPlanningHeaderData(service, { currentProfileId: actor?.id || null, platformRole: actor?.platformRole || null, slots, sharedSlotLoaders: planningHeaderSlotLoaders(service) });
     const assertFinished = await current();
     assertFinished(); assertData();
     return result;

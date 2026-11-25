@@ -69,8 +69,9 @@ const meta = {
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
+    const notificationReceiptTime = Date.now();
     const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: "mara@example.com" }, (input, init) => {
-    const path = String(input).split("?")[0];
+    const url = new URL(String(input), window.location.origin), path = url.pathname;
     if (path === "/api/auth/session") return Response.json({ session: { user, userId: user.id, revision: "workspace-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
     if (path === "/api/administrator-access") return init?.method && init.method !== "GET" ? Response.json({ error: "This fixture does not activate administrator access" }, { status: 403 }) : Response.json({ administratorAccess: access });
     if (path === "/api/administration-data") return capabilities.manageAdministratorEligibility ? Response.json({ administration: { ...administrationStoryModel, capabilities, people: [], notificationEvents: [], notificationDeliveries: [] } }) : Response.json({ error: "Kein Zugriff", code: "administrator_access_required" }, { status: 403 });
@@ -81,7 +82,14 @@ const meta = {
     if (path === "/api/events" && init?.method === "POST") return Response.json({ event: { ...event, ...JSON.parse(String(init.body)), id: 2, updatedAt: "r2" } });
     if (path === "/api/tools/metadata") return Response.json({ metadata: { title: "", description: "", imageUrl: "", siteName: "" } });
     if (path === "/api/tools" && init?.method === "POST") return Response.json({ tool: { ...tool, ...JSON.parse(String(init.body)), id: "created-tool", updatedAt: "r2" } });
-    if (path === "/api/notifications-data") return Response.json({ headerData: { ...headerData, quickLinks: readyHeaderSlot([{ id: "guide", name: "Aktueller Teamleitfaden", category: "knowledge", url: "https://example.com/guide", previewImageUrl: "" }]) }, model: { revision: "notifications", people: args.initialData.profiles, items: [], events: args.initialData.notificationEvents, deliveries: [], coverage: { events: "complete", deliveries: "forbidden" } } });
+    if (path === "/api/notifications-data") {
+      const area = url.searchParams.get("area"), events = args.initialData.notificationEvents;
+      const receipt = { readAuthority: { userId: user.id, deadline: notificationReceiptTime + 60_000 }, readActor: { profileId: args.initialCurrentProfile?.id, platformRole: args.initialCurrentProfile?.platformRole }, sourceRevision: "notification-story", observedAt: new Date(notificationReceiptTime - 1).toISOString(), validUntil: new Date(notificationReceiptTime + 60_000).toISOString() };
+      if (area === "preview") return Response.json({ ...receipt, items: events.filter(row => row.status === "pending" && !row.seenAt) });
+      if (area === "count") return Response.json({ ...receipt, unreadCount: events.filter(row => row.status === "pending" && !row.seenAt).length });
+      if (area === "inbox") { const offset = url.searchParams.has("continuation") ? 40 : 0, page = events.slice(offset, offset + 40), more = events.length > offset + page.length; return Response.json({ ...receipt, events: page, coverage: more ? "partial" : "complete", continuation: more ? "next-page" : null, references: [], referenceCoverage: "complete" }); }
+      return Response.json({ headerData: { ...headerData, quickLinks: readyHeaderSlot([{ id: "guide", name: "Aktueller Teamleitfaden", category: "knowledge", url: "https://example.com/guide", previewImageUrl: "" }]) }, model: { revision: "notifications", people: args.initialData.profiles, items: [], events, deliveries: [], coverage: { events: "complete", deliveries: "forbidden" } } });
+    }
     if (path === "/api/decision-log") return Response.json({ result: { ...decisionLog, fetchedAt: "2099-01-02T10:00:00Z" } });
     if (path === "/api/profile-data") return Response.json({ model: { revision: "profile", people: args.initialData.profiles, project: args.initialData.project, initiatives: [], notificationPreferences: [], preferences: [] } });
     if (path === "/api/backlog-data") return Response.json({ model: { revision: "backlog", people: args.initialData.profiles, items: args.initialData.tasks, sprints: args.initialData.sprints, commitments: [] } });
@@ -167,7 +175,7 @@ export const ToolsCreationFromContext: Story = {
 };
 
 export const NotificationViewSurvivesHeaderRefresh: Story = {
-  args: { initialWorkspace: "notifications", initialData: { ...emptyPlanningShellState, profiles: [profile], notificationEvents: [pendingNotification, doneNotification] } },
+  args: { initialWorkspace: "notifications", initialHeaderData: { ...headerData, quickLinks: readyHeaderSlot([{ id: "guide", name: "Aktueller Teamleitfaden", category: "knowledge", url: "https://example.com/guide", previewImageUrl: "" }]) }, initialData: { ...emptyPlanningShellState, profiles: [profile], notificationEvents: [pendingNotification, doneNotification] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expectApplicationHeader(canvasElement, "Benachrichtigungen");
@@ -279,5 +287,18 @@ export const TeamKeepsContentControlsWithoutEmptyContext: Story = {
     await expect(await canvas.findByRole("heading", { name: "Rollen & Vertretung" }, { timeout: 5_000 })).toBeVisible();
     await expect(canvas.queryByLabelText("Bereichskontext")).not.toBeInTheDocument();
     for (const name of ["Kuratierte Links", "Kalender öffnen", "Benachrichtigungen", "Hilfe öffnen", /GitHub öffnen/, "Account-Menü öffnen"]) await expect(canvas.getByRole("button", { name })).toBeVisible();
+  },
+};
+
+export const NotificationInboxLoadsBeyondFirstPage: Story = {
+  args: { initialWorkspace: "notifications", initialData: { ...emptyPlanningShellState, profiles: [profile], notificationEvents: Array.from({ length: 41 }, (_, index) => ({ ...pendingNotification, id: index + 1, title: index === 40 ? "Hinweis auf weiterer Seite" : `Hinweis ${index + 1}` })) } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("41 ungelesen insgesamt")).toBeVisible();
+    await expect(canvas.getByText("40 neu in geladenen Hinweisen")).toBeVisible();
+    await expect(canvas.queryByText("Hinweis auf weiterer Seite")).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Weitere Hinweise laden" }));
+    await expect(await canvas.findByText("Hinweis auf weiterer Seite")).toBeVisible();
+    await expect(canvas.getByText("41 neu in geladenen Hinweisen")).toBeVisible();
   },
 };

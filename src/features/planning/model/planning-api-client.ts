@@ -12,8 +12,10 @@ import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-m
 
 type FmdToolPayload = FmdToolDraft & Pick<FmdTool, "status"> & { expectedUpdatedAt?: string };
 
-export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects", query?: import("./planning-board-query").PlanningBoardQueryInput, options?: { signal?: AbortSignal }) {
+export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, workspace: "planning" | "projects", query?: import("./planning-board-query").PlanningBoardQueryInput, options?: { signal?: AbortSignal; independentHeader?: boolean }) {
   const route = workspace === "planning" ? "/api/planning-board-data" : "/api/strategic-planning-data";
+  const scoped = query && workspace === "planning" ? `${route}?scope=${encodeURIComponent(JSON.stringify(query))}` : route;
+  const path = workspace === "projects" && options?.independentHeader ? `${scoped}?header=independent` : scoped;
   return apiClient.requestJson<{
     model?: PlanningWorkspaceModel;
     readAuthority?: import("./planning-server-header-read").PlanningReadAuthority;
@@ -21,25 +23,25 @@ export function requestPlanningWorkspaceData(apiClient: BrowserApiClient, worksp
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
     code?: string;
-  }>(query && workspace === "planning" ? `${route}?scope=${encodeURIComponent(JSON.stringify(query))}` : route, options);
+  }>(path, options?.signal ? { signal: options.signal } : undefined);
 }
 
-export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, workspace: SupportingWorkspace) {
+export function requestSupportingWorkspaceData(apiClient: BrowserApiClient, workspace: SupportingWorkspace, options?: { independentHeader?: boolean }) {
   return apiClient.requestJson<{
     model?: SupportingWorkspaceModel;
     headerData?: PlanningHeaderData;
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
-  }>(`/api/${workspace}-data`);
+  }>(`/api/${workspace}-data${options?.independentHeader ? "?header=independent" : ""}`);
 }
 
-export function requestSprintWorkspaceData(apiClient: BrowserApiClient) {
+export function requestSprintWorkspaceData(apiClient: BrowserApiClient, options?: { independentHeader?: boolean }) {
   return apiClient.requestJson<{
     model?: SprintWorkspaceModel;
     headerData?: PlanningHeaderData;
     currentProfile?: AuthenticatedProfile | null;
     error?: string;
-  }>("/api/sprint-data");
+  }>(`/api/sprint-data${options?.independentHeader ? "?header=independent" : ""}`);
 }
 
 export function requestPlanningShellStateRevision(apiClient: BrowserApiClient) {

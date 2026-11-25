@@ -63,7 +63,7 @@ const meta = {
       if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
       if (path === "/api/planning-revision") return Response.json({ revision: planningTaskRevision([]) });
       if (path === "/api/github-app/status") return Response.json({ installation: { available: true }, user: { connected: true }, waitingCommentCount: 0 });
-      if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });
+      if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()], readActor: { profileId: profile.id, platformRole: profile.platformRole }, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
       // A new response must not repair profile fields overwritten during the Release visit.
       if (path === "/api/team-data" && url.searchParams.get("area") === "people" && teamReads++ === 0) return Response.json({
         readAuthority: teamReadAuthority, currentProfile: { id: profile.id, name: profile.name, platformRole: profile.platformRole, githubLogin: profile.githubLogin },

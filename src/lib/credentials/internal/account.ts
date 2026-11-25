@@ -3,7 +3,7 @@ import type { SessionAuthorityContext } from "@/features/administrator-access/mo
 import type { NextRequest } from "next/server";
 import type { AccountCredentialInput, AccountSettingsUpdate, AccountGitHubProjectUpdate, AccountNotificationPreferenceUpdate, AccountPreviewUpload } from "../account-types";
 import { randomUUID } from "node:crypto";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 import type { DbNotificationPreference, DbProfile, DbProfileFeatureTourAcknowledgement } from "../../planning-row-types";
 import { googleChatDigestEventTypes } from "../../notification-policy";
 import { authorizeSessionPolicy, currentAdministratorAccess, administratorAccessFailure } from "./session-policy";
@@ -12,6 +12,7 @@ import { WorkspaceAccessError } from "../../workspace-identity";
 import { validToolPreviewPath } from "../../tool-preview-image";
 import { getServerAuthSupabase } from "./cookie-client";
 import { authorizeSessionData } from "./session";
+import { projectSessionView } from "./session-view";
 import { resolveSessionRequest } from "./session-request";
 import { createSupabaseProfileReadModel } from "@/features/profile/server/profile-read-model-supabase";
 import { emptyPlanningHeaderData, loadPlanningHeaderData, readyHeaderSlot } from "../../planning-header-data";
@@ -19,7 +20,8 @@ import { mapProfile } from "../../planning-profile-mappers";
 import type { HeaderDataSlot, Profile } from "../../types";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import { platformReleaseSeed } from "@/features/platform-releases/model/platform-release-seed";
-import { loadPlatformReleases } from "@/features/platform-releases/server/platform-release-read-model-supabase";
+import { loadPlatformReleaseContent } from "@/features/platform-releases/server/platform-release-read-model-supabase";
+import { readPlanningReleaseReferenceSnapshot, type PlanningReleaseKey } from "@/features/planning-items/server/planning-release-reference-read-source";
 import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { settingsPreconditions, governancePreconditions } from "./profile-edit-preconditions";
 
@@ -48,6 +50,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
   const strictConfiguration = accountServiceConfiguration(true);
   const configurationBinding = configurationFingerprint();
   let request: NextRequest;
+  let releaseCookieSession: Session | undefined;
   if (input.credential.kind === "server-cookies") {
     if (action !== "account.preview.read" && action !== "account.profile.read" && action !== "releases.read") return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
     if (action === "account.preview.read" && !validToolPreviewPath(previewPath)) return { ok: false as const, status: 400, error: "Ungültiger Bildpfad." };
@@ -60,6 +63,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
       const current = await client.auth.getSession();
       if (current.error && isAuthRetryableFetchError(current.error)) return { ok: false as const, status: 503, error: "Anmeldung konnte vorübergehend nicht geprüft werden." };
       if (current.error || !current.data.session?.access_token) return { ok: false as const, status: 401, error: "Anmeldung ungültig oder abgelaufen." };
+      if (action === "releases.read") releaseCookieSession = current.data.session;
       request = { headers: new Headers({ authorization: `Bearer ${current.data.session.access_token}` }), method: "GET" } as NextRequest;
     }
   } else if (input.credential.kind === "session-request") {
@@ -94,7 +98,69 @@ export async function authorizeAccount(input: AccountCredentialInput) {
   };
   const service = accountService(false, current, assertCurrent, configuration)!;
   const strictService = accountService(true, current, assertCurrent, strictConfiguration);
-  return { ok: true as const, profile, account: {
+  const releaseReadAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : null;
+  const releaseReadActor = profile ? { profileId: profile.id, platformRole: profile.platformRole } : null;
+  const releaseReadSessionId = "readSessionId" in permission ? permission.readSessionId : null;
+  const releaseReadFailure = (error: unknown) => releaseReadAuthority && Date.now() >= releaseReadAuthority.deadline
+    || error instanceof WorkspaceAccessError && [401, 403].includes(error.status) ? "forbidden" as const : "unavailable" as const;
+
+  async function observeReleaseReferenceSource(requestSignal?: AbortSignal) {
+    if (action !== "releases.read") return { status: "forbidden" as const };
+    if (!userData || !releaseReadAuthority || !releaseReadActor) return { status: "unavailable" as const };
+    const { deadline } = releaseReadAuthority;
+    if (Date.now() >= deadline) return { status: "forbidden" as const };
+    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - Date.now())));
+    const signal = requestSignal ? AbortSignal.any([requestSignal, deadlineSignal]) : deadlineSignal;
+    if (signal.aborted) return { status: "unavailable" as const };
+    try {
+      const result = await userData.rpc("platform_release_reference_publication_context").abortSignal(signal);
+      if (Date.now() >= deadline || result.status === 401 || result.status === 403) return { status: "forbidden" as const };
+      if (signal.aborted || result.error || !result.data || typeof result.data.source_revision !== "string"
+        || !result.data.source_revision) return { status: "unavailable" as const };
+      if (result.data.profile_id !== releaseReadActor.profileId || result.data.platform_role !== releaseReadActor.platformRole)
+        return { status: "forbidden" as const };
+      assertCurrent();
+      return { status: "ready" as const, sourceRevision: result.data.source_revision as string,
+        readAuthority: releaseReadAuthority, readActor: releaseReadActor };
+    } catch (error) {
+      return { status: releaseReadFailure(error) };
+    }
+  }
+
+  async function readReleaseReferenceBatch(keys: readonly PlanningReleaseKey[], requestSignal?: AbortSignal) {
+    if (action !== "releases.read") return { status: "forbidden" as const };
+    if (!strictService || !userData || !releaseReadAuthority || !releaseReadActor || !releaseReadSessionId) return { status: "unavailable" as const };
+    const { userId, deadline } = releaseReadAuthority;
+    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - Date.now())));
+    const signal = requestSignal ? AbortSignal.any([requestSignal, deadlineSignal]) : deadlineSignal;
+    try {
+      let precedingRevision: string | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (Date.now() >= deadline) return { status: "forbidden" as const };
+        if (signal.aborted) return { status: "unavailable" as const };
+        const result = await readPlanningReleaseReferenceSnapshot(strictService, {
+          userId, sessionId: releaseReadSessionId, ...releaseReadActor, deadline, keys, signal,
+        });
+        if (Date.now() >= deadline) return { status: "forbidden" as const };
+        if (result.status === "forbidden" || result.status === "unavailable") return result;
+        const latest = await observeReleaseReferenceSource(signal);
+        if (latest.status !== "ready") return latest;
+        if (result.status === "ready" && latest.sourceRevision === result.sourceRevision) {
+          return { ...result, readAuthority: releaseReadAuthority, readActor: releaseReadActor };
+        }
+        // A stale snapshot has no revision. Use the previous attempt's live
+        // observation to bracket the stale result before reporting a conflict.
+        if (result.status === "stale" && latest.sourceRevision === precedingRevision) return result;
+        precedingRevision = latest.sourceRevision;
+      }
+      return { status: "unavailable" as const };
+    } catch (error) {
+      return { status: releaseReadFailure(error) };
+    }
+  }
+  const readSession = releaseCookieSession && "user" in permission ? projectSessionView(releaseCookieSession, permission.user) : undefined;
+  return { ok: true as const, profile, ...(readSession ? { readSession } : {}), account: {
+    observeReleaseReferenceSource,
     async markReleaseSeen() {
       if (action !== "releases.seen") return { error: { status: 403, message: "Keine Berechtigung für diese Aktion." } };
       if (!profile) return { error: null };
@@ -104,7 +170,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
         .eq("recipient_profile_id", profile.id).eq("entity_type", "platform_release").eq("entity_id", version).is("seen_at", null);
       return error ? { error: { status: 500, message: "Lesestatus konnte nicht gespeichert werden." } } : { error: null };
     },
-    async loadReleaseHeader() {
+    async loadReleaseHeader(options?: { headerSlots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[] }) {
       const unavailableProfiles: HeaderDataSlot<Profile[]> = { state: "error", data: [], error: "Kalenderprofile konnten nicht geladen werden." };
       if (action !== "releases.read" || !strictService) return { available: false as const, headerData: emptyPlanningHeaderData, calendarProfiles: unavailableProfiles };
       try {
@@ -112,7 +178,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
         await current();
         assertCurrent();
         const [headerData, people] = await Promise.all([
-          loadPlanningHeaderData(strictService, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(strictService) }),
+          loadPlanningHeaderData(strictService, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, slots: options?.headerSlots, sharedSlotLoaders: planningHeaderSlotLoaders(strictService) }),
           strictService.from("profiles").select("id,name,platform_role,org_role,github_login,weekly_capacity,profile_color", { count: "exact" }).order("id").limit(1000),
         ]);
         assertCurrent();
@@ -125,19 +191,61 @@ export async function authorizeAccount(input: AccountCredentialInput) {
         return { available: false as const, headerData: emptyPlanningHeaderData, calendarProfiles: { ...unavailableProfiles, error: status === 401 || status === 403 ? "Kein Zugriff auf Kalenderprofile." : unavailableProfiles.error } };
       }
     },
-    async readReleases() {
+    async readReleaseContent(options?: { version?: string; signal?: AbortSignal }) {
+      if (action !== "releases.read") return { status: "forbidden" as const };
+      const readAuthority = releaseReadAuthority, readActor = releaseReadActor;
+      if (!strictService || !readAuthority || !readActor) {
+        if (process.env.NODE_ENV !== "development" || requiresSupabaseAuth()) return { status: "unavailable" as const };
+        const releases = platformReleaseSeed.filter(release => !options?.version || options.version === release.version)
+          .map(({ planningReferences: _references, ...release }) => { void _references; return release; });
+        return { status: "ready" as const, releases, readAuthority, readActor };
+      }
+      const deadline = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+      try {
+        assertCurrent();
+        if (signal.aborted) return { status: "unavailable" as const };
+        const result = await loadPlatformReleaseContent(strictService, readActor.profileId, { version: options?.version, signal });
+        if (Date.now() >= readAuthority.deadline) return { status: "forbidden" as const };
+        if (result.status !== "ready") return result;
+        await current();
+        assertCurrent();
+        return signal.aborted ? { status: "unavailable" as const } : { ...result, readAuthority, readActor };
+      } catch (error) {
+        return { status: releaseReadFailure(error) };
+      }
+    },
+    async readReleaseReferences(options: PlanningReleaseKey & { signal?: AbortSignal }) {
+      const { version, manifestDigest, signal } = options;
+      const release = { version, manifestDigest };
+      if (!/^v\d+\.\d+\.\d+$/.test(version) || !/^[a-f0-9]{64}$/.test(manifestDigest)) return { status: "stale" as const };
+      const result = await readReleaseReferenceBatch([release], signal);
+      if (result.status !== "ready") return result;
+      return { status: "ready" as const, ...result.releases[0], sourceRevision: result.sourceRevision,
+        readActor: result.readActor, readAuthority: result.readAuthority };
+    },
+    async readReleases(signal?: AbortSignal) {
       if (action !== "releases.read") return { available: false as const, releases: [] };
       if (!strictService) return { available: false as const, releases: process.env.NODE_ENV === "development" ? platformReleaseSeed : [] };
       try {
         assertCurrent();
         await current();
         assertCurrent();
-        const releases = await loadPlatformReleases(strictService, profile?.id || null);
+        const content = await loadPlatformReleaseContent(strictService, profile?.id || null, { signal });
         assertCurrent();
-        return { available: true as const, releases };
+        if (content.status === "forbidden" || signal?.aborted) return { available: false as const, releases: [] };
+        // The legacy archive retains its existing response shape for a failed release-table query.
+        if (content.status === "unavailable" || content.releases.length === 0) return { available: true as const, releases: [] };
+        const keys = content.releases.map(({ version, manifestDigest }) => ({ version, manifestDigest }));
+        const related = await readReleaseReferenceBatch(keys, signal);
+        if (related.status !== "ready") return { available: false as const, releases: [] };
+        assertCurrent();
+        return { available: true as const, releases: content.releases.map((release, index) => ({
+          ...release, planningReferences: related.releases[index].planningReferences,
+        })) };
       } catch { return { available: false as const, releases: [] }; }
     },
-    async loadProfile() {
+    async loadProfile(options?: { headerSlots?: readonly import("../../planning-header-data").PlanningHeaderSlotKey[] }) {
       if (action !== "account.profile.read") return { status: "forbidden" as const };
       if (!service) return { status: "unavailable" as const };
       try {
@@ -146,7 +254,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
         assertCurrent();
         const [result, headerData] = await Promise.all([
           createSupabaseProfileReadModel(service).load({ authorized: true, actorProfileId: profile?.id || null }),
-          loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, sharedSlotLoaders: planningHeaderSlotLoaders(service) }),
+          loadPlanningHeaderData(service, { currentProfileId: profile?.id || null, platformRole: profile?.platformRole || null, slots: options?.headerSlots, sharedSlotLoaders: planningHeaderSlotLoaders(service) }),
         ]);
         assertCurrent();
         return result.status === "ready" ? { ...result, headerData } : { status: result.status };

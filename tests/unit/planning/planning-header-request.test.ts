@@ -1,8 +1,20 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { requestPlanningHeaderData } from "@/features/planning/model/planning-api-client";
+import { requestPlanningHeaderData, requestPlanningWorkspaceData, requestSupportingWorkspaceData, requestSprintWorkspaceData } from "@/features/planning/model/planning-api-client";
 import type { BrowserApiClient } from "@/lib/browser-api-client";
 
 afterEach(() => vi.useRealTimers());
+
+test("independent notification headers are explicitly requested without changing legacy calls", async () => {
+  const requestJson = vi.fn<BrowserApiClient["requestJson"]>().mockResolvedValue({ response: new Response(null), body: {} });
+  const client = { requestJson } as unknown as BrowserApiClient;
+  await requestSupportingWorkspaceData(client, "profile");
+  await requestSupportingWorkspaceData(client, "profile", { independentHeader: true });
+  await requestSupportingWorkspaceData(client, "events", { independentHeader: true });
+  await requestSprintWorkspaceData(client);
+  await requestSprintWorkspaceData(client, { independentHeader: true });
+  await requestPlanningWorkspaceData(client, "projects", undefined, { independentHeader: true });
+  expect(requestJson.mock.calls.map(call => call[0])).toEqual(["/api/profile-data", "/api/profile-data?header=independent", "/api/events-data?header=independent", "/api/sprint-data", "/api/sprint-data?header=independent", "/api/strategic-planning-data?header=independent"]);
+});
 
 test("a stalled header request times out and the next request can succeed", async () => {
   vi.useFakeTimers();

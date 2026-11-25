@@ -1,13 +1,13 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { notificationBadgeTone, notificationTypeLabel } from "@/features/notifications/model/notification-display";
 import { TaskReferenceLink } from "@/features/tasks/atoms/task-reference-link";
 import { formatDate } from "@/lib/display";
 import { notificationLifecycleLabel } from "@/lib/notification-lifecycle";
 import { isOperationalLeadRole } from "@/lib/platform";
-import type { NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
+import type { HeaderDataSlot, NotificationEvent, PlanningShellState, Profile } from "@/lib/types";
 import { UiBadge, UiEmptyState, UiPanel } from "@/shared/atoms/ui-primitives";
 import { FilterSegmentedControl } from "@/shared/molecules/filter-toolbar";
 import { ApplicationWorkspaceControls } from "@/features/application-shell/molecules/application-workspace-context";
@@ -59,16 +59,40 @@ export function NotificationsOverview({
   completeness = "partial",
   pendingEventIds = [],
   readStatus = "current",
+  count,
+  onRetryCount,
+  continuation,
+  loadingMore = false,
+  pageError = false,
+  onLoadMore,
+  onRetryInbox,
+  references = [],
+  referenceCoverage,
+  onInteractionChange,
 }: {
   completeness?: "complete" | "partial";
   pendingEventIds?: readonly number[];
   readStatus?: import("@/features/planning/model/planning-state").PlanningReadStatus;
+  count?: HeaderDataSlot<number | null>;
+  onRetryCount?: () => void;
+  continuation?: string | null;
+  loadingMore?: boolean;
+  pageError?: boolean;
+  onLoadMore?: () => void;
+  onRetryInbox?: () => void;
+  references?: readonly import("@/features/planning/model/planning-notifications-state").NotificationInboxReference[];
+  referenceCoverage?: "complete" | "partial" | "unavailable";
+  onInteractionChange?: (active: boolean) => void;
   currentProfile: Profile | null;
   data: PlanningShellState;
   onOpenNotification: (event: NotificationEvent) => void;
   onDismissNotification: (eventId: number) => void;
 }) {
   const [personalFilter, setPersonalFilter] = useState<PersonalNotificationFilter>("pending");
+  const interaction = useRef({ focused: false, scrolling: false, timer: undefined as ReturnType<typeof setTimeout> | undefined });
+  const onInteraction = useRef(onInteractionChange);
+  useEffect(() => { onInteraction.current = onInteractionChange; }, [onInteractionChange]);
+  useEffect(() => () => { if (interaction.current.timer) clearTimeout(interaction.current.timer); onInteraction.current?.(false); }, []);
   const personalNotifications = useMemo(
     () => currentProfile
       ? data.notificationEvents.filter((event) => (
@@ -87,16 +111,25 @@ export function NotificationsOverview({
   const personalNewCount = personalNotifications.filter((event) => event.status === "pending" && !event.seenAt).length;
   const personalDoneCount = personalNotifications.filter((event) => isPersonalNotificationDone(event)).length;
   const personalTodayCount = personalNotifications.filter((event) => isToday(event.createdAt)).length;
-  if (readStatus === "forbidden") return <p role="status" className="p-4 text-sm text-slate-700">Kein Zugriff auf Benachrichtigungen.</p>;
-  if (readStatus === "not-loaded" || readStatus === "loading" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen werden geladen.</p>;
-  if (readStatus === "unavailable" && !personalNotifications.length) return <p role="status" className="p-4 text-sm text-slate-700">Benachrichtigungen konnten nicht geladen werden.</p>;
+  const exactCount = <>
+    {count?.state === "ready" && count.data !== null ? <span>{count.freshness === "stale" ? "Ungelesene Anzahl wird geprüft." : `${count.data} ungelesen insgesamt`}</span> : null}
+    {count?.state === "loading" || count?.state === "idle" ? <span role="status">Ungelesene Anzahl wird geladen.</span> : null}
+    {count?.state === "error" ? onRetryCount ? <button type="button" onClick={onRetryCount} className="font-semibold text-blue-700">Ungelesene Anzahl erneut laden</button> : <span>Ungelesene Anzahl nicht verfügbar.</span> : null}
+  </>;
+  if (readStatus === "forbidden") return <div className="p-4 text-sm text-slate-700"><p role="status">Kein Zugriff auf Benachrichtigungen.</p>{exactCount}</div>;
+  if (readStatus === "not-loaded" || readStatus === "loading" && !personalNotifications.length) return <div className="p-4 text-sm text-slate-700"><p role="status">Benachrichtigungen werden geladen.</p>{exactCount}</div>;
+  if (readStatus === "stale" && !personalNotifications.length) return <div className="p-4 text-sm text-slate-700"><p role="status">Der Stand der Benachrichtigungen wird geprüft.</p>{exactCount}{onRetryInbox ? <button type="button" onClick={onRetryInbox} className="min-h-11 font-semibold text-blue-700">Benachrichtigungen erneut laden</button> : null}</div>;
+  if (readStatus === "unavailable" && !personalNotifications.length) return <div className="p-4 text-sm text-slate-700"><p role="status">Benachrichtigungen konnten nicht geladen werden.</p>{exactCount}{onRetryInbox ? <button type="button" onClick={onRetryInbox} className="min-h-11 font-semibold text-blue-700">Benachrichtigungen erneut laden</button> : null}</div>;
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-4" onFocusCapture={() => { interaction.current.focused = true; onInteraction.current?.(true); }} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) { interaction.current.focused = false; if (!interaction.current.scrolling) onInteraction.current?.(false); } }}>
       {readStatus === "unavailable" ? <p role="status" className="text-sm text-slate-600">Benachrichtigungen konnten nicht aktualisiert werden. Der letzte verfügbare Stand bleibt sichtbar.</p> : null}
+      {(readStatus === "unavailable" || readStatus === "stale" && !continuation) && onRetryInbox ? <button type="button" onClick={onRetryInbox} className="min-h-11 justify-self-start font-semibold text-blue-700">Benachrichtigungen erneut laden</button> : null}
       {readStatus === "stale" || readStatus === "loading" ? <p role="status" className="text-sm text-slate-600">Der Stand der Benachrichtigungen wird geprüft.</p> : null}
-      {completeness === "partial" ? <p className="text-sm text-slate-600">Gezählt werden nur die geladenen Benachrichtigungen.</p> : null}
+      {completeness === "partial" ? <p className="text-sm text-slate-600">Die Filterzahlen beziehen sich nur auf geladene Hinweise.</p> : null}
+      {referenceCoverage && referenceCoverage !== "complete" ? <p className="text-sm text-slate-600">Planungsdetails sind nicht vollständig verfügbar.</p> : null}
       <section className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
-        <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>
+        {count ? <span>{personalNewCount} neu in geladenen Hinweisen</span> : <span><strong className="text-slate-900">{personalNewCount}</strong> neu</span>}
+        {exactCount}
         <span><strong className="text-slate-900">{personalOpenCount}</strong> offen</span>
       </section>
 
@@ -106,7 +139,7 @@ export function NotificationsOverview({
             <div>
               <h2 className="text-base font-semibold text-slate-950">Für mich{currentProfile && isOperationalLeadRole(currentProfile.platformRole) ? " & Team" : ""}</h2>
               <p className="mt-1 text-sm text-slate-500">
-                {personalNewCount} neu · {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute
+                {personalNewCount} neu · {personalOpenCount} offen · {personalDoneCount} erledigt · {personalTodayCount} heute{completeness === "partial" ? " (geladen)" : ""}
               </p>
             </div>
             <ApplicationWorkspaceControls>
@@ -124,10 +157,11 @@ export function NotificationsOverview({
             </ApplicationWorkspaceControls>
           </div>
 
-          <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain">
+          <div className="max-h-[calc(100dvh-18rem)] overflow-auto overscroll-contain" onScroll={() => { interaction.current.scrolling = true; onInteraction.current?.(true); if (interaction.current.timer) clearTimeout(interaction.current.timer); interaction.current.timer = setTimeout(() => { interaction.current.scrolling = false; if (!interaction.current.focused) onInteraction.current?.(false); }, 500); }}>
             <div className="min-w-0">
               {filteredPersonalNotifications.map((event) => {
                 const actorName = profileName(data.profiles, event.actorProfileId) || event.actorLabel;
+                const reference = references.find(item => item.itemId === event.entityId);
                 const showTypeBadge = shouldShowTypeBadge(event.type);
                 const task = event.entityType.trim().toLowerCase() === "task"
                   ? data.tasks.find((item) => item.id === event.entityId) || null
@@ -136,6 +170,7 @@ export function NotificationsOverview({
                   <>
                     <span className="block truncate font-semibold text-slate-950">{event.title}</span>
                     {event.body && <span className="mt-1 block line-clamp-2 text-sm leading-5 text-slate-600">{event.body}</span>}
+                    {reference ? <span className="mt-1 block truncate text-xs text-slate-600">{reference.title}</span> : null}
                     <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       {showTypeBadge && <UiBadge tone={notificationBadgeTone(event.type)} size="xs">{notificationTypeLabel(event.type)}</UiBadge>}
                       {(personalFilter === "all" || event.status === "pending" && event.seenAt) && (
@@ -182,9 +217,10 @@ export function NotificationsOverview({
           </div>
           {!filteredPersonalNotifications.length && (
             <div className="p-4">
-              <UiEmptyState minHeight="sm">Keine Hinweise für diesen Filter.</UiEmptyState>
+              <UiEmptyState minHeight="sm">{continuation ? "Keine geladenen Hinweise für diesen Filter." : "Keine Hinweise für diesen Filter."}</UiEmptyState>
             </div>
           )}
+          {continuation && onLoadMore ? <div className="p-4">{pageError ? <p role="status" className="text-sm text-slate-600">Weitere Hinweise konnten nicht geladen werden.</p> : null}<button type="button" onClick={onLoadMore} disabled={loadingMore} className="min-h-11 rounded-md px-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">{loadingMore ? "Weitere Hinweise werden geladen." : "Weitere Hinweise laden"}</button></div> : null}
         </UiPanel>
       </div>
     </div>

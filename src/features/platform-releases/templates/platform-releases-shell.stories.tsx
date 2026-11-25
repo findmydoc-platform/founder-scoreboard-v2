@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { getRouter } from "@storybook/nextjs-vite/navigation.mock";
@@ -9,6 +10,9 @@ import type { HeaderDataSlot, PlanningHeaderData, Profile } from "@/lib/types";
 import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-data";
 import { PlatformReleaseArchive } from "../organisms/platform-release-archive";
 import { PlatformReleaseDetail } from "../organisms/platform-release-detail";
+import { PlatformReleaseServerReferenceReceipt } from "../organisms/platform-release-server-reference-receipt";
+import type { PlatformReleaseReferenceEntry, PlatformReleaseReferenceEntryOutcome } from "../model/platform-release-model";
+import { PlatformReleaseOwnedDetail } from "../organisms/platform-release-owned-detail";
 import { releaseStoryFixture } from "../organisms/platform-release-story-fixture";
 import { PlatformReleasesShell } from "./platform-releases-shell";
 import { expectApplicationHeader } from "../../../../tests/helpers/application-header-browser-contract";
@@ -24,9 +28,12 @@ const headerData: PlanningHeaderData = {
 
 type AdministratorFixture = "denied" | "eligible" | "active";
 type IdentityFixture = "ready" | "loading" | "failed" | "denied" | "empty";
-type ReleaseFixture = { detail?: boolean; administrator?: AdministratorFixture; identities?: IdentityFixture; calendarFailed?: boolean; githubUnavailable?: boolean };
+type ReleaseFixture = { detail?: boolean; independentReferences?: boolean; streamedReferences?: "ready" | "unavailable" | "rejected"; administrator?: AdministratorFixture; identities?: IdentityFixture; calendarFailed?: boolean; githubUnavailable?: boolean };
 const profile: Profile = { id: "release-profile", name: "Mara", githubLogin: "mara", platformRole: "founder", orgRole: "Founder", weeklyCapacity: 40, color: "#2563eb" };
 let restoreGithubFixture = () => {};
+let failFirstReference = () => {};
+let releaseAreaRequests: string[] = [];
+const releaseSession = { userId: user.id, user: { id: user.id, displayName: "Mara" }, revision: "release-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
 function profilesFor(state: IdentityFixture): HeaderDataSlot<Profile[]> {
   if (state === "loading") return { state: "loading", data: [] };
   if (state === "failed" || state === "denied") return { state: "error", data: [], error: state === "denied" ? "Kein Zugriff auf Kalenderprofile." : "Kalenderprofile konnten nicht geladen werden." };
@@ -35,15 +42,33 @@ function profilesFor(state: IdentityFixture): HeaderDataSlot<Profile[]> {
 function accessFor(mode: AdministratorFixture): AdministratorAccessSnapshot {
   return { eligible: mode !== "denied", active: mode === "active", expiresAt: mode === "active" ? new Date(Date.now() + 3600_000).toISOString() : null };
 }
-function releaseBrowserFixture({ administrator = "denied", calendarFailed = false, githubUnavailable = false }: ReleaseFixture) {
+function releaseContentFixture() {
+  const { version, summary, publishedAt, manifestDigest, manifest, notificationId, seenAt } = releaseStoryFixture();
+  return { version, summary, publishedAt, manifestDigest, manifest, notificationId, seenAt };
+}
+function releaseBrowserFixture({ administrator = "denied", calendarFailed = false, githubUnavailable = false, independentReferences = false, streamedReferences }: ReleaseFixture) {
+  releaseAreaRequests = [];
+  let referencesRead = 0;
+  failFirstReference = () => undefined;
   let access = accessFor(administrator);
   let githubFailed = githubUnavailable;
   restoreGithubFixture = () => { githubFailed = false; };
   return mockAccountLifecycle("google", { linked: true, workspaceEmail: user.email }, (input, init) => {
-    const path = new URL(String(input), window.location.origin).pathname;
-    if (path === "/api/auth/session") return Response.json({ session: { userId: user.id, user: { id: user.id, displayName: "Mara" }, revision: "release-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
+    const url = new URL(String(input), window.location.origin), path = url.pathname;
+    if (path === "/api/auth/session") return Response.json({ session: releaseSession });
     if (path === "/api/planning-header-data") return Response.json({ headerData });
-    if (path === "/api/team/platform-releases/v1/releases") return Response.json({ releases: [releaseStoryFixture()] });
+    if (path === "/api/team/platform-releases/v1/releases") {
+      const area = url.searchParams.get("area");
+      releaseAreaRequests.push(area || "legacy");
+      const evidence = { readActor: { profileId: profile.id, platformRole: profile.platformRole }, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } };
+      if (area === "references" && (independentReferences || streamedReferences)) {
+        const fixture = releaseStoryFixture();
+        if (url.searchParams.get("version") !== fixture.version || url.searchParams.get("manifestDigest") !== fixture.manifestDigest) return Response.json({ error: "Wrong release reference request" }, { status: 400 });
+        if (!streamedReferences && ++referencesRead === 1) return new Promise<Response>(resolve => { failFirstReference = () => resolve(Response.json({ error: "Temporary reference error" }, { status: 503 })); });
+        return Response.json({ ...evidence, version: fixture.version, manifestDigest: fixture.manifestDigest, sourceRevision: "reference-source", planningReferences: [] });
+      }
+      return Response.json({ ...evidence, releases: [releaseContentFixture()] });
+    }
     if (path === "/api/administrator-access") {
       if (init?.method === "DELETE") access = accessFor("eligible");
       return Response.json({ administratorAccess: access });
@@ -58,10 +83,43 @@ function releaseBrowserFixture({ administrator = "denied", calendarFailed = fals
   });
 }
 
-function ReleaseComposition({ detail = false, administrator = "denied", identities = "ready", githubUnavailable = false }: ReleaseFixture) {
-  return <><PlatformReleasesShell authUser={user} currentPlatformRole="founder" initialCurrentProfile={profile} initialAdministratorAccess={accessFor(administrator)} headerData={headerData} calendarProfiles={profilesFor(identities)} returnToArchive={detail}>
-    {detail ? <PlatformReleaseDetail release={releaseStoryFixture()} /> : <PlatformReleaseArchive releases={[releaseStoryFixture()]} />}
-  </PlatformReleasesShell>{githubUnavailable ? <button type="button" onClick={() => restoreGithubFixture()}>Restore GitHub service</button> : null}</>;
+function ReleaseComposition({ detail = false, administrator = "denied", identities = "ready", githubUnavailable = false, independentReferences = false, streamedReferences }: ReleaseFixture) {
+  const content = releaseContentFixture();
+  const [deferred] = useState(() => Promise.withResolvers<PlatformReleaseReferenceEntryOutcome>());
+  const [subscribed, setSubscribed] = useState(false);
+  const [attached, setAttached] = useState(true);
+  const [settled, setSettled] = useState(false);
+  const [result] = useState<PromiseLike<PlatformReleaseReferenceEntryOutcome>>(() => ({
+    then(resolve, reject) {
+      setSubscribed(true);
+      return deferred.promise.then(resolve, reject);
+    },
+  }));
+  const [entry] = useState<PlatformReleaseReferenceEntry>(() => ({ id: "release-document", key: { version: content.version, manifestDigest: content.manifestDigest },
+    session: releaseSession, readActor: { profileId: profile.id, platformRole: profile.platformRole },
+    readAuthority: { userId: user.id, deadline: Date.now() + 30_000 }, timeoutAt: Date.now() + 15_000 }));
+  const outcome: PlatformReleaseReferenceEntryOutcome = streamedReferences === "ready"
+    ? { status: "ready", receipt: { ...entry.key, readActor: entry.readActor, readAuthority: entry.readAuthority, sourceRevision: "document-source", planningReferences: [
+      { repository: "example/release", pullRequestNumber: 12, taskLinks: [{ id: "document-deliverable", type: "deliverable", title: "Document deliverable", href: "/tasks/document-deliverable" }] },
+    ] } } : { status: "unavailable" };
+  const deliver = () => {
+    if (streamedReferences === "rejected") deferred.reject(new Error("Synthetic Flight rejection"));
+    else deferred.resolve(outcome);
+    void deferred.promise.then(() => setSettled(true), () => setSettled(true));
+  };
+  return <><PlatformReleasesShell authUser={user} currentPlatformRole="founder" initialCurrentProfile={profile} initialAdministratorAccess={accessFor(administrator)} headerData={headerData} calendarProfiles={profilesFor(identities)} returnToArchive={detail} initialReleaseReferenceEntry={streamedReferences ? entry : undefined}>
+    {streamedReferences ? <PlatformReleaseOwnedDetail release={{ ...content, seenAt: content.publishedAt }} serverEntryId={entry.id}>
+      {attached ? <PlatformReleaseServerReferenceReceipt id={entry.id} result={result} /> : null}
+    </PlatformReleaseOwnedDetail> : independentReferences ? <PlatformReleaseOwnedDetail release={{ ...content, seenAt: content.publishedAt }} />
+      : detail ? <PlatformReleaseDetail release={releaseStoryFixture()} /> : <PlatformReleaseArchive releases={[releaseStoryFixture()]} />}
+  </PlatformReleasesShell>{githubUnavailable ? <button type="button" onClick={() => restoreGithubFixture()}>Restore GitHub service</button> : null}
+    {independentReferences ? <button type="button" onClick={() => failFirstReference()}>Fail Planning references</button> : null}
+    {streamedReferences ? <>
+      <button type="button" onClick={deliver} disabled={!subscribed}>Deliver document references</button>
+      <button type="button" onClick={() => setAttached(false)}>Detach document reference relay</button>
+      {settled ? <span>Document result settled</span> : null}
+    </> : null}
+  </>;
 }
 
 const meta = {
@@ -195,3 +253,77 @@ export const TabletRailKeepsReleaseNavigationCompact: Story = {
 };
 
 export const DetailTabletRailKeepsReleaseNavigationCompact: Story = { ...TabletRailKeepsReleaseNavigationCompact, args: { detail: true } };
+
+export const OwnedReleaseRetriesOnlyItsPlanningReferences: Story = {
+  args: { detail: true, independentReferences: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const title = await canvas.findByRole("heading", { level: 1, name: "Klinikgruppen im Dashboard vorbereitet" });
+    await expect(title).toBeVisible();
+    await expect(await canvas.findByText("Planungszuordnungen werden geprüft.")).toBeVisible();
+    await expect(canvas.queryByText("Noch keine Planungszuordnung erkannt.")).not.toBeInTheDocument();
+    const technical = canvas.getByRole("button", { name: /Technische Details/ });
+    await userEvent.click(technical);
+    await userEvent.click(canvas.getByRole("button", { name: "Fail Planning references" }));
+    const retry = await canvas.findByRole("button", { name: "Planungszuordnungen erneut laden" });
+    const beforeRetry = releaseAreaRequests.length;
+    await userEvent.click(retry);
+    await expect(await canvas.findByText("Noch keine Planungszuordnung erkannt.")).toBeVisible();
+    await expect(releaseAreaRequests.slice(beforeRetry)).toEqual(["references"]);
+    await expect(canvas.getByRole("heading", { name: "Verknüpfte Planung" })).toHaveFocus();
+    await expect(technical).toHaveAttribute("aria-expanded", "true");
+    await expect(title).toBeVisible();
+  },
+};
+
+export const DocumentReferenceDeliveryDoesNotReadAgain: Story = {
+  args: { detail: true, streamedReferences: "ready" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("heading", { level: 1, name: "Klinikgruppen im Dashboard vorbereitet" })).toBeVisible();
+    await expect(canvas.getByText("Planungszuordnungen werden geprüft.")).toBeVisible();
+    await userEvent.click(canvas.getByRole("button", { name: /Technische Details/ }));
+    await expect(canvas.getByRole("heading", { name: "Pull Requests" })).toBeVisible();
+    const deliver = canvas.getByRole("button", { name: "Deliver document references" });
+    await expect(deliver).toBeEnabled();
+    await userEvent.click(deliver);
+    await expect(await canvas.findByRole("link", { name: /Document deliverable/ })).toBeVisible();
+    await expect(releaseAreaRequests.filter(area => area === "references")).toEqual([]);
+  },
+};
+
+export const FailedDocumentReferencesRetryIndependently: Story = {
+  args: { detail: true, streamedReferences: "unavailable" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const deliver = canvas.getByRole("button", { name: "Deliver document references" });
+    await expect(deliver).toBeEnabled();
+    await userEvent.click(deliver);
+    const retry = await canvas.findByRole("button", { name: "Planungszuordnungen erneut laden" });
+    await expect(canvas.queryByText("Noch keine Planungszuordnung erkannt.")).not.toBeInTheDocument();
+    await expect(releaseAreaRequests.filter(area => area === "references")).toEqual([]);
+    await userEvent.click(retry);
+    await expect(await canvas.findByText("Noch keine Planungszuordnung erkannt.")).toBeVisible();
+    await expect(releaseAreaRequests.filter(area => area === "references")).toEqual(["references"]);
+    await expect(canvas.getByRole("heading", { level: 1, name: "Klinikgruppen im Dashboard vorbereitet" })).toBeVisible();
+  },
+};
+
+export const RejectedDocumentReferenceDeliveryCanRetry: Story = {
+  ...FailedDocumentReferencesRetryIndependently, args: { detail: true, streamedReferences: "rejected" },
+};
+
+export const DetachedDocumentReferenceDeliveryIsIgnored: Story = {
+  args: { detail: true, streamedReferences: "ready" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const deliver = canvas.getByRole("button", { name: "Deliver document references" });
+    await expect(deliver).toBeEnabled();
+    await userEvent.click(canvas.getByRole("button", { name: "Detach document reference relay" }));
+    await userEvent.click(deliver);
+    await expect(await canvas.findByText("Document result settled")).toBeVisible();
+    await expect(canvas.getByText("Planungszuordnungen werden geprüft.")).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: /Document deliverable/ })).not.toBeInTheDocument();
+    await expect(releaseAreaRequests.filter(area => area === "references")).toEqual([]);
+  },
+};

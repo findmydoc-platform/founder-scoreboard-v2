@@ -34,7 +34,7 @@ export function ApplicationHeader({ area, lifecycle, navigation, context, focus,
       <ApplicationHeaderOverflow phone={phone} triggerRef={returnFocusRef} actions={{
         links: <FmdToolQuickLinks menuItem={phone} restoreFocusRef={phone ? returnFocusRef : undefined} quickLinks={runtime.headerData.quickLinks} open={runtime.quickLinksOpen} onToggle={runtime.toggleQuickLinks} onRetry={runtime.retryQuickLinks} />,
         calendar: <HeaderCalendarAction menuItem={phone} restoreFocusRef={phone ? returnFocusRef : undefined} planningState={lifecycle.enabled ? lifecycle.planningState : undefined} events={runtime.headerData.calendarEvents} onOpenTeam={runtime.openTeam} profiles={lifecycle.profiles} profilesSlot={lifecycle.calendarProfiles} />,
-        notifications: <NotificationInbox notifications={runtime.headerData.notifications} open={runtime.notificationsOpen} onToggle={runtime.toggleNotifications} onOpen={runtime.openNotification} onOpenCenter={runtime.openNotificationCenter} onDismiss={runtime.dismissNotification} />,
+        notifications: <NotificationInbox notifications={runtime.headerData.notifications} count={runtime.notificationCount} onRetryCount={runtime.retryNotificationCount} onRetryPreview={runtime.retryNotificationPreview} open={runtime.notificationsOpen} onToggle={runtime.toggleNotifications} onOpen={runtime.openNotification} onOpenCenter={runtime.openNotificationCenter} onDismiss={runtime.dismissNotification} />,
         help: <PlanningHelpMenu menuItem={phone} restoreFocusRef={phone ? returnFocusRef : undefined} />,
         github: <GitHubSyncTrigger {...lifecycle.github} menuItem={phone} />,
         account,

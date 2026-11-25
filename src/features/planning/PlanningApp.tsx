@@ -18,6 +18,7 @@ import { createBrowserApiClient } from "@/lib/browser-api-client";
 
 type Props = {
   children?: import("react").ReactNode;
+  initialNotificationEntry?: import("./model/planning-notifications-state").NotificationEntryRead;
   initialServerHeaderRead?: import("./model/planning-server-header-read").PlanningServerHeaderRead;
   initialBacklogRead?: import("./model/planning-backlog-hydration").PlanningBacklogHydration;
   initialWorkspaceRead?: import("./model/planning-workspace-hydration").PlanningWorkspaceHydration;
@@ -40,6 +41,7 @@ type Props = {
 export function PlanningApp({
   children,
   initialServerHeaderRead,
+  initialNotificationEntry,
   initialBacklogRead,
   initialWorkspaceRead,
   initialData,
@@ -65,6 +67,7 @@ export function PlanningApp({
   });
   const controller = usePlanningAppController({
     initialServerHeaderRead,
+    initialNotificationEntry,
     initialBacklogRead,
     initialWorkspaceRead,
     initialDecisionLogResult,

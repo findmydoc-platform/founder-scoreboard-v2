@@ -20,7 +20,8 @@ export async function supportingWorkspaceGet(request: NextRequest, action: Resou
       eventsRange = { from: start.toISOString(), to: end.toISOString() };
     }
   }
-  const result = await permission.resource.loadWorkspace({ eventsRange });
+  const headerSlots = request.nextUrl.searchParams.get("header") === "independent" ? ["quickLinks", "calendarEvents"] as const : undefined;
+  const result = await permission.resource.loadWorkspace({ eventsRange, headerSlots });
   if (result.status === "forbidden") return apiError(`${labels[action]} darf nicht geladen werden.`, 403);
   if (result.status === "unavailable") return apiError(`${labels[action]} konnte nicht geladen werden.`, 503);
   return observeRuntimePreparation(() => NextResponse.json({ model: result.model, headerData: result.headerData, currentProfile: permission.profile }));

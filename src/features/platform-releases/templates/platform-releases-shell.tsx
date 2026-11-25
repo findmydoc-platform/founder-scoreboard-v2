@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import type { PlatformReleaseReferenceEntry } from "@/features/platform-releases/model/platform-release-model";
 import { usePlatformReleaseAuth } from "@/features/platform-releases/hooks/use-platform-release-auth";
 import { ApplicationHeader } from "@/features/application-shell/organisms/application-header";
 import { AppSidebar } from "@/features/planning/organisms/app-sidebar";
@@ -28,10 +29,11 @@ type Props = {
   headerData: PlanningHeaderData;
   calendarProfiles?: HeaderDataSlot<Profile[]>;
   returnToArchive?: boolean;
+  initialReleaseReferenceEntry?: PlatformReleaseReferenceEntry;
 };
 
-export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole, initialCurrentProfile = null, initialAdministratorAccess, headerData, calendarProfiles, returnToArchive = false }: Props) {
-  const owner = usePlanningStateOwner({ initialData: emptyPlanningShellState, initialHeaderData: headerData, initialCurrentProfile, initialAdministratorAccess, initialUserId: authUser?.id || "", initialWorkspace: "decision-log" });
+export function PlatformReleasesShell({ authUser = null, children, currentPlatformRole, initialCurrentProfile = null, initialAdministratorAccess, headerData, calendarProfiles, returnToArchive = false, initialReleaseReferenceEntry }: Props) {
+  const owner = usePlanningStateOwner({ initialData: emptyPlanningShellState, initialHeaderData: headerData, initialCurrentProfile, initialAdministratorAccess, initialUserId: authUser?.id || "", initialWorkspace: "decision-log", initialReleaseReferenceEntry });
   const { planningState, data } = owner;
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);

@@ -26,5 +26,5 @@ test("owned preview upload and verification use multipart then the confirmed pro
 });
 test("owned Tools read preserves completeness and reuses already-returned quicklinks", async () => {
   const calls = [], current = { ...tool, name: "Read", updatedAt: "r2" }; const state = await owner({ requestJson: async path => { calls.push(path); return { response: new Response(null, { status: 200 }), body: { model: { revision: "opaque", tools: [current], people: [], coverage: "complete" }, headerData: { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([current]) } } }; } }, { ...emptyPlanningHeaderData, quickLinks: readyHeaderSlot([]) });
-  await state.planning.refreshTools(); assert.deepEqual(calls, ["/api/tools-data"]); assert.equal(state.planning.tools().completeness, "complete"); assert.equal(state.planning.tools().curatedCount, 1); assert.equal(state.planning.header().data.quickLinks.data[0].name, "Read");
+  await state.planning.refreshTools(); assert.deepEqual(calls, ["/api/tools-data?header=independent"]); assert.equal(state.planning.tools().completeness, "complete"); assert.equal(state.planning.tools().curatedCount, 1); assert.equal(state.planning.header().data.quickLinks.data[0].name, "Read");
 });

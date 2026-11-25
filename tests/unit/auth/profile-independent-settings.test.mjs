@@ -66,6 +66,16 @@ it("Profile API retains complete authorized settings and off-page preferences wh
   expectNoPlanningEnumeration();
 });
 
+it("Profile API can defer its notification header for independent preview and count reads", async () => {
+  const { GET } = await importTestModule("src/app/api/profile-data/route.ts", framework());
+  const response = await GET(protocol.request("/api/profile-data?header=independent"));
+  expect(response.status).toBe(200);
+  const body = await response.json();
+  expect(body.headerData.notifications.state).toBe("idle");
+  expect(reads.filter(read => read.table === "notification_events")).toEqual([]);
+  expectPreferences(body.model.preferences);
+});
+
 it("direct Profile SSR publishes complete independent settings without waiting for Planning options", async () => {
   const { renderWorkspacePage } = await importTestModule("src/app/(workspaces)/workspace-page.tsx", {
     ...framework(), "next/headers": { cookies: async () => protocol.cookieJar() },

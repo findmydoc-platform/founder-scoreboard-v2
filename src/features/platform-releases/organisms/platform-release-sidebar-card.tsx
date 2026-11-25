@@ -4,7 +4,7 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useSyncExternalStore, type MouseEvent } from "react";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
-import { formatReleaseDate, releaseTitle, type PlatformReleaseRecord } from "../model/platform-release-model";
+import { formatReleaseDate, releaseTitle, type PlatformReleaseContent } from "../model/platform-release-model";
 
 type Props = {
   compact?: boolean;
@@ -23,7 +23,7 @@ export function PlatformReleaseSidebarCard({ compact = false, mobile = false, on
   return <PlatformReleaseSidebarCardView release={release} compact={compact} mobile={mobile} onNavigate={onNavigate} onRequestNavigation={onRequestNavigation} />;
 }
 
-export function PlatformReleaseSidebarCardView({ release, compact = false, mobile = false, onNavigate, onRequestNavigation }: Props & { release: PlatformReleaseRecord }) {
+export function PlatformReleaseSidebarCardView({ release, compact = false, mobile = false, onNavigate, onRequestNavigation }: Props & { release: PlatformReleaseContent }) {
   const unread = !release.seenAt;
   const href = `/team/platform-releases/${encodeURIComponent(release.version)}`;
   const requestNavigation = (event: MouseEvent<HTMLAnchorElement>) => {

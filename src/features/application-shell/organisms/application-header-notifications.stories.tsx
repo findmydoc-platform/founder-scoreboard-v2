@@ -8,7 +8,7 @@ import { PlatformReleaseArchive } from "@/features/platform-releases/organisms/p
 import { releaseStoryFixture } from "@/features/platform-releases/organisms/platform-release-story-fixture";
 import { TaskDetailPage } from "@/features/tasks/templates/task-detail-page";
 import { taskDetailModelToPlanningShellState } from "@/features/tasks/model/task-detail-planning-shell-projection";
-import { readyHeaderSlot } from "@/lib/planning-header-data";
+import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-data";
 import type { HeaderNotification } from "@/lib/types";
 import { createBrowserSessionAdapter } from "@/lib/credentials/browser";
 import { itemPageHeaderData, itemPageModel, itemPageProfile, itemPageUser, mockItemPageBrowser } from "../../../../tests/helpers/task-detail-page-browser-fixture";
@@ -25,9 +25,11 @@ function notificationHeader(targetPath = "") {
 }
 
 let completeNotificationResponse: (() => void) | undefined;
+let completeCountResponse: (() => void) | undefined;
+let notificationAreaRequests: string[] = [];
 
-function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; delayedResult?: "rejected" | "unconfirmed"; loaded?: boolean; unboundHeader?: boolean }) {
-  const pageHeader = notificationHeader(targetPath);
+function NotificationPlanningPage({ host = "planning", targetPath = "", outcome, loaded = true, delayedCount = false, demandPreview = false }: { host?: "planning" | "item" | "releases"; targetPath?: string; outcome?: "saved" | "rejected" | "unconfirmed" | "delayed"; delayedResult?: "rejected" | "unconfirmed"; loaded?: boolean; unboundHeader?: boolean; delayedCount?: boolean; demandPreview?: boolean }) {
+  const pageHeader = delayedCount || demandPreview ? emptyPlanningHeaderData : notificationHeader(targetPath);
   if (host === "item") return <TaskDetailPage taskId="item-page-task" initialModel={itemPageModel()} headerData={pageHeader}
     source="supabase" authRequired initialAuthUser={itemPageUser} initialCurrentProfile={itemPageProfile} />;
   if (host === "releases") return <PlatformReleasesShell authUser={itemPageUser} currentPlatformRole={itemPageProfile.platformRole}
@@ -39,7 +41,7 @@ function NotificationPlanningPage({ host = "planning", targetPath = "", outcome,
     initialData={loaded ? data : { ...data, tasks: [] }} initialHeaderData={pageHeader}
     initialWorkspace="planning" source="supabase" authRequired initialAuthUser={itemPageUser}
     initialCurrentProfile={itemPageProfile} initialProtectedDataLoaded
-  />{outcome === "delayed" ? <button type="button" onClick={() => completeNotificationResponse?.()}>Complete notification response</button> : null}</>;
+  />{outcome === "delayed" ? <button type="button" onClick={() => completeNotificationResponse?.()}>Complete notification response</button> : null}{delayedCount ? <button type="button" onClick={() => completeCountResponse?.()}>Complete unread count</button> : null}</>;
 }
 
 let statusActions: string[] = [];
@@ -50,14 +52,24 @@ const meta = {
   beforeEach: async ({ args }) => {
     statusActions = [];
     completeNotificationResponse = undefined;
+    completeCountResponse = undefined;
+    notificationAreaRequests = [];
     const seenKey = `founderops.product-updates.seen.${itemPageProfile.id}`;
     const previousSeen = localStorage.getItem(seenKey);
     localStorage.setItem(seenKey, JSON.stringify(productUpdates.map(update => update.id)));
     let currentHeader = notificationHeader(args.targetPath);
     const headerAuthority = { userId: itemPageUser.id, deadline: Date.now() + 60_000 };
     const restoreBrowser = await mockItemPageBrowser({ headerData: notificationHeader(args.targetPath), respond: (input, init) => {
-      const path = new URL(String(input), window.location.origin).pathname;
+      const request = new URL(String(input), window.location.origin), path = request.pathname;
       if (path === "/api/planning-header-data") return Response.json({ headerData: currentHeader, readAuthority: args.unboundHeader ? undefined : headerAuthority });
+      if (path === "/api/notifications-data" && ["preview", "count"].includes(request.searchParams.get("area") || "")) {
+        notificationAreaRequests.push(request.searchParams.get("area")!);
+        const slot = currentHeader.notifications.data;
+        const receipt = { readAuthority: args.unboundHeader && slot.unreadCount === 7 ? undefined : headerAuthority, readActor: { profileId: itemPageProfile.id, platformRole: itemPageProfile.platformRole }, sourceRevision: "notification-story-source", observedAt: new Date(Date.now() - 100).toISOString(), validUntil: new Date(Date.now() + 60_000).toISOString() };
+        if (request.searchParams.get("area") === "preview") return Response.json({ ...receipt, items: slot.items });
+        if (args.delayedCount) return new Promise<Response>(resolve => { completeCountResponse = () => resolve(Response.json({ ...receipt, unreadCount: slot.unreadCount })); });
+        return Response.json({ ...receipt, unreadCount: slot.unreadCount });
+      }
       if (path === "/api/tasks/item-page-task/detail-data") return Response.json({ taskDetail: itemPageModel(), unavailable: [] });
       if (path === "/api/notifications/597" && init?.method === "PATCH") {
         const action = JSON.parse(String(init.body)).action;
@@ -246,7 +258,7 @@ export const DismissKeepsTheAuthoritativeUnreadCount: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inbox = await canvas.findByRole("button", { name: "Benachrichtigungen" });
-    await expect(inbox).toHaveTextContent("1");
+    await waitFor(() => expect(inbox).toHaveTextContent("1"));
     await userEvent.click(inbox);
     await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
     await expect(await canvas.findByText("Benachrichtigung wird geschlossen.")).toBeVisible();
@@ -255,7 +267,7 @@ export const DismissKeepsTheAuthoritativeUnreadCount: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
     await waitFor(() => expect(inbox).toHaveTextContent("7"));
     await userEvent.click(inbox);
-    await expect(canvas.getByText("Keine neuen Hinweise.")).toBeVisible();
+    await expect(await canvas.findByText("Keine neuen Hinweise.")).toBeVisible();
     await expect(getRouter().push).not.toHaveBeenCalled();
     await expect(statusActions).toEqual(["dismiss"]);
   },
@@ -266,12 +278,12 @@ export const UnboundHeaderCannotCertifyTheUnreadCount: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const inbox = await canvas.findByRole("button", { name: "Benachrichtigungen" });
-    await expect(inbox).toHaveTextContent("1");
+    await waitFor(() => expect(inbox).toHaveTextContent("1"));
     await userEvent.click(inbox);
     await userEvent.click(canvas.getByRole("button", { name: "Notification schließen" }));
     await userEvent.click(canvas.getByRole("button", { name: "Complete notification response" }));
     await userEvent.click(inbox);
-    await expect(await canvas.findByText("Die ursprüngliche Leseberechtigung konnte nicht bestätigt werden.")).toBeVisible();
+    await expect(await canvas.findByRole("button", { name: "Ungelesene Anzahl erneut laden" })).toBeVisible();
     await expect(inbox).toHaveTextContent("…");
     await expect(inbox).not.toHaveTextContent("7");
     await expect(statusActions).toEqual(["dismiss"]);
@@ -435,5 +447,36 @@ export const RejectedSeenKeepsTheCurrentPage: Story = {
     await expect(await canvas.findByText("Die Benachrichtigung kann nicht geöffnet werden.")).toBeVisible();
     await expect(getRouter().push).not.toHaveBeenCalled();
     await expect(statusActions).toEqual(["seen"]);
+  },
+};
+
+export const PreviewIsUsableBeforeExactCount: Story = {
+  args: { delayedCount: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = await canvas.findByRole("button", { name: "Benachrichtigungen" });
+    await userEvent.click(trigger);
+    await expect(await canvas.findByText("Open planning assignment")).toBeVisible();
+    await expect(canvas.getByText("Ungelesene Anzahl wird geladen.")).toBeVisible();
+    canvas.getByRole("button", { name: "Complete unread count" }).click();
+    await waitFor(() => expect(trigger).toHaveTextContent("1"));
+    await expect(canvas.getByText("Open planning assignment")).toBeVisible();
+  },
+};
+
+export const PreviewLoadsOnlyWhenOpenedAndIsReused: Story = {
+  args: { demandPreview: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = await canvas.findByRole("button", { name: "Benachrichtigungen" });
+    await waitFor(() => expect(notificationAreaRequests).toContain("count"));
+    await expect(notificationAreaRequests.filter(area => area === "preview")).toHaveLength(0);
+    await userEvent.click(trigger);
+    await expect(await canvas.findByText("Open planning assignment")).toBeVisible();
+    await expect(notificationAreaRequests.filter(area => area === "preview")).toHaveLength(1);
+    await userEvent.click(trigger);
+    await userEvent.click(trigger);
+    await expect(canvas.getByText("Open planning assignment")).toBeVisible();
+    await expect(notificationAreaRequests.filter(area => area === "preview")).toHaveLength(1);
   },
 };

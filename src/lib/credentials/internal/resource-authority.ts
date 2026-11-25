@@ -69,6 +69,7 @@ export async function resourceAuthority(input: ResourceCredentialInput, startedA
   const strictService = planningService(true, reassert, assertCurrent);
   const userData = "constrainedData" in permission ? permission.constrainedData(assertCurrent) : permission.data;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
-  const readSession = action === "team.read" && cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
-  return { ok: true as const, readAuthority, readSession, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
+  const readSessionId = "readSessionId" in permission ? permission.readSessionId : undefined;
+  const readSession = (action === "team.read" || action === "notifications.read") && cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
+  return { ok: true as const, readAuthority, readSession, readSessionId, profile, correction, service, userData, followup: planningService(false)!, current, assertCurrent, request, strictService, strictFollowup: planningService(true) };
 }
