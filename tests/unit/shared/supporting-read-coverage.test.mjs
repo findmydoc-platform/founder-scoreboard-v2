@@ -47,11 +47,11 @@ test("Team preserves authoritative empty scopes while missing counts remain part
 });
 
 
-test("Profile separately reports truncated initiative membership and preferences without losing complete empty auxiliary scopes",async()=>{
+test("Profile keeps unloaded planning scopes partial while reporting preference coverage independently",async()=>{
  const db=postgrest({projects:{rows:[{id:"findmydoc-founder-execution",name:"Project",range_label:null,review_objection_window_hours:48}]},profiles:{rows:[profile("person")]},active_tasks:{rows:[task("initiative")],count:1001},notification_preferences:{rows:[],count:1},profile_ui_preferences:{rows:[{profile_id:"person",updated_at:"opaque/preference"}],count:1001}});
  const result=await createSupabaseProfileReadModel(db.client).load({authorized:true,actorProfileId:"person"});
- expect(result.status).toBe("ready");expect(result.model.readCoverage).toEqual({project:"complete",people:"complete",initiatives:"partial",strategies:"complete",raci:"complete",links:"complete",notificationPreferences:"partial",preferences:"partial"});expect(result.model.initiatives.map(row=>row.id)).toEqual(["initiative"]);expect(result.model.preferences[0].profileId).toBe("person");
- expect(db.calls).toHaveLength(8);expect(db.calls.find(call=>call.table==="notification_preferences").count).toContain("count=exact");expect(db.calls.find(call=>call.table==="profile_ui_preferences").count).toContain("count=exact");
+ expect(result.status).toBe("ready");expect(result.model.readCoverage).toEqual({project:"complete",people:"complete",initiatives:"partial",strategies:"partial",raci:"partial",links:"partial",notificationPreferences:"partial",preferences:"partial"});expect(result.model.initiatives).toEqual([]);expect(result.model.preferences[0].profileId).toBe("person");
+ expect(db.calls.map(call=>call.table).sort()).toEqual(["notification_preferences","profile_ui_preferences","profiles","projects"]);expect(db.calls.find(call=>call.table==="notification_preferences").count).toContain("count=exact");expect(db.calls.find(call=>call.table==="profile_ui_preferences").count).toContain("count=exact");
 });
 
 test.each([[0,"complete"],[null,"partial"]])("Profile distinguishes exact empty preference counts from unknown counts: %s",async(count,coverage)=>{

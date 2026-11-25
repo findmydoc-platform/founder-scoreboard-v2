@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { loadPlanningTeamMetrics } from "@/features/planning-items/server/planning-team-metrics-read-source";
 import "server-only";
 import { disconnectBookkeeping } from "./disconnect-bookkeeping";
 import { getGoogleWorkspaceDisconnectView, disconnectGoogleWorkspace } from "@/features/team-workweek/server/google-workspace-disconnect";
@@ -21,9 +23,10 @@ import { resourceAuthority } from "./resource-authority";
 import { createSupabaseEventsReadModel } from "@/features/events/server/events-read-model-supabase";
 import { createSupabaseToolsReadModel } from "@/features/tools/server/tools-read-model-supabase";
 import { createSupabaseStrategicPlanningReadModel } from "@/features/projects/server/strategic-planning-read-model-supabase";
-import { createSupabaseTeamReadModel } from "@/features/team/server/team-read-model-supabase";
+import { planningPublicationSource, planningService } from "./planning-service";
+import { createSupabaseTeamReadModel, loadSupabaseTeamPeople } from "@/features/team/server/team-read-model-supabase";
 import { createSupabaseNotificationsReadModel } from "@/features/notifications/server/notifications-read-model-supabase";
-import { loadPlanningHeaderData } from "../../planning-header-data";
+import { emptyPlanningHeaderData, loadPlanningHeaderData } from "../../planning-header-data";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
 
 const actions = new Set(["events.read", "tools.read", "strategic.read", "team.read", "notifications.read", "events.create", "events.update", "tools.create", "tools.update", "tools.metadata", "notification.status.write", "connection.github.read", "connection.github.disconnect", "assets.github.read", "connection.google.read", "connection.google.disconnect.preview", "connection.google.disconnect"]);
@@ -48,10 +51,123 @@ export async function authorizeResource(input: ResourceCredentialInput) {
       ]);
       return result.status === "ready" ? { ...result, headerData } : result.status === "staleContinuation" ? { status: "unavailable" as const } : result;
   }
+  async function loadTeamPeopleRead(options?: { signal?: AbortSignal }) {
+    if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+    const readAuthority = bound.readAuthority;
+    if (!readAuthority) return { status: "unavailable" as const };
+    let admissionChecked = false;
+    let admissionFailure: "forbidden" | "unavailable" | undefined;
+    const admitPeople = async () => {
+      admissionChecked = true;
+      admissionFailure = "unavailable";
+      try {
+        await bound.current();
+        bound.assertCurrent();
+        admissionFailure = undefined;
+        return null;
+      } catch (error) {
+        const status = error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
+        admissionFailure = status === 403 ? "forbidden" : "unavailable";
+        return { status, message: "Team konnte nicht autorisiert werden." };
+      }
+    };
+    try {
+      const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+      const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+      // Every directory page keeps fresh admission; local failures must also be admitted.
+      const peopleService = planningService(false, admitPeople, bound.assertCurrent, signal);
+      const result = peopleService ? await loadSupabaseTeamPeople(peopleService, { authorized: true, actorProfileId: profile.id,
+        authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
+      if (!admissionChecked) await admitPeople();
+      if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+      if (admissionFailure) return { status: admissionFailure };
+      bound.assertCurrent();
+      return result.status === "ready" ? { ...result, readAuthority } : result;
+    } catch (error) {
+      if (!admissionChecked) await admitPeople();
+      if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+      if (admissionFailure) return { status: admissionFailure };
+      return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+    }
+  }
   let observedNotification: { id: number; recipient_profile_id: string | null; status: string; seen_at: string | null; dismissed_at: string | null } | null = null;
   let observedTool: DbFmdTool | null = null;
   let observedEvent: DbFounderEvent | null = null;
   return { ok: true as const, profile, resource: {
+    loadTeamPeople(options?: { signal?: AbortSignal }) { return loadTeamPeopleRead(options); },
+    async loadTeamPeoplePage(options?: { signal?: AbortSignal }) {
+      if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+      const readAuthority = bound.readAuthority, readSession = bound.readSession;
+      if (!readAuthority || !readSession) return { status: "unavailable" as const };
+      const serverHeaderRead = { ...readAuthority, id: randomUUID(), sessionRevision: readSession.revision,
+        timeoutAt: Math.min(readAuthority.deadline, Date.now() + 15_000) };
+      const loaders = planningHeaderSlotLoaders(service);
+      const admitted = bound.current();
+      const start = (slot: "quickLinks" | "calendarEvents") => {
+        const execute = async () => {
+          await admitted;
+          const data = await loaders[slot]();
+          bound.assertCurrent();
+          return { headerData: { ...emptyPlanningHeaderData, [slot]: data } };
+        };
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([execute(), new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error("Header read timed out.")), Math.max(0, serverHeaderRead.timeoutAt - Date.now()));
+        })]).catch(() => ({ headerData: { ...emptyPlanningHeaderData, [slot]: { ...emptyPlanningHeaderData[slot], state: "error" as const,
+          error: slot === "quickLinks" ? "Kuratierte Links konnten nicht geladen werden." : "Kalenderdaten konnten nicht geladen werden." } } }))
+          .finally(() => { if (timeout) clearTimeout(timeout); });
+      };
+      const headerSlots = { quickLinks: start("quickLinks"), calendarEvents: start("calendarEvents") };
+      try {
+        const people = await loadTeamPeopleRead(options);
+        if (people.status !== "ready") return people;
+        if (options?.signal?.aborted) return { status: "unavailable" as const };
+        if (people.readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        bound.assertCurrent();
+        return { ...people, headerData: emptyPlanningHeaderData, readSession, serverHeaderRead, headerSlots };
+      } catch (error) {
+        return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+      }
+    },
+    async loadTeamMetrics(options?: { signal?: AbortSignal }) {
+      if (action !== "team.read" || !profile) return { status: "forbidden" as const };
+      const readAuthority = context.readAuthority;
+      if (!readAuthority) return { status: "unavailable" as const };
+      let admissionChecked = false;
+      let admissionFailure: "forbidden" | "unavailable" | undefined;
+      const admitMetrics = async () => {
+        admissionChecked = true;
+        admissionFailure = "unavailable";
+        try {
+          await bound.current();
+          bound.assertCurrent();
+          admissionFailure = undefined;
+          return null;
+        } catch (error) {
+          const status = error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? 403 : 503;
+          admissionFailure = status === 403 ? "forbidden" : "unavailable";
+          return { status, message: "Team konnte nicht autorisiert werden." };
+        }
+      };
+      try {
+        const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+        const signal = options?.signal ? AbortSignal.any([options.signal, deadlineSignal]) : deadlineSignal;
+        // The RPC checks fresh authority; local rejection still needs admission before disclosure.
+        const metricsService = planningService(false, admitMetrics, bound.assertCurrent, signal);
+        const result = metricsService ? await loadPlanningTeamMetrics(metricsService, { authorized: true, actorProfileId: profile.id, actorUserId: readAuthority.userId,
+          authorityDeadline: readAuthority.deadline, publicationSource: planningPublicationSource(userData, profile, bound.assertCurrent), signal }) : { status: "unavailable" as const };
+        if (!admissionChecked) await admitMetrics();
+        if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        if (admissionFailure) return { status: admissionFailure };
+        bound.assertCurrent();
+        return result.status === "ready" ? { ...result, readAuthority } : result;
+      } catch (error) {
+        if (!admissionChecked) await admitMetrics();
+        if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+        if (admissionFailure) return { status: admissionFailure };
+        return { status: error instanceof Error && "status" in error && (error.status === 401 || error.status === 403) ? "forbidden" as const : "unavailable" as const };
+      }
+    },
     loadStrategic() {
       if (action !== "strategic.read") return Promise.resolve({ status: "forbidden" as const });
       return load(createSupabaseStrategicPlanningReadModel(service));

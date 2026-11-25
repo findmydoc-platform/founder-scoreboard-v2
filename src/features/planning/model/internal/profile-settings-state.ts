@@ -12,6 +12,7 @@ type Context = {
   active(): boolean;
   generation(): number;
   initialWorkspace: AppWorkspace;
+  initialTeamCompleteness?: "complete" | "partial";
   readStatus(workspace?: "profile" | "team"): PlanningReadStatus;
   saveTeam?: (profileId: string, patch: TeamProfilePatch, expected: Record<string, unknown>) => Promise<Partial<Profile> & { id: string }>;
   refreshTeam(): Promise<boolean>;
@@ -30,7 +31,7 @@ export function createProfileSettingsState(context: Context) {
   const ceoDemotions = new Map<string, Set<string>>();
   const teamSaves = new Map<string, TeamProfileSaveView>();
   let teamMembers = context.initialWorkspace === "team" ? new Set(context.confirmed().profiles.map(profile => profile.id)) : undefined;
-  let teamCompleteness: PlanningTeamView["completeness"] = teamMembers ? "partial" : "none";
+  let teamCompleteness: PlanningTeamView["completeness"] = teamMembers ? context.initialTeamCompleteness || "partial" : "none";
   let teamDenied = false;
   const teamChecks = new Map<string, Promise<boolean>>();
   const tourSaves = new Map<string, { profileId: string; tourId: string; phase: "saving" | "saved" | "rejected" | "unconfirmed"; error: string }>();

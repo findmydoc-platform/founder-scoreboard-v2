@@ -12,6 +12,7 @@ type TaskReferenceLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "chi
   children?: ReactNode;
   onOpenTask?: (taskId: string) => void;
   showIcon?: boolean;
+  prefetch?: false;
   layout?: "inline" | "block" | "flex";
 };
 
@@ -21,6 +22,7 @@ export function TaskReferenceLink({
   className,
   onOpenTask,
   showIcon = true,
+  prefetch,
   layout = "inline",
   draggable = false,
   ...props
@@ -35,6 +37,7 @@ export function TaskReferenceLink({
     <Link
       href={`/tasks/${encodeURIComponent(task.id)}`}
       onClick={handleClick}
+      prefetch={prefetch}
       aria-haspopup={onOpenTask ? "dialog" : undefined}
       draggable={draggable}
       className={classNames(
