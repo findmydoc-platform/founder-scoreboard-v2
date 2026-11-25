@@ -124,7 +124,7 @@ GitHub Actions executes the production flow in this order:
 - Assert that the configured Vercel organization and project IDs match the FounderOps production project before contacting Vercel.
 - Pull production runtime variables with `vercel pull --yes --environment=production`.
 - Build the production Vercel output from the GitHub Actions production job. The Vercel build command is only `pnpm run build`; it does not repeat tests, lint, or policy checks.
-- Run `pnpm run deploy:supabase-migrations`, guarded by `SCHEMA_DEPLOY_TARGET=production`. The deploy refuses a missing baseline ledger or an active GitHub issue sync lock, performs a CLI dry run, and pushes only pending migrations.
+- Run `pnpm run deploy:supabase-migrations` on the verified production checkout. The runner refuses a missing baseline ledger or an active GitHub issue sync lock. It checks the exact dry-run set before applying in-order migrations. Out-of-order migrations require a separate release approval.
 - Verify the live production database security contract and Auth mapping.
 - Copy tracked project files with `git archive HEAD`, then add the prebuilt output, project metadata, Next.js build metadata, package manifests, and installed `node_modules` into a temporary runner directory that contains no `.git` folder.
 - Deploy the prebuilt production output from that Git-metadata-free runner directory.
@@ -138,6 +138,24 @@ GitHub Actions executes the production flow in this order:
 `supabase/migrations/20260827064853_current_schema_baseline.sql` is the immutable current-schema baseline. A fresh local database starts from it and then applies later timestamp migrations in order. Production must never replay the baseline over the existing schema.
 
 The production migration ledger is initialized to this baseline and records every later applied migration. The deploy script fails closed when the baseline entry is missing, which prevents the current-schema baseline from being replayed over production.
+
+An out-of-order release requires an authorized administrator to set
+`APPROVED_PRODUCTION_MIGRATION_PLAN` on the GitHub `production` environment
+before merging. The version 1 JSON manifest contains `pullRequest` (the
+number), `base` (previous main SHA), `head` (approved PR head SHA), `tree`
+(expected Git merge tree ID), `ledger` (sorted live pre-deploy version
+strings), and `pending` (sorted objects with `file` and `sha256`). The
+workflow checks the main push, the PR head ref, and the resulting tree. A
+squash commit may have a different SHA. The approved path applies only the
+listed bytes, under the migration session lock. Existing migration files
+cannot be replayed through that path.
+
+Rotate the secret for the next approved release or remove it after successful
+deployment. A stale or invalid secret aborts the schema step. A manual dispatch
+does not authorize out-of-order SQL. If apply may have completed before the
+deployment failed, inspect the live ledger and deployed artifact under the
+release procedure before attempting a new run. The approved path cannot
+silently replace the observed ledger or reuse the pre-apply approval.
 
 All later schema changes start with `pnpm run db:migration:new <clear_name>` and are committed under `supabase/migrations/`. Add `tests/migrations/<migration-name>.test.mjs` only for data transformations, deletion risk, non-additive structural changes, or authorization boundaries. Ordinary additive changes do not require a migration-specific test. Run `pnpm run verify:migrations`, `pnpm run test:migrations`, and a fresh `pnpm run db:reset` before opening a pull request. Production rollback is forward-only by default: add a corrective migration. Backup restoration and migration-history repair require an explicitly approved incident procedure; the pipeline contains no automatic schema rollback.
 
