@@ -1,5 +1,6 @@
 import type { ApprovalDecisionAction, Task, TaskActivity, TaskReview, TaskReviewChecklist, ReviewDecision } from "@/lib/types";
 import type { PlanningReadStatus, PlanningTaskSaveCheck } from "@/features/planning/model/planning-state";
+import type { DeliverableReviewBasis } from "./deliverable-review-basis";
 import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-command-types";
 
 export type TaskReviewDecisionInput = { decision: ReviewDecision; points: number; checklist?: TaskReviewChecklist; comment?: string };
@@ -11,14 +12,25 @@ export type TaskReviewOperation = {
  submitted: Readonly<{ task: Task; command: TaskReviewSubmission }> | null;
  error: string; checking: boolean; readStatus: PlanningReadStatus; serverTask: Task | null;
 };
+export type TaskReviewBasisView = Readonly<{
+  readStatus: PlanningReadStatus;
+  targetChanged?: boolean;
+  evidence?: DeliverableReviewBasis["evidence"];
+  sprintLock?: DeliverableReviewBasis["sprintLock"];
+  blockedReason?: Extract<DeliverableReviewBasis["decision"], { status: "blocked" }>["reason"];
+}>;
+export type TaskReviewBasisOptions = { signal?: AbortSignal; refresh?: boolean };
 export type TaskReviewAdapter = {
+ readTaskReviewBasis?: (taskId: string, options: { signal: AbortSignal }) => Promise<DeliverableReviewBasis>;
  decideTaskApproval?: (task:Task, action:Exclude<ApprovalDecisionAction,"reject">, note:string)=>Promise<TaskReviewReceipt>;
  requestTaskReview?: (task:Task,input:TaskReviewRequestInput)=>Promise<TaskReviewReceipt>;
- decideTaskReview?: (task:Task,input:TaskReviewDecisionInput)=>Promise<TaskReviewReceipt>;
+ decideTaskReview?: (task:Task,input:TaskReviewDecisionInput,decisionBasis?:string)=>Promise<TaskReviewReceipt>;
  withdrawTaskReview?: (task:Task,reason:string)=>Promise<TaskReviewReceipt>;
  reopenTaskReview?: (task:Task,input:import("./review-evidence").ReviewEvidenceSubmission)=>Promise<TaskReviewReceipt>;
 };
 export interface PlanningTaskReviews {
+  taskReviewBasis(taskId: string): TaskReviewBasisView | undefined;
+  loadTaskReviewBasis(taskId: string, options?: TaskReviewBasisOptions): Promise<boolean>;
  decideTaskApproval(task:Task,action:Exclude<ApprovalDecisionAction,"reject">,note?:string):Promise<TaskUpdateResult>;
  requestTaskReview(task:Task,input?:TaskReviewRequestInput):Promise<TaskUpdateResult>;
  decideTaskReview(task:Task,input:TaskReviewDecisionInput):Promise<TaskUpdateResult>;

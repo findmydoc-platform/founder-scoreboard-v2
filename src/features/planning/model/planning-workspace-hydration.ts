@@ -6,7 +6,8 @@ import { planningBoardQueryKey } from "./planning-board-query";
 import type { Task } from "@/lib/types";
 
 export type PlanningWorkspaceHydration = Readonly<{
-  workspace: "planning" | "projects" | "team";
+  workspace: "planning" | "projects" | "team" | "sprint";
+  sprintScope?: { query: import("@/features/sprint/model/sprint-scoped-read").SprintScopedQuery; page: import("@/features/sprint/model/sprint-scoped-read").SprintScopedPage; readActor: import("@/features/sprint/model/sprint-scoped-read").SprintScopedRead["readActor"]; selectionBasis?: string };
   queryKey: string;
   query?: import("./planning-board-query").PlanningBoardQuery;
   queryRevision?: string;

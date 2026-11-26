@@ -6,45 +6,7 @@ import type { Meeting, MeetingAttendance, Profile, SprintCommitment, Task } from
 import { apiError } from "@/lib/api-response";
 import { requirePlanningContext, requirePlanningJsonContext } from "@/features/planning/server/planning-api-context";
 import { createNotificationPayload } from "@/lib/notification-catalog";
-import { DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS, sprintReviewDueAt } from "@/lib/sprint-review-window";
-
-type TaskRow = {
-  id: string;
-  updated_at: string;
-  project_id: string;
-  parent_task_id: string | null;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string;
-  owner: string | null;
-  assignee: string | null;
-  workstream: string | null;
-  sort_order: number;
-  estimate_hours: number | null;
-  definition_of_done: string | null;
-  evidence_link: string | null;
-  issue_number: string | null;
-  issue_url: string | null;
-  github_issue_number: number | null;
-  github_issue_url: string | null;
-  sprint_id: string | null;
-  review_status: string | null;
-  score_points: number | null;
-  score_final: boolean | null;
-  task_type: string | null;
-  approval_status: string | null;
-  score_relevant: boolean | null;
-  carryover_count: number | null;
-  original_sprint_id: string | null;
-  problem_statement: string | null;
-  intended_outcome: string | null;
-  scope_constraints: string | null;
-  acceptance_criteria: string | null;
-  evidence_required: string | null;
-  dod_template_version: string | null;
-  sprint_outcome: string | null;
-};
+import type { SprintCompletionTask as TaskRow } from "@/features/planning-items/server/planning-sprint-completion-source";
 
 type StoredSprintLockResult = {
   sprint?: { id?: string; status?: string; scoreLocked?: boolean };
@@ -74,13 +36,33 @@ function carryoverReason(outcome: string) {
   return reasons[outcome] || "Deliverable wurde in den nächsten Sprint übertragen.";
 }
 
-type LockPayload = { expectedUpdatedAt?: string; expectedTasks?: {id:string;updatedAt:string}[] };
+type LockPayload = { expectedUpdatedAt?: string; expectedTasks?: {id:string;updatedAt:string}[]; completionBasis?: string };
 const complete = (result:{data:unknown;count?:number|null}) => Array.isArray(result.data) && result.count === result.data.length;
 function mapSprint(row:{id:string;name:string;status:string;start_date:string|null;end_date:string|null;review_due_at:string|null;score_locked:boolean;updated_at:string}) { return {id:row.id,name:row.name,status:row.status,startDate:row.start_date||"",endDate:row.end_date||"",reviewDueAt:row.review_due_at||"",scoreLocked:row.score_locked,updatedAt:row.updated_at}; }
 function conflict(error:string,code:string,status=409){return NextResponse.json({error,code},{status});}
+const completionHeaders = { "Cache-Control": "private, no-store" };
+const completionFailures = {
+  forbidden: { status: 403, code: "sprint_lock_denied", error: "Sprint-Abschluss darf nicht geladen werden." },
+  notFound: { status: 404, code: "sprint_lock_not_found", error: "Sprint wurde nicht gefunden." },
+  stale: { status: 409, code: "sprint_lock_basis_stale", error: "Die Grundlage für den Sprint-Abschluss hat sich geändert." },
+  unavailable: { status: 503, code: "sprint_lock_incomplete", error: "Der Sprint-Abschluss konnte nicht vollständig geprüft werden." },
+} as const;
+
+function completionFailure(status: keyof typeof completionFailures) {
+  const result = completionFailures[status];
+  return NextResponse.json({ error: result.error, code: result.code }, { status: result.status, headers: completionHeaders });
+}
 export async function GET(request:NextRequest,context:{params:Promise<{id:string}>}) {
  const {id}=await context.params;const authorized=await requirePlanningContext(request,"planning.sprint.lock",id);if(!authorized.ok)return authorized.response;
- const {planning}=authorized;const observed=await planning.readSprintLock();if(observed.error||!observed.data)return apiError("Sprint-Abschluss kann nicht geladen werden.", observed.error?.code === "42501" ? 403 : 404);
+ const {planning}=authorized;
+ const area = request.nextUrl.searchParams.get("area");
+ if (area === "completion" || area === "completion-source") {
+   const result = area === "completion"
+     ? await planning.loadSprintCompletion(request.signal)
+     : await planning.observeSprintCompletion(request.signal);
+   return result.status === "ready" ? NextResponse.json(result.read, { headers: completionHeaders }) : completionFailure(result.status);
+ }
+ const observed=await planning.readSprintLock();if(observed.error||!observed.data)return apiError("Sprint-Abschluss kann nicht geladen werden.", observed.error?.code === "42501" ? 403 : 404);
  const sprint=observed.data;const stored=sprint.lock_result as StoredSprintLockResult|null;
  const receipt=sprint.score_locked&&stored?.sprint?.id===id&&stored.sprint.scoreLocked&&stored.sprint.status==="closed"?stored:null;
  if(receipt)return NextResponse.json({basis:{sprint:mapSprint(sprint),tasks:[]},tasksComplete:false,receipt});
@@ -107,81 +89,51 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if(typeof payload.expectedUpdatedAt!=="string"||!payload.expectedUpdatedAt||!Array.isArray(payload.expectedTasks)||payload.expectedTasks.some(task=>!task||typeof task.id!=="string"||!task.id||typeof task.updatedAt!=="string"||!task.updatedAt)||new Set(payload.expectedTasks.map(task=>task.id)).size!==payload.expectedTasks.length)return conflict("Lade Sprint und Aufgaben neu, bevor du den Sprint abschließt.","sprint_lock_basis_missing",400);
   if(payload.expectedUpdatedAt!==sprint.updated_at)return conflict("Der Sprint wurde zwischenzeitlich geändert. Vergleiche die Änderungen.","sprint_lock_conflict");
 
-  const objectionResult=await planning.readSprintBlockingObjections();
-  const { data: blockingObjections, error: objectionError } = objectionResult;
-
-  if (objectionError) return apiError(objectionError.message, 500);
-  if(!complete(objectionResult))return conflict("Die Score-Einwände sind nicht vollständig geladen.","sprint_lock_incomplete");
-  const unresolvedObjection = (blockingObjections || []).find((objection) =>
-    objection.status === "open" || Boolean(objection.second_reviewer_profile_id && !objection.second_reviewed_at)
-  );
-  if (unresolvedObjection) {
-    return conflict("Klärt zuerst alle offenen Score-Einwände, bevor ihr den Sprint abschließt.","sprint_lock_objections");
+  if (payload.completionBasis !== undefined && (typeof payload.completionBasis !== "string" || payload.completionBasis.length > 4096)) {
+    return completionFailure("stale");
+  }
+  const prepared = await planning.prepareSprintCompletion(payload.completionBasis);
+  if (prepared.status === "stale") {
+    const latest = await planning.readSprintLock();
+    const stored = latest.data?.lock_result as StoredSprintLockResult | null | undefined;
+    if (latest.data?.score_locked && stored?.sprint?.id === id && stored.sprint.scoreLocked && stored.sprint.status === "closed") {
+      return NextResponse.json({ ok: true, ...stored, replayed: true });
+    }
+  }
+  if (prepared.status !== "ready") return completionFailure(prepared.status);
+  const { read, foundation } = prepared.read;
+  if (read.receipt) return NextResponse.json({ ok: true, ...read.receipt, replayed: true });
+  if (payload.expectedUpdatedAt !== read.basis.sprint.updatedAt) {
+    return conflict("Der Sprint wurde zwischenzeitlich geändert. Vergleiche die Änderungen.", "sprint_lock_conflict");
+  }
+  if (read.decision.status === "blocked") {
+    if (read.decision.reason === "objections") return conflict("Klärt zuerst alle offenen Score-Einwände, bevor ihr den Sprint abschließt.", "sprint_lock_objections");
+    if (read.decision.reason === "reviewWindow") return conflict("Die Review- und Einwandfrist läuft noch. Danach kannst du den Sprint abschließen.", "sprint_lock_window");
+    if (read.decision.reason === "alreadyLocked") return apiError("Der Sprint ist bereits abgeschlossen.", 409);
+    return apiError("Reviewfrist konnte nicht aus dem Sprint-Ende abgeleitet werden.", 409);
+  }
+  if (!foundation || !read.tasksComplete) return completionFailure("unavailable");
+  const expectedTasks = new Map(payload.expectedTasks.map(task => [task.id, task.updatedAt]));
+  const sprintTasks = foundation.tasks;
+  if (expectedTasks.size !== sprintTasks.length || sprintTasks.some(task => expectedTasks.get(task.id) !== task.updated_at)) {
+    return conflict("Die angezeigten Sprint-Aufgaben wurden zwischenzeitlich geändert. Vergleiche die Änderungen.", "sprint_lock_tasks_conflict");
   }
 
-  const adjustmentResult=await planning.readSprintAcceptedAdjustments();
-  const { data: acceptedAdjustments, error: acceptedAdjustmentError } = adjustmentResult;
-
-  if (acceptedAdjustmentError) return apiError(acceptedAdjustmentError.message, 500);
-  if(!complete(adjustmentResult))return conflict("Die Bewertungen sind nicht vollständig geladen.","sprint_lock_incomplete");
-
   const acceptedAdjustmentByProfile = new Map<string, {
-    resolved_delivery_points: number;
-    resolved_form_points: number;
-    resolved_weekly_points: number;
+    resolved_delivery_points: number; resolved_form_points: number; resolved_weekly_points: number;
   }>();
-  for (const adjustment of acceptedAdjustments || []) {
+  for (const adjustment of foundation.accepted_adjustments) {
     if (!acceptedAdjustmentByProfile.has(adjustment.profile_id)) {
       acceptedAdjustmentByProfile.set(adjustment.profile_id, adjustment as {
-        resolved_delivery_points: number;
-        resolved_form_points: number;
-        resolved_weekly_points: number;
+        resolved_delivery_points: number; resolved_form_points: number; resolved_weekly_points: number;
       });
     }
   }
 
-  let reviewDueAt = sprint.review_due_at || "";
-  if (!reviewDueAt) {
-    const { data: project, error: projectError } = await planning.readSprintLockProject();
-
-    if (projectError || !project) return apiError("FounderOps-Prozesseinstellungen wurden nicht gefunden.", 409);
-    reviewDueAt = sprintReviewDueAt(
-      sprint.end_date || "",
-      Number(project.review_objection_window_hours || DEFAULT_REVIEW_OBJECTION_WINDOW_HOURS),
-    );
-  }
-  if (!reviewDueAt) return apiError("Reviewfrist konnte nicht aus dem Sprint-Ende abgeleitet werden.", 409);
-  if (new Date(reviewDueAt).getTime() > Date.now()) {
-    return conflict("Die Review- und Einwandfrist läuft noch. Danach kannst du den Sprint abschließen.","sprint_lock_window");
-  }
-
-  const { data: nextSprint, error: nextSprintError } = await planning.readNextSprint();
-
-  if (nextSprintError) return apiError(nextSprintError.message, 500);
-
-  const taskResult=await planning.readSprintTaskRows();
-  const { data: tasks, error: tasksError } = taskResult;
-
-  if (tasksError) return apiError(tasksError.message, 500);
-  if(!complete(taskResult))return conflict("Die Aufgaben sind nicht vollständig geladen.","sprint_lock_incomplete");
-  const expectedTasks=new Map(payload.expectedTasks.map(task=>[task.id,task.updatedAt]));
-  if(expectedTasks.size!==(tasks||[]).length||(tasks||[]).some(task=>expectedTasks.get(task.id)!==task.updated_at))return conflict("Die angezeigten Sprint-Aufgaben wurden zwischenzeitlich geändert. Vergleiche die Änderungen.","sprint_lock_tasks_conflict");
-
-  const sprintTasks = (tasks || []) as TaskRow[];
-  const carryoverTasks = sprintTasks.filter((task) =>
-    task.task_type === "deliverable"
-    && task.approval_status === "approved"
-    && task.score_relevant !== false
-    && !task.score_final
-  );
-  const taskIds = carryoverTasks.map((task) => task.id);
-
-  const blockerResult = taskIds.length
-    ? await planning.readSprintBlockers(taskIds)
-    : { data: [], count: 0 };
-  if ("error" in blockerResult && blockerResult.error) return apiError(blockerResult.error.message, 500);
-  if(!complete(blockerResult))return conflict("Die Blocker sind nicht vollständig geladen.","sprint_lock_incomplete");
-  const openBlockerTaskIds = new Set((blockerResult.data || []).map((blocker: { task_id: string }) => blocker.task_id));
+  const carryoverTasks = sprintTasks.filter(task => task.task_type === "deliverable" && task.approval_status === "approved"
+    && task.score_relevant !== false && !task.score_final);
+  const openBlockerTaskIds = new Set(foundation.blocker_task_ids);
+  const nextSprintId = read.nextSprintId;
 
   const carryoverInserts = [];
   const notifications: ReturnType<typeof createNotificationPayload>[] = [];
@@ -206,9 +158,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       acceptedBlockerTaskIds.push(task.id);
     }
 
-    if (nextSprint?.id) {
+    if (nextSprintId) {
+      if (!task.priority) return completionFailure("unavailable");
       carryoverInserts.push(buildTaskInsertRow({
-        id: `${task.id}-carryover-${nextSprint.id}`,
+        id: `${task.id}-carryover-${nextSprintId}`,
         projectId: task.project_id,
         parentTaskId: task.parent_task_id,
         title: task.title,
@@ -256,23 +209,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
   }
 
-  const [
-    profileResult,
-    commitmentResult,
-    meetingResult,
-    attendanceResult,
-    strikeStateResult,
-  ] = await planning.readSprintScoringInputs();
-
-  if (profileResult.error) return apiError(profileResult.error.message, 500);
-  if (commitmentResult.error) return apiError(commitmentResult.error.message, 500);
-  if (meetingResult.error) return apiError(meetingResult.error.message, 500);
-  if (attendanceResult.error) return apiError(attendanceResult.error.message, 500);
-  if (strikeStateResult.error) return apiError(strikeStateResult.error.message, 500);
-
-  if(![profileResult,commitmentResult,meetingResult,attendanceResult,strikeStateResult].every(complete))return conflict("Die Bewertungsgrundlagen wurden nicht vollständig geladen.","sprint_lock_incomplete");
-
-  const profiles = (profileResult.data || []).map((profile) => ({
+  const profiles = foundation.profiles.map((profile) => ({
     id: profile.id,
     name: profile.name,
     platformRole: profile.platform_role || "founder",
@@ -300,7 +237,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     issueUrl: task.issue_url || "",
     sprintOutcome: (task.sprint_outcome || "") as Task["sprintOutcome"],
   })) as Task[];
-  const commitments = (commitmentResult.data || []).map((commitment) => ({
+  const commitments = foundation.commitments.map((commitment) => ({
     id: commitment.id,
     sprintId: commitment.sprint_id,
     profileId: commitment.profile_id,
@@ -308,7 +245,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     weeklyHours: commitment.weekly_hours,
     note: commitment.note || "",
   })) as SprintCommitment[];
-  const meetings = (meetingResult.data || []).map((meeting) => ({
+  const meetings = foundation.meetings.map((meeting) => ({
     id: meeting.id,
     sprintId: meeting.sprint_id,
     title: meeting.title,
@@ -317,7 +254,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     status: meeting.status,
     agenda: meeting.agenda || "",
   })) as Meeting[];
-  const meetingAttendance = (attendanceResult.data || []).map((attendance) => ({
+  const meetingAttendance = foundation.attendance.map((attendance) => ({
     id: attendance.id,
     meetingId: attendance.meeting_id,
     profileId: attendance.profile_id,
@@ -329,7 +266,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     createdAt: attendance.created_at,
     updatedAt: attendance.updated_at,
   })) as MeetingAttendance[];
-  const strikeStateByProfile = new Map((strikeStateResult.data || []).map((state) => [state.profile_id, state]));
+  const strikeStateByProfile = new Map(foundation.strike_states.map((state) => [state.profile_id, state]));
   const scoreRows = [];
   const strikeStateRows = [];
   const strikeEvents = [];
@@ -398,7 +335,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const resultData = {
     carryover: {
-      nextSprintId: nextSprint?.id || "",
+      nextSprintId: nextSprintId || "",
       created: carryoverInserts.length,
       evaluated: carryoverTasks.length,
     },
@@ -415,6 +352,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }, metadata);
 
   if (transactionError) {
+    if (transactionError.code === "P0021") return payload.completionBasis
+      ? completionFailure("stale")
+      : conflict("Die Grundlage für den Sprint-Abschluss hat sich geändert.", "sprint_lock_conflict");
+    if (transactionError.code === "42501") return completionFailure("forbidden");
     if (transactionError.code === "P0001") return conflict("Sprint wurde parallel geändert. Vergleiche die Änderungen.","sprint_lock_conflict");
     if (transactionError.code === "P0007") return conflict("Sprint-Aufgaben wurden parallel geändert. Vergleiche die Änderungen.","sprint_lock_tasks_conflict");
     if (transactionError.code === "P0002") return apiError("Sprint wurde nicht gefunden.", 404);

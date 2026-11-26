@@ -189,7 +189,14 @@ export function PlanningWorkspaceRenderer({ controller, administrationCapabiliti
             return result.ok;
           }}
           onChangeStatus={(task, status) => updateTask(task, { status })}
-          onAssignSprint={(task, sprintId) => updateTask(task, { sprintId })}
+          onAssignSprint={async (task, sprintId) => {
+            const owner = controller.planningState;
+            if (!owner.protectedCache()?.tasks.some(item => item.id === task.id)) {
+              const target = await owner.loadTaskDetail(task.id, { area: "target" });
+              if (!target.ok) return;
+            }
+            await updateTask(task, { sprintId });
+          }}
           sprintPlanningOptions={sprintPlanningOptions}
           plannedSprintCount={futureSprintDrafts(
             data.sprints,

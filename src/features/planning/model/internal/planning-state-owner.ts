@@ -15,6 +15,7 @@ import { createTaskRelationshipChanges } from "./task-relationship-changes";
 import { createTaskGitHubSyncState } from "./task-github-sync-state";
 import { createGitHubConnectionState } from "./github-connection-state";
 import { createTaskAttachmentUploads } from "./task-attachment-uploads";
+import { createTaskReviewBasisState } from "./task-review-basis-state";
 import { createTaskReviewOperations } from "./task-review-operations";
 import { createTaskGitHubImports } from "./task-github-comment-imports";
 import { createAdministrationPersonState } from "./administration-person-state";
@@ -41,12 +42,16 @@ import type { TaskUpdateResult } from "@/features/tasks/hooks/task-mutation-comm
 import type { TaskDetailModel, TaskDetailUnavailableArea } from "@/features/tasks/model/task-detail-read-model";
 import { applyTaskDetailModel } from "@/features/tasks/model/task-detail-planning-shell-projection";
 import { emptyPlanningShellState } from "../planning-shell-state";
-import { sprintViewCoverage } from "./sprint-read-coverage";
+import { DEFAULT_SPRINT_TASK_FILTERS } from "@/features/sprint/model/sprint-task-table-view-model";
+import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
+import { sprintModelCoverage, sprintViewCoverage } from "./sprint-read-coverage";
+import { createSprintCompletionState } from "./sprint-completion-state";
 import { createSprintLockState } from "./sprint-lock-state";
 import { createSprintPlanState } from "./sprint-plan-state";
 import { createReviewWindowState } from "./review-window-state";
 import { createSprintCommitmentState } from "./sprint-commitment-state";
 import { createScoreObjectionState } from "./score-objection-state";
+import { createSprintAssessmentState } from "./sprint-assessment-state";
 import { createSprintState } from "./sprint-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
 import { createTaskLifecycle } from "./task-lifecycle";
@@ -57,6 +62,8 @@ import type { OwnProfileSettingsConfirmation, OwnProfileSettingsPatch } from "@/
 import { createTaskEditing } from "./task-editing";
 import { applyPlanningItemApprovalPatch } from "../approval-domain";
 import { createPlanningStructureReads, type StructureRead } from "./planning-structure-reads";
+import { createSprintCollectionReads } from "./sprint-collection-reads";
+import type { SprintScopedQuery, SprintScopedRead, SprintSelectedProjectionRead, SprintJointRead } from "@/features/sprint/model/sprint-scoped-read";
 import { createPlanningCandidateReads } from "./planning-candidate-reads";
 
 import { projectCoveredRead, workspaceReadCoverage, type PlanningReadCoverage } from "./planning-read-scopes";
@@ -86,7 +93,14 @@ export type PlanningStateAdapter = import("@/features/tasks/model/task-github-sy
   createScoreObjection?: (sprintId: string, comment: string) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   processScoreObjection?: (objection: import("@/lib/types").ScoreObjection, score: import("@/lib/types").FounderSprintScore | null, input: import("@/lib/types").ScoreObjectionResolutionInput) => Promise<import("@/features/sprint/model/score-objection-state").ScoreObjectionConfirmation>;
   saveSprintCommitment?: (basis: import("@/lib/types").SprintCommitment, patch: import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentPatch) => Promise<import("@/features/sprint/model/sprint-commitment-editing").SprintCommitmentConfirmation>;
-  lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
+  lockSprint?: (basis: import("@/features/sprint/model/sprint-lock").SprintLockBasis, completionBasis?: string, expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision">) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockReceipt>;
+  readSprintAssessment?: (sprintId: string, options: { signal: AbortSignal }) => Promise<import("@/features/sprint/model/sprint-assessment-read").SprintAssessmentReceipt>;
+  observeSprintAssessment?: (sprintId: string, options: { signal: AbortSignal }) => Promise<import("@/features/sprint/model/sprint-assessment-read").SprintAssessmentSource>;
+  readSprintCollection?: (query: SprintScopedQuery, signal: AbortSignal) => Promise<SprintScopedRead>;
+  readSprintJoint?: (query: SprintScopedQuery, token: string, signal: AbortSignal) => Promise<SprintJointRead>;
+  readSprintProjection?: (query: SprintScopedQuery, token: string, signal: AbortSignal) => Promise<SprintSelectedProjectionRead>;
+  readSprintCompletion?: (sprintId: string, options: { signal: AbortSignal }) => Promise<import("@/features/sprint/model/sprint-completion-read").SprintCompletionRead>;
+  observeSprintCompletion?: (sprintId: string, options: { signal: AbortSignal }) => Promise<import("@/features/sprint/model/sprint-completion-read").SprintCompletionSource>;
   readSprintLock?: (sprintId: string) => Promise<import("@/features/sprint/model/sprint-lock").SprintLockObservation>;
 
   createSprintPlan?: (options: import("@/features/sprint/model/sprint-planning-options").SprintPlanningOptions, basis: import("@/features/sprint/model/sprint-plan").SprintPlanBasis) => Promise<import("@/features/sprint/model/sprint-plan").SprintPlanConfirmation>;
@@ -258,6 +272,81 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   const candidateReads = createPlanningCandidateReads({ read: adapter.readCandidates, publish, now: () => adapter.now?.() ?? Date.now(),
     binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, userId, actor: actorIdentity }) });
 
+  function denySprintRead() {
+    assessment.clear();
+    completion.clear();
+    workspaceStatuses.set("sprint", "forbidden");
+    sprintState.readStatus("forbidden");
+    attendanceState.denyWorkspace();
+    scoreObjections.deny();
+    profileSettings.readStatus("forbidden", "sprint");
+  }
+  function denySprintCollection() {
+    for (const id of memberships.get("sprint") || []) {
+      const otherScope = [...memberships].some(([workspace, ids]) => workspace !== "sprint" && workspaceStatuses.get(workspace) !== "forbidden" && ids.has(id));
+      if (otherScope || detailStatuses.get(id) === "current") continue;
+      deniedTaskReads.add(id);
+      taskDeniedAt.set(id, ++sequence);
+    }
+    denySprintRead();
+  }
+
+  const initialSprintActor = { userId, profile: initialCurrentProfile };
+  // A rotated credential for this owner must prove the actor again. The
+  // original page identity is only the expected actor for that comparison.
+  const expectedSprintActor = () => actorIdentity || (initialSprintActor.userId === userId ? initialSprintActor.profile : null) || null;
+  const completion = createSprintCompletionState({
+    read: adapter.readSprintCompletion,
+    observe: adapter.observeSprintCompletion,
+    binding: () => ({ active: isActive(), userId, generation: sessionGeneration, sessionRevision, sessionExpiresAt, sourceEpoch: planningSourceEpoch, actor: expectedSprintActor() }),
+    canRead: id => workspaceStatuses.get("sprint") !== "forbidden" && confirmed.sprints.some(sprint => sprint.id === id),
+    now: () => adapter.now?.() ?? Date.now(),
+    changed: publish,
+  });
+  const assessment = createSprintAssessmentState({
+    read: adapter.readSprintAssessment,
+    observe: adapter.observeSprintAssessment,
+    binding: () => ({ active: isActive(), userId, generation: sessionGeneration, sessionRevision, sessionExpiresAt, sourceEpoch: planningSourceEpoch, actor: expectedSprintActor() }),
+    canRead: id => workspaceStatuses.get("sprint") !== "forbidden" && confirmed.sprints.some(sprint => sprint.id === id),
+    now: () => adapter.now?.() ?? Date.now(),
+    nextSequence: () => ++sequence,
+    acceptCommitments(receipt, started) {
+      const rows = commitments.acceptAssessment(receipt.scoreRows.map(row => row.commitment), started);
+      if (!rows) return false;
+      confirmed = { ...confirmed, sprintCommitments: rows };
+      return true;
+    },
+    changed: publish,
+  });
+  const sprintCollections = createSprintCollectionReads({ read: adapter.readSprintCollection, readProjection: adapter.readSprintProjection, readJoint: adapter.readSprintJoint, publish, onAccessDenied: denySprintCollection,
+    now: () => adapter.now?.() ?? Date.now(),
+    binding: () => ({ active: isActive(), generation: sessionGeneration, sourceEpoch: planningSourceEpoch, sessionRevision, sessionExpiresAt, userId, actor: expectedSprintActor() }) });
+
+  let selectedSprintDemand: SprintScopedQuery | undefined;
+  function seedSprintScope(read: import("../planning-workspace-hydration").PlanningWorkspaceHydration, members: readonly Task[]) {
+    if (!read.sprintScope || !read.readAuthority || read.session.userId !== userId || read.session.revision !== sessionRevision
+      || read.session.expiresAt !== sessionExpiresAt || read.sprintScope.query.scope !== "selected") return;
+    const { query, page, readActor, selectionBasis } = read.sprintScope;
+    if (read.scopeRevision !== page.sourceRevision || read.revision !== page.sourceRevision) return;
+    if (sprintCollections.seed(query, { page, readActor, readAuthority: read.readAuthority, selectionBasis }, members)) selectedSprintDemand = query;
+  }
+
+  function loadSprintCollection(query: SprintScopedQuery, force = false, sharedSearch = false) {
+    if (query.scope === "assignment") return sprintCollections.load(query, { force });
+    selectedSprintDemand = query;
+    let token: ReturnType<typeof beginWorkspaceRead> | undefined;
+    const load = sharedSearch ? sprintCollections.loadShared : sprintCollections.load;
+    return load(query, { force, onAccept: (result: SprintScopedRead) => {
+      if (!result.model || !token || result.selectionBasis && result.model.revision !== result.page.sourceRevision || result.model.items.some(item => item.sprintId !== result.page.sprintId)
+        || result.model.items.length !== result.page.scopeTotal) return false;
+      const currentProfile = result.model.people.find(person => person.id === result.readActor.profileId && person.platformRole === result.readActor.platformRole);
+      return acceptWorkspaceRead("sprint", { data: sprintWorkspaceModelToPlanningShellState(result.model),
+        coverage: sprintModelCoverage(result.model), taskCoverage: "complete", readAuthority: result.readAuthority, currentProfile,
+        profileOmittedFields: ["notificationsEnabled", "googleChatUserId", "googleChatDmSpace"],
+        projectOmittedFields: ["githubProjectOwner", "githubProjectNumber"] }, token);
+    }, onStart: () => { token = beginWorkspaceRead("sprint"); } });
+  }
+
   const structureTaskReceipts = new Map<string, {
     started: number; source: string; version: string; area: "roots" | "children"; context: boolean; omitted: readonly (keyof Task)[];
     deadline: number; generation: number; session: string | undefined; epoch: number; actorId: string; role: string;
@@ -350,7 +439,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
   }
   function invalidatePlanningSource(invalidateChildren = true) {
     ganttStatus = "stale";
+    assessment.invalidate();
+    completion.invalidate();
     candidateReads.invalidate();
+    sprintCollections.clear();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearOrphanBacklog(); clearBacklogSupport();
     if (backlogSelectionQuery) {
       backlogSupportStatuses.set("controls", "stale");
@@ -750,7 +842,14 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     invalidateNotifications: () => notifications.invalidateHeader(["notifications"]), endSession, refresh: reloadBlockerTask,
     confirmRelation: relation => { lifecycle.confirmRelationship(relation); invalidatePlanningSource(); }, removeRelation: id => { lifecycle.confirmRelationshipRemoval(id); invalidatePlanningSource(); },
   });
-  const taskReviews = createTaskReviewOperations({ adapter, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>githubSync.blocksTask(task.id)||relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
+  const reviewBasis = createTaskReviewBasisState({
+    read: adapter.readTaskReviewBasis,
+    binding: () => ({ active: isActive(), userId, generation: sessionGeneration, sessionRevision, sessionExpiresAt, sourceEpoch: planningSourceEpoch, actor: actorIdentity }),
+    now: () => adapter.now?.() ?? Date.now(),
+    task: id => deniedTaskReads.has(id) ? undefined : confirmed.tasks.find(task => task.id === id && !lifecycle.isRemoved(task)),
+    changed: publish,
+  });
+  const taskReviews = createTaskReviewOperations({ adapter, decisionBasis: reviewBasis.decisionToken, invalidateBasis: reviewBasis.invalidate, current: () => confirmed, active:isActive, generation:()=>sessionGeneration, changed:publish,nextSequence:()=>++sequence,canRead:id=>!deniedTaskReads.has(id)&&confirmed.tasks.some(task=>task.id===id&&!lifecycle.isRemoved(task)),dependencyPending:task=>githubSync.blocksTask(task.id)||relationshipChanges.blocksTask(task.id)||attachmentUploads.blocksTask(task.id)||lifecycle.isRemoving(task)||githubImports.blocksTask(task.id)||blockerReports.blocksTask(task.id)||backlogAssignments.blocksTask(task.id)||backlogOrdering.blocksTask(task.id)||sprintLock.blocksTask(task)||taskSchedulePending(task.id)||[...pending.values()].some(op=>op.taskId===task.id),refresh:reloadBlockerTask,invalidate:()=>notifications.invalidateHeader(["notifications"]),accept(receipt,task,started,command){
     const current=confirmed.tasks.find(row=>row.id===task.id);
     const newer=Math.max(taskConfirmedAt.get(task.id)||0,taskReadAt.get(task.id)||0)>started&&current?.updatedAt!==task.updatedAt&&current?.updatedAt!==receipt.task.updatedAt;
     if(!newer) { const patch={...receipt.task,id:task.id}; confirmed=patch.approvalStatus!==undefined?applyPlanningItemApprovalPatch(confirmed,{...patch,approvalStatus:patch.approvalStatus}):{...confirmed,tasks:confirmed.tasks.map(row=>row.id===task.id?{...row,...patch}:row)};confirmTaskRevision(task.id,++sequence);
@@ -760,7 +859,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if(receipt.activities?.length){const byId=new Map(confirmed.taskActivity.map(activity=>[activity.id,activity]));for(const activity of receipt.activities)byId.set(activity.id,activity);confirmed={...confirmed,taskActivity:[...byId.values()]};}
     if(command.kind==="approval"&&detailStatuses.get(task.id)==="current") {detailStatuses.set(task.id,"stale");void planning.loadTaskDetail(task.id);}
   }});
-  const attendanceState = createMeetingAttendanceState({ initial: active ? initialData.meetingAttendance : [], adapter, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, changed: publish, endSession, dependencyPending: meeting => sprintLock.blocksSprint(meeting.sprintId), invalidateNotifications: () => notifications.invalidateHeader(["notifications"]) });
+  const attendanceState = createMeetingAttendanceState({ initial: active ? initialData.meetingAttendance : [], adapter, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, changed: publish, endSession, dependencyPending: meeting => sprintLock.blocksSprint(meeting.sprintId), invalidateNotifications: () => { assessment.invalidate(); completion.invalidate(); notifications.invalidateHeader(["notifications"]); } });
   const profileSettings = createProfileSettingsState({ confirmed: () => confirmed, update: data => {
     const directory = (profiles: PlanningShellState["profiles"]) => profiles.map(({ id, name, platformRole, githubLogin, avatarUrl, color, orgRole, focus, weeklyCapacity }) => ({ id, name, platformRole, githubLogin, avatarUrl, color, orgRole, focus, weeklyCapacity }));
     const sourceChanged = JSON.stringify(directory(data.profiles)) !== JSON.stringify(directory(confirmed.profiles));
@@ -768,8 +867,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     if (sourceChanged) invalidatePlanningSource();
   }, changed: publish, active: isActive, generation: () => sessionGeneration, initialWorkspace, initialTeamCompleteness: teamBasis ? "complete" : undefined, readStatus: (workspace = "profile") => workspaceStatuses.get(workspace) || "not-loaded", save: adapter.saveOwnProfileSettings, saveTeam: adapter.saveTeamProfile, governanceAuthorityChanged: notifications.invalidateNotificationAuthority, refreshTeam: () => planning.refreshWorkspace("team"), acknowledge: adapter.acknowledgeFeatureTour, refresh: () => planning.refreshWorkspace("profile"), nextSequence: () => ++sequence });
   const profileTokens = createProfileApiTokensState({ active: isActive, generation: () => sessionGeneration, changed: publish, adapter });
-  const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
-  const commitments = createSprintCommitmentState({current:()=>confirmed,update:data=>{confirmed=data;},changed:publish,active:isActive,generation:()=>sessionGeneration,nextSequence:()=>++sequence,save:adapter.saveSprintCommitment,dependencyPending:id=>sprintLock.blocksSprint(id),checkDependency:id=>sprintLock.check(id),refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded"});
+  const scoreObjections=createScoreObjectionState({current:()=>confirmed,update:data=>{assessment.invalidate();completion.invalidate();confirmed=data;},changed:publish,nextSequence:()=>++sequence,active:isActive,generation:()=>sessionGeneration,refresh:()=>planning.refreshWorkspace("sprint"),readStatus:()=>workspaceStatuses.get("sprint")||"not-loaded",canRead:()=>!sprintState.denied(),dependencyPending:id=>sprintLock.blocksSprint(id),create:adapter.createScoreObjection,process:adapter.processScoreObjection});
+  const commitments = createSprintCommitmentState({current:()=>confirmed,update:data=>{assessment.invalidate();completion.invalidate();confirmed=data;},changed:publish,active:isActive,generation:()=>sessionGeneration,
+    actorBinding: () => JSON.stringify([userId, sessionRevision, expectedSprintActor()?.id, expectedSprintActor()?.platformRole]),
+    canSave: id => { const view = assessment.view(id); return !adapter.readSprintAssessment || view.readStatus === "current" && !view.scoreLocked; },nextSequence:()=>++sequence,save:adapter.saveSprintCommitment,dependencyPending:id=>sprintLock.blocksSprint(id),checkDependency:id=>sprintLock.check(id),refresh:id=>adapter.readSprintAssessment?assessment.load(id,{refresh:true}):planning.refreshWorkspace("sprint"),readStatus:id=>adapter.readSprintAssessment?assessment.view(id).readStatus:workspaceStatuses.get("sprint")||"not-loaded"});
   const sprintState = createSprintState({ current: () => confirmed, update: data => { const sourceChanged = data.sprints.length !== confirmed.sprints.length || data.sprints.some((sprint, index) => sprint !== confirmed.sprints[index]); confirmed = data; if (sourceChanged) invalidatePlanningSource(); }, changed: publish, active: isActive, generation: () => sessionGeneration, nextSequence: () => ++sequence, save: adapter.saveSprint, dependencyPending: id => blockerBlocksSprint(id) || backlogAssignments.blocksSprint(id) || orderingBlocksSprint(id), checkDependency: async id => { if (blockerBlocksSprint(id)) return checkSprintBlocker(id); if (orderingBlocksSprint(id)) await checkOrdering(); else await backlogAssignments.checkSprint(id); return { outcome: isActive() ? "unconfirmed" : "session-ended", readStatus: workspaceStatuses.get("backlog") || "unavailable" }; }, lockPending: id=>sprintLock.blocksSprint(id), checkLock:id=>sprintLock.check(id), planPending: id => sprintPlan.blocksSprint(id), checkPlan: () => sprintPlan.check(), reviewWindowPending: () => reviewWindow.blocksSprints(), checkReviewWindow: () => reviewWindow.check(), readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const reviewWindow = createReviewWindowState({ current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, schedulesPending: () => sprintState.schedulesPending() || sprintPlan.blocksSchedules() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : sprintPlan.blocksSchedules() ? sprintPlan.check() : sprintState.checkPendingSchedules(), save: adapter.saveReviewWindow, accept: sprintState.acceptReviewWindow, denied: sprintState.denied, readVersion: sprintState.reviewWindowReadVersion, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
   const sprintPlan = createSprintPlanState({ schedulesPending: () => sprintState.schedulesPending() || reviewWindow.blocksSprints() || sprintLock.pending() || backlogAssignments.pending() || backlogOrdering.pending() || confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)), checkSchedules: () => confirmed.tasks.some(task => task.sprintId && taskEffectsPending(task.id)) ? checkSprintBlocker() : backlogOrdering.pending() ? checkOrdering() : sprintLock.pending() ? sprintLock.check() : reviewWindow.blocksSprints() ? reviewWindow.check() : sprintState.checkPendingSchedules(), current: () => confirmed, active: isActive, generation: () => sessionGeneration, changed: publish, nextSequence: () => ++sequence, create: adapter.createSprintPlan, accept: sprintState.acceptPlan, denied: sprintState.denied, readStatus: () => workspaceStatuses.get("sprint") || "not-loaded", refresh: () => planning.refreshWorkspace("sprint") });
@@ -807,7 +908,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     readStatus: () => workspaceStatuses.get("sprint") || "not-loaded",
     lock: adapter.lockSprint,
     observe: adapter.readSprintLock,
+    completion: adapter.readSprintCompletion ? completion : undefined,
+    actorBinding: () => JSON.stringify([userId, sessionRevision, expectedSprintActor()?.id, expectedSprintActor()?.platformRole]),
     accept(receipt, basis) {
+      completion.invalidate(receipt.sprint.id);
       sprintState.acceptLock(receipt);
       scoreObjections.acceptLock(receipt.sprint.id);
       for (const task of basis.tasks) {
@@ -1215,6 +1319,8 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     meetingAttendanceEdits: attendanceState.views,
     resumeMeetingAttendance: attendanceState.resume,
     ...taskReviews.publicState,
+    taskReviewBasis: reviewBasis.view,
+    loadTaskReviewBasis: reviewBasis.load,
     taskReviewOperations: taskReviews.views,
     checkTaskReview: taskReviews.check,
     beginAdministrationProjectEdit: administration.beginProject,
@@ -1264,7 +1370,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     reportTaskBlocker: blockerReports.report,
     taskBlockerReports: blockerReports.views,
     checkTaskBlockerReport: blockerReports.check,
-    beginSprintLock: (sprint,tasks) => sprintLock.begin(sprint,tasks),
+    beginSprintLock: (sprint,tasks,revision) => sprintLock.begin(sprint,tasks,revision),
     sprintLocks: id => { isActive(); return sprintLock.views(id); },
     resumeSprintLock: sprintLock.resume,
     beginBacklogOrder: backlogOrdering.begin,
@@ -1307,6 +1413,21 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     scoreObjectionOperations:scoreObjections.views,
     beginScoreObjectionReview:scoreObjections.begin,
     beginSprintCommitmentEdit: shown => commitments.begin(shown),
+    sprintCollection: sprintCollections.view,
+    loadSprintCollection,
+    loadSharedSprintSearch: query => loadSprintCollection(query, false, true),
+    cancelSprintCollection: sprintCollections.cancel,
+    selectedSprintScope: () => {
+      if (!selectedSprintDemand) return null;
+      const view = sprintCollections.view(selectedSprintDemand);
+      return { ...view, page: view.page || sprintCollections.membership(selectedSprintDemand.sprintId) };
+    },
+    sprintCompletion: completion.view,
+    loadSprintCompletion: completion.load,
+    checkSprintCompletion: completion.check,
+    sprintAssessment: assessment.view,
+    loadSprintAssessment: assessment.load,
+    checkSprintAssessment: assessment.check,
     sprintWorkspace: () => {
       isActive();
       const data = sprintState.denied() ? emptyPlanningShellState : visible;
@@ -1597,7 +1718,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
             for (const id of childLists.get(taskId)?.ids || []) { deniedTaskReads.add(id); taskDeniedAt.set(id, deniedAt); }
             detachPlanningMetadata();
             if (workspaceStatuses.get("planning") !== "forbidden") workspaceStatuses.set("planning", "stale");
-            taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId);
+            reviewBasis.invalidate(taskId, true); taskReviews.deny(taskId); githubSync.deny(taskId); blockerReports.denied(taskId); attachmentUploads.failed(taskId); relationshipChanges.denied(taskId);
           }
           if (!area || area === "target" || failedStatus === "forbidden") detailStatuses.set(taskId, failedStatus);
           if (area && area !== "target") detailAreaStatuses.set(key, failedStatus);
@@ -1751,6 +1872,9 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (isActive() && sessionRevision && (workspace === "planning" || workspace === "projects")) hydrationRequests.set(workspace, beginWorkspaceRead(workspace));
     },
     refreshWorkspace(workspace) {
+      if (workspace === "sprint" && adapter.readSprintCollection) return loadSprintCollection(selectedSprintDemand || {
+        scope: "selected", sprintId: null, filters: DEFAULT_SPRINT_TASK_FILTERS, continuation: null,
+      }, true);
       if (!isActive()) return Promise.resolve(false);
       if (workspace === "notifications" && adapter.readNotificationInbox) return notifications.publicState.loadNotificationPage();
       if (workspace === "planning" && ganttMounts && ganttQuery) return Promise.all([loadGantt(ganttQuery, { refresh: true }), structureReads.refresh(true)]).then(results => results.every(Boolean));
@@ -2269,8 +2393,11 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       if (workspace === "events" && eventRead !== null) events.failed(error, eventRead);
       workspaceStatuses.set(workspace, readErrorStatus(error));
       if (workspace === "planning" && readErrorStatus(error) === "forbidden") denyPlanningScope();
-      if (workspace === "sprint") { sprintState.readStatus(readErrorStatus(error)); if (readErrorStatus(error) === "forbidden") {attendanceState.denyWorkspace();scoreObjections.deny();} }
-      profileSettings.readStatus(readErrorStatus(error), workspace);
+      if (workspace === "sprint" && readErrorStatus(error) === "forbidden") denySprintRead();
+      else {
+        if (workspace === "sprint") sprintState.readStatus(readErrorStatus(error));
+        profileSettings.readStatus(readErrorStatus(error), workspace);
+      }
       publish();
       return false;
     } finally { readTransports.delete(token.started); }
@@ -2835,7 +2962,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     backlogSelectionQuery = undefined;
     for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort();
     ganttPending?.controller.abort(); ganttPending = undefined; ganttReceipt = undefined; ganttQuery = undefined; ganttStatus = "not-loaded";
-    candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear();
+    candidateReads.clear(); sprintCollections.clear(); assessment.clear(); completion.clear(); structureReads.clear(); structureTaskReceipts.clear();
     selectedBacklog = undefined; selectedBacklogRead?.controller.abort(); clearOrphanBacklog(true); displayedBacklogMembers.clear(); clearBacklogSupport();
     failedQueryDemand = undefined;
     planningInteraction = { selectedTaskId: null };
@@ -2864,6 +2991,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     relationshipChanges.clear();
     attachmentUploads.clear();
     taskReviews.clear();
+    reviewBasis.clear();
     githubSync.clear();
     githubConnection.clear();
     githubImports.clear();
@@ -2961,6 +3089,7 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       && read.session.expiresAt * 1000 > (adapter.now?.() ?? Date.now())
       && (!read.readAuthority || read.readAuthority.userId === userId && read.readAuthority.deadline > (adapter.now?.() ?? Date.now()));
     if (read?.readAuthority && !boundRead) return;
+    if (boundRead && read?.workspace === "sprint" && !selectedSprintDemand) seedSprintScope(read, data.tasks);
     const requested = hydrationRequests.get(workspace);
     hydrationRequests.delete(workspace);
     if (requiresBoundHydration && !boundRead) {
@@ -3037,6 +3166,10 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
     else visible = confirmed;
     return true;
   }
+  if (initialWorkspaceRead?.workspace === "sprint") {
+    selectedSprintDemand = initialWorkspaceRead.sprintScope?.query;
+    seedSprintScope(initialWorkspaceRead, initialData.tasks);
+  }
   if (initialTaskDetailRead) acceptTaskDetailHydration(initialTaskDetailRead, false);
   if (initialWorkspaceRead?.workspace === "planning" && initialWorkspaceRead.board?.delivery && initialWorkspaceRead.readAuthority
     && initialWorkspaceRead.session.userId === userId && initialWorkspaceRead.readAuthority.userId === userId
@@ -3074,6 +3207,6 @@ export function createPlanningState({ userId, initialData, initialWorkspace = "p
       deferNotifications = true;
       try { endSession(); } finally { deferNotifications = false; }
     },
-    dispose: () => { ganttPending?.controller.abort(); ganttReceipt = undefined; for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); structureReads.clear(); structureTaskReceipts.clear(); administration.clear(); notifications.dispose(); unsubscribeSession?.(); },
+    dispose: () => { ganttPending?.controller.abort(); ganttReceipt = undefined; for (const move of relativeBacklogMoves.values()) if (!move.writing) move.controller.abort(); clearBacklogSupport(); clearOrphanBacklog(true); selectedBacklogRead?.controller.abort(); candidateReads.clear(); sprintCollections.clear(); assessment.clear(); completion.clear(); structureReads.clear(); structureTaskReceipts.clear(); administration.clear(); reviewBasis.clear(); notifications.dispose(); unsubscribeSession?.(); },
   } };
 }

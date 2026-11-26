@@ -5,19 +5,30 @@ import type { AuthenticatedProfile } from "../../types";
 import type { PlanningCredentialInput } from "../types";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 import { rolePermitsAction } from "./session-policy";
+import { observePlanningSprintCompletion, preparePlanningSprintCompletion, type PreparedSprintCompletion, type SprintCompletionAccess } from "@/features/planning-items/server/planning-sprint-completion-source";
 
 type PlanningSprintContext = {
   action: PlanningCredentialInput["action"]; targetId: string; profile: AuthenticatedProfile | null; service: SupabaseClient; followup: SupabaseClient;
   current(): Promise<{ code?: string; message: string } | null>;
+  completion?: { user: SupabaseClient; access: SprintCompletionAccess; currentEnvironment(): boolean };
 };
 const forbidden = () => ({ code: "42501", message: "Keine Berechtigung für diese Aktion." });
 
-export function planningSprintOperations({ action, targetId, profile, service, followup, current }: PlanningSprintContext) {
-  let lockProjectId = "";
-  let lockStartDate = "";
-  let nextSprintId = "";
-  const sprintTaskIds = new Set<string>();
+export function planningSprintOperations({ action, targetId, profile, service, followup, current, completion }: PlanningSprintContext) {
+  let preparedCompletion: Readonly<{ fence: NonNullable<PreparedSprintCompletion["fence"]>; taskIds: ReadonlySet<string>; nextSprintId: string | null }> | null = null;
   let savedCommitment: Record<string, unknown> | null = null;
+  function completionAccess(signal?: AbortSignal) {
+    if (!completion || !completion.currentEnvironment() || !targetId) return;
+    const deadline = AbortSignal.timeout(Math.max(0, Math.ceil(completion.access.deadline - Date.now())));
+    return { ...completion.access, signal: signal ? AbortSignal.any([signal, deadline]) : deadline };
+  }
+  async function completeRead(displayedToken?: string, signal?: AbortSignal) {
+    if (action !== "planning.sprint.lock" || !profile || profile.platformRole !== "ceo") return { status: "forbidden" as const };
+    const access = completionAccess(signal);
+    if (!completion || !access) return { status: "unavailable" as const };
+    const result = await preparePlanningSprintCompletion(service, completion.user, access, targetId, displayedToken);
+    return completion.currentEnvironment() ? result : { status: "unavailable" as const };
+  }
   return {
     async createScoreObjection(comment: string, metadata: { request_ip?: string | null; user_agent?: string | null }) {
       if (action !== "planning.sprint.objection.create" || !targetId || !profile || await current()) return { data: null, error: forbidden() };
@@ -44,75 +55,67 @@ export function planningSprintOperations({ action, targetId, profile, service, f
         p_review_objection_window_hours: values.hours, p_actor_profile_id: profile.id,
         p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
     },
+    async loadSprintCompletion(signal?: AbortSignal) {
+      const result = await completeRead(undefined, signal);
+      return result.status === "ready" ? { status: "ready" as const, read: result.read.read } : result;
+    },
+    async observeSprintCompletion(signal?: AbortSignal) {
+      if (action !== "planning.sprint.lock" || !profile || profile.platformRole !== "ceo") return { status: "forbidden" as const };
+      const access = completionAccess(signal);
+      if (!completion || !access) return { status: "unavailable" as const };
+      const result = await observePlanningSprintCompletion(completion.user, access, targetId);
+      return completion.currentEnvironment() ? result : { status: "unavailable" as const };
+    },
+    async prepareSprintCompletion(displayedToken?: string) {
+      preparedCompletion = null;
+      const result = await completeRead(displayedToken);
+      if (result.status === "ready" && result.read.fence) preparedCompletion = {
+        fence: { ...result.read.fence }, taskIds: new Set(result.read.read.basis.tasks.map(task => task.id)),
+        nextSprintId: result.read.read.nextSprintId,
+      };
+      return result;
+    },
     async readSprintLock() {
       if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
-      const result = await service.from("sprints").select("id,project_id,name,status,start_date,end_date,review_due_at,score_locked,updated_at,lock_result").eq("id", targetId).single();
-      if (result.data) { lockProjectId = result.data.project_id; lockStartDate = result.data.start_date || "1900-01-01"; }
-      return result;
-    },
-    async readSprintBlockingObjections() {
-      if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
-      return await service.from("score_objections").select("id,status,second_reviewer_profile_id,second_reviewed_at", { count: "exact" }).eq("sprint_id", targetId);
-    },
-    async readSprintAcceptedAdjustments() {
-      if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
-      return await service.from("score_objections").select("profile_id,resolved_delivery_points,resolved_form_points,resolved_weekly_points,reviewed_at", { count: "exact" })
-        .eq("sprint_id", targetId).eq("status", "accepted").not("resolved_delivery_points", "is", null).order("reviewed_at", { ascending: false });
-    },
-    async readSprintLockProject() {
-      if (action !== "planning.sprint.lock" || !lockProjectId || await current()) return { data: null, error: forbidden() };
-      return await service.from("projects").select("review_objection_window_hours").eq("id", lockProjectId).single();
-    },
-    async readNextSprint() {
-      if (action !== "planning.sprint.lock" || !targetId || !lockStartDate || await current()) return { data: null, error: forbidden() };
-      const result = await service.from("sprints").select("id,name,start_date,end_date").neq("id", targetId).gt("start_date", lockStartDate)
-        .order("start_date", { ascending: true }).limit(1).maybeSingle();
-      nextSprintId = result.data?.id || "";
-      return result;
+      return service.from("sprints").select("id,project_id,name,status,start_date,end_date,review_due_at,score_locked,updated_at,lock_result").eq("id", targetId).single();
     },
     async readSprintTaskRows() {
-      if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden() };
-      const result = await service
-    .from(ACTIVE_TASKS_TABLE)
-    .select("id,project_id,parent_task_id,title,description,status,priority,owner,assignee,workstream,sort_order,estimate_hours,definition_of_done,evidence_link,issue_number,issue_url,github_issue_number,github_issue_url,sprint_id,review_status,score_points,score_final,task_type,approval_status,score_relevant,carryover_count,original_sprint_id,problem_statement,intended_outcome,scope_constraints,acceptance_criteria,evidence_required,dod_template_version,sprint_outcome,updated_at", { count: "exact" })
-    .eq("sprint_id", targetId);
-      for (const task of result.data || []) sprintTaskIds.add(task.id);
-      return result;
+      if (action !== "planning.sprint.lock" || !targetId || await current()) return { data: null, error: forbidden(), count: null };
+      return service.from(ACTIVE_TASKS_TABLE).select("id,title,updated_at", { count: "exact" }).eq("sprint_id", targetId);
     },
-    async readSprintBlockers(suppliedTaskIds: string[]) {
-      const taskIds = [...suppliedTaskIds];
-      if (action !== "planning.sprint.lock" || taskIds.some(id => !sprintTaskIds.has(id)) || await current()) return { data: null, error: forbidden() };
-      return await service.from("task_blockers").select("id,task_id,status", { count: "exact" }).in("task_id", taskIds).eq("status", "open");
-    },
-    async readSprintScoringInputs() {
-      if (action !== "planning.sprint.lock" || !targetId || await current()) {
-        const denied = { data: null, error: forbidden() };
-        return [denied, denied, denied, denied, denied] as const;
-      }
-      return Promise.all([
-    service.from("profiles").select("id,name,platform_role,weekly_capacity", { count: "exact" }),
-    service.from("sprint_commitments").select("id,sprint_id,profile_id,commitment_level,weekly_hours,note", { count: "exact" }).eq("sprint_id", targetId),
-    service.from("meetings").select("id,sprint_id,title,meeting_at,duration_minutes,status,agenda", { count: "exact" }).eq("sprint_id", targetId).order("meeting_at"),
-    service.from("meeting_attendance").select("id,meeting_id,profile_id,status,absence_reason,reason_accepted,written_update,points,created_at,updated_at", { count: "exact" }),
-    service.from("founder_strike_state").select("id,profile_id,strike_level,fulfilled_reset_streak,last_evaluated_sprint_id,updated_at", { count: "exact" }),
-  ]);
-    },
-    async commitSprintLock(suppliedValues: { expectedUpdatedAt: string; expectedTasks?: readonly { id: string; updatedAt: string }[]; taskUpdates: readonly Record<string, unknown>[]; acceptedBlockerTaskIds: readonly string[];
+    async commitSprintLock(suppliedValues: { expectedUpdatedAt: string; expectedTasks: readonly { id: string; updatedAt: string }[];
+      taskUpdates: readonly Record<string, unknown>[]; acceptedBlockerTaskIds: readonly string[];
       carryoverInserts: readonly Record<string, unknown>[]; notifications: readonly Record<string, unknown>[]; scoreRows: readonly Record<string, unknown>[];
       strikeStateRows: readonly Record<string, unknown>[]; strikeEvents: readonly Record<string, unknown>[]; resultData: Record<string, unknown> },
       metadata: { request_ip?: string | null; user_agent?: string | null }) {
       const values = structuredClone(suppliedValues);
-      if (action !== "planning.sprint.lock" || !targetId || !profile || values.taskUpdates.some(row => !sprintTaskIds.has(String(row.id)))
-        || values.acceptedBlockerTaskIds.some(id => !sprintTaskIds.has(id))
-        || values.carryoverInserts.some(row => !nextSprintId || !sprintTaskIds.has(String(row.carried_from_task_id)) || row.carried_from_sprint_id !== targetId
-          || row.id !== `${String(row.carried_from_task_id)}-carryover-${nextSprintId}`) || await current()) return { data: null, error: forbidden() };
-      return await service.rpc("lock_sprint_with_review_window_transaction", { p_sprint_id: targetId, p_expected_updated_at: values.expectedUpdatedAt,
-        p_task_updates: values.taskUpdates, p_accepted_blocker_task_ids: values.acceptedBlockerTaskIds, p_carryover_inserts: values.carryoverInserts,
+      const prepared = preparedCompletion;
+      preparedCompletion = null;
+      const fence = prepared?.fence;
+      if (action !== "planning.sprint.lock" || !targetId || !profile || !prepared || !fence || !completion) {
+        return { data: null, error: forbidden() };
+      }
+      const ids = prepared.taskIds;
+      const next = prepared.nextSprintId;
+      if (values.expectedUpdatedAt !== fence.expectedUpdatedAt
+        || values.taskUpdates.some(row => !ids.has(String(row.id)))
+        || values.acceptedBlockerTaskIds.some(id => !ids.has(id))
+        || values.carryoverInserts.some(row => !next || !ids.has(String(row.carried_from_task_id)) || row.carried_from_sprint_id !== targetId
+          || row.id !== `${String(row.carried_from_task_id)}-carryover-${next}`)
+        || await current() || !completion.currentEnvironment()) return { data: null, error: forbidden() };
+      return service.rpc("commit_sprint_completion_basis", {
+        p_sprint_id: targetId, p_expected_updated_at: values.expectedUpdatedAt,
+        p_task_updates: values.taskUpdates, p_accepted_blocker_task_ids: values.acceptedBlockerTaskIds,
+        p_carryover_inserts: values.carryoverInserts,
         p_notifications: values.notifications.map(row => ({ ...row, actor_profile_id: profile.id })),
         p_score_rows: values.scoreRows.map(row => ({ ...row, sprint_id: targetId, finalized_by: profile.id })),
         p_strike_state_rows: values.strikeStateRows.map(row => ({ ...row, last_evaluated_sprint_id: targetId })),
         p_strike_events: values.strikeEvents.map(row => ({ ...row, sprint_id: targetId, created_by: profile.id })),
-        p_result_data: { ...Object.fromEntries(Object.entries(values.resultData).filter(([key])=>key!=="_planning_lock_basis")), ...(values.expectedTasks === undefined ? {} : { _planning_lock_basis: values.expectedTasks.map(task=>({id:task.id,updatedAt:task.updatedAt})) }) }, p_actor_profile_id: profile.id, p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null });
+        p_result_data: { ...values.resultData, _planning_lock_basis: values.expectedTasks.map(task => ({ id: task.id, updatedAt: task.updatedAt })) },
+        p_actor_profile_id: profile.id, p_actor_user_id: completion.access.userId, p_session_id: completion.access.sessionId,
+        p_deadline: new Date(fence.deadline).toISOString(), p_valid_until: fence.validUntil, p_source_revision: fence.sourceRevision,
+        p_request_ip: metadata.request_ip || null, p_user_agent: metadata.user_agent || null,
+      });
     },
     async readSprintPlanProject() {
       if (action !== "planning.sprint.plan" || await current()) return { data: null, error: forbidden() };

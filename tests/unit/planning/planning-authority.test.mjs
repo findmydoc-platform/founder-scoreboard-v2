@@ -85,17 +85,35 @@ test.each([
   ["reopen", "reopenReview", { status: "Erledigt", review_status: "accepted", score_final: true }, {}],
 ])("the %s review capability retains its specific workflow and rejects a viewer", async (operation, kind, state, fields) => {
   const task = { id: "review-task", task_type: "deliverable", title: "Review task", updated_at: "2026-10-17T08:00:00Z", approval_status: "approved", assignee: "synthetic-profile", owner: "synthetic-profile", review_owner_profile_id: "synthetic-profile", score_final: false, ...state };
+  const transaction = { task, activities: [], review: operation === "decide" ? {
+    id: 1, task_id: task.id, sprint_id: "", reviewer_profile_id: "synthetic-profile", decision: "accepted",
+    points: 12, comment: "Reviewed evidence", checklist: fields.checklist, created_at: "2026-10-17T08:01:00Z",
+  } : null };
   const protocol = administratorProtocol({ responses: {
     prepare_planning_review_command: { task, actorName: "Synthetic Founder", reviewer: { id: "synthetic-profile", contributor: true }, defaultReviewer: { id: "synthetic-profile", contributor: true } },
     has_valid_planning_review_evidence: true,
-    mutate_planning_review_command_transaction_v3: { task, activities: [], review: operation === "decide" ? { id: 1, task_id: task.id, sprint_id: "", reviewer_profile_id: "synthetic-profile", decision: "accepted", points: 12, comment: "Reviewed evidence", checklist: fields.checklist, created_at: "2026-10-17T08:01:00Z" } : null },
+    mutate_planning_review_command_transaction_v3: transaction,
+    decide_planning_review_from_basis: transaction,
+    planning_board_publication_context: { profile_id: "synthetic-profile", platform_role: "founder", source_revision: "42" },
+    planning_deliverable_review_basis: () => {
+      const prepared = protocol.state.responses.prepare_planning_review_command;
+      return Response.json({ status: "ready", taskUpdatedAt: prepared.task.updated_at, sourceRevision: "42",
+        evaluatedAt: new Date(Date.now()-100).toISOString(), validUntil: new Date(Date.now()+30_000).toISOString(),
+        hasEvidence: true, hasException: false, exceptionNote: null,
+        evidenceLinks: [{ taskId: task.id, title: task.title, url: "https://example.test/proof", kind: "evidence" }],
+        sprintId: null, sprintLocked: Boolean(prepared.sprintLocked), blockedReason: prepared.sprintLocked ? "sprintLocked" : null });
+    },
   } });
   const { authorizeCredentialAction } = await importTestModule("src/lib/credentials/index.ts", { "server-only": {} });
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: `planning.review.${operation}`, targetId: task.id };
   const permission = await authorizeCredentialAction(input);
   expect(permission.ok).toBe(true);
   expect(await permission.planning.runReview({ command: { kind: "actOnItem", action: { kind, itemId: task.id, expectedRevision: task.updated_at, ...fields } } })).toMatchObject({ ok: true, status: "committed" });
-  expect(protocol.calls.find(call => call.name === "mutate_planning_review_command_transaction_v3").body.p_action).toBe(operation);
+  const writeRpc = operation === "decide" ? "decide_planning_review_from_basis" : "mutate_planning_review_command_transaction_v3";
+  const write = protocol.calls.find(call => call.name === writeRpc);
+  expect(write.body.p_task_id).toBe(task.id);
+  if (operation === "decide") expect(write.body).toMatchObject({ p_source_revision: "42", p_actor_profile_id: "synthetic-profile" });
+  else expect(write.body.p_action).toBe(operation);
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
@@ -112,7 +130,7 @@ test.each([
   expect(receipt).toMatchObject({ ok: true, task: { id: task.id },activities:[] });
   if(operation==="decide") {
     expect(receipt.review).toMatchObject({id:1,taskId:task.id,reviewerProfileId:"synthetic-profile",createdAt:"2026-10-17T08:01:00Z"});
-    expect(protocol.calls.filter(call=>call.name==="mutate_planning_review_command_transaction_v3").at(-1).body.p_expected_updated_at).toBe(task.updated_at);
+    expect(protocol.calls.filter(call=>call.name===writeRpc).at(-1).body.p_expected_updated_at).toBe(task.updated_at);
     protocol.state.responses.prepare_planning_review_command.task={...task,updated_at:"2026-10-17T09:00:00Z"};
     const conflict=await POST(protocol.request("/api/tasks/review-task/review","POST",payload),{params:Promise.resolve({id:task.id})});expect(conflict.status).toBe(409);expect(await conflict.json()).toMatchObject({conflictReason:"revision"});
     protocol.state.responses.prepare_planning_review_command.task=task;
@@ -283,13 +301,7 @@ test("sprint planning keeps its operational-lead grant and binds the project and
 
 test("only the CEO locks a sprint and the real route retains a stored replay", async () => {
   const stored = { sprint: { id: "locked-sprint", status: "closed", scoreLocked: true }, carryover: { created: 0 } };
-  const protocol = administratorProtocol({ role: "ceo", responses: {
-    lock_sprint_with_review_window_transaction: body => {
-      expect(body.p_sprint_id).toBe("locked-sprint");
-      expect(body.p_actor_profile_id).toBe("synthetic-profile");
-      return Response.json(stored);
-    },
-  } });
+  const protocol = administratorProtocol({ role: "ceo" });
   const authFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
@@ -300,8 +312,8 @@ test("only the CEO locks a sprint and the real route retains a stored replay", a
   const input = { credential: { kind: "session-request", request: protocol.request() }, action: "planning.sprint.lock", targetId: "locked-sprint" };
   const permission = await authorizeCredentialAction(input);
   expect(permission.ok).toBe(true);
-  const values = { expectedUpdatedAt: "2026-10-17T08:00:00Z", taskUpdates: [], acceptedBlockerTaskIds: [], carryoverInserts: [], notifications: [], scoreRows: [], strikeStateRows: [], strikeEvents: [], resultData: stored };
-  expect(await permission.planning.commitSprintLock(values, {})).toMatchObject({ data: stored, error: null });
+  const values = { expectedUpdatedAt: "2026-10-17T08:00:00Z", expectedTasks:[], taskUpdates: [], acceptedBlockerTaskIds: [], carryoverInserts: [], notifications: [], scoreRows: [], strikeStateRows: [], strikeEvents: [], resultData: stored };
+  expect(await permission.planning.commitSprintLock(values, {})).toMatchObject({ data: null, error: { code: "42501" } });
   const { POST } = await importTestModule("src/app/api/sprints/[id]/lock/route.ts", { "server-only": {} });
   const response = await POST(protocol.request("/api/sprints/locked-sprint/lock", "POST", {}), { params: Promise.resolve({ id: "locked-sprint" }) });
   expect(response.status).toBe(200);

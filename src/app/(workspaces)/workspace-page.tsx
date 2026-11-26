@@ -14,6 +14,8 @@ import type { AppWorkspace } from "@/features/planning/model/workspace-routes";
 import { backlogModelToPlanningShellState } from "@/features/backlog/model/backlog-planning-shell-projection";
 import { planningWorkspaceModelToPlanningShellState } from "@/features/planning-items/model/planning-shell-projection";
 import { supportingWorkspaceModelToPlanningShellState, type SupportingWorkspace } from "@/features/planning/model/supporting-planning-shell-projection";
+import { parseSprintScopedQuery } from "@/features/sprint/model/sprint-scoped-read";
+import { sprintModelCoverage } from "@/features/planning/model/internal/sprint-read-coverage";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { emptyPlanningHeaderData } from "@/lib/planning-header-data";
@@ -103,13 +105,28 @@ async function loadSupportingWorkspacePageData(
   return permission.resource.loadWorkspace({ headerSlots: ["quickLinks", "calendarEvents"] });
 }
 
-async function loadSprintPageData(profile?: AuthenticatedProfile | null) {
+async function loadSprintPageData(profile?: AuthenticatedProfile | null, session?: import("@/lib/credentials/session-types").ServerSessionView, params?: URLSearchParams) {
   const permission = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "planning.sprint.read" });
   if (!permission.ok || (profile !== undefined && (permission.profile?.id !== profile?.id || permission.profile?.platformRole !== profile?.platformRole))) return { status: "unavailable" as const };
-  const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader(["quickLinks", "calendarEvents"])]);
-  return sprint.status === "ready" && header.ok
-    ? { status: "ready" as const, model: sprint.model, headerData: header.headerData }
-    : { status: "unavailable" as const };
+  if (!session && profile === undefined) {
+    const [sprint, header] = await Promise.all([permission.planning.loadSprint(), permission.planning.loadHeader(["quickLinks", "calendarEvents"])]);
+    return sprint.status === "ready" && header.ok ? { status: "ready" as const, model: sprint.model, headerData: header.headerData } : { status: "unavailable" as const };
+  }
+  const readSession = permission.readSession;
+  if (!profile || !session || !readSession || readSession.userId !== session.userId || readSession.revision !== session.revision
+    || readSession.expiresAt !== session.expiresAt) return { status: "unavailable" as const };
+  const query = parseSprintScopedQuery(params || new URLSearchParams({ scope: "selected" }));
+  if (!query) return { status: "unavailable" as const };
+  const [sprint, header] = await Promise.all([permission.planning.loadSprintScope(query), permission.planning.loadHeader(["quickLinks", "calendarEvents"])]);
+  if (sprint.status !== "ready" || !sprint.model || !header.ok || sprint.readActor.profileId !== profile?.id
+    || sprint.readActor.platformRole !== profile.platformRole || sprint.readAuthority.userId !== session.userId
+    || sprint.readAuthority.deadline <= Date.now() || sprint.readAuthority.deadline > session.expiresAt * 1_000) return { status: "unavailable" as const };
+  const scopedRead: import("@/features/planning/model/planning-workspace-hydration").PlanningWorkspaceHydration = {
+    workspace: "sprint", queryKey: "workspace", session, revision: sprint.model.revision, readAuthority: sprint.readAuthority,
+    scopeRevision: sprint.page.sourceRevision, coverage: sprintModelCoverage(sprint.model), taskOmittedFields: [],
+    sprintScope: { query: { ...query, sprintId: sprint.page.sprintId }, page: sprint.page, readActor: sprint.readActor, selectionBasis: sprint.selectionBasis },
+  };
+  return { status: "ready" as const, model: sprint.model, headerData: header.headerData, scopedRead };
 }
 
 async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
@@ -124,7 +141,7 @@ async function loadDecisionLogPageData(profile?: AuthenticatedProfile | null) {
   } catch { return { status: "unavailable" as const }; }
 }
 
-export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput, backlogParams?: URLSearchParams) {
+export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planningQuery?: PlanningBoardQueryInput, workspaceParams?: URLSearchParams) {
   if (requiresSupabaseAuth()) {
     const auth = await authorizeCredentialAction({ credential: { kind: "server-cookies" }, action: "session.planning" });
     if (!auth.ok) {
@@ -169,7 +186,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
     }
 
     if (initialWorkspace === "backlog") {
-      const backlog = await loadBacklogPageData(auth.profile, backlogParams);
+      const backlog = await loadBacklogPageData(auth.profile, workspaceParams);
       if (backlog.status !== "ready") {
         return <WorkspaceDataUnavailablePage workspace="backlog" authUserEmail={auth.user?.email || ""} />;
       }
@@ -263,7 +280,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
     }
 
     if (initialWorkspace === "sprint") {
-      const sprint = await loadSprintPageData(auth.profile);
+      const sprint = await loadSprintPageData(auth.profile, auth.session, workspaceParams);
       if (sprint.status !== "ready") return <WorkspaceDataUnavailablePage workspace="sprint" authUserEmail={auth.user?.email || ""} />;
       return (
         <PlanningApp
@@ -271,6 +288,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
           initialHeaderData={sprint.headerData}
           initialWorkspace="sprint"
           initialSprintModel={sprint.model}
+          initialWorkspaceRead={sprint.scopedRead}
           source="supabase"
           authRequired
           initialAuthUser={auth.user}
@@ -304,7 +322,7 @@ export async function renderWorkspacePage(initialWorkspace: AppWorkspace, planni
   if (initialWorkspace === "administration") redirect("/planning");
 
   if (initialWorkspace === "backlog") {
-    const backlog = await loadBacklogPageData(undefined, backlogParams);
+    const backlog = await loadBacklogPageData(undefined, workspaceParams);
     if (backlog.status !== "ready") return <WorkspaceDataUnavailablePage workspace="backlog" />;
     return (
       <PlanningApp

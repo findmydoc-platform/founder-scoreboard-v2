@@ -28,6 +28,10 @@ import type { NextRequest } from "next/server";
 import { ACTIVE_TASKS_TABLE } from "../../planning-read-model";
 
 import { createSupabaseBacklogReadModel, loadSupabaseBacklogBootstrap } from "@/features/backlog/server/backlog-read-model-supabase";
+import { loadPlanningSprintTaskScope, loadPlanningSprintSelectedProjection } from "@/features/planning-items/server/planning-sprint-task-read-source";
+import { loadPlanningSprintAssessment, observePlanningSprintAssessment } from "@/features/planning-items/server/planning-sprint-assessment-source";
+import { readPlanningDeliverableReviewBasis, readReviewDecisionFence } from "@/features/planning-items/server/planning-deliverable-review-source";
+import type { SprintScopedQuery, SprintScopedResult, SprintSelectedProjectionResult } from "@/features/sprint/model/sprint-scoped-read";
 import { createSupabaseSprintReadModel } from "@/features/sprint/server/sprint-read-model-supabase";
 import { createSupabaseTaskDetailReadModel } from "@/features/tasks/server/task-detail-read-model-supabase";
 import { createSupabasePlanningBoardReadModel } from "@/features/planning/server/planning-board-read-model-supabase";
@@ -69,7 +73,7 @@ const planningPolicyActions: Record<PlanningCredentialInput["action"], SessionPo
   "planning.focus.write": "planning.contribute", "planning.focus.delete": "planning.contribute", "planning.attendance.write": "planning.contribute",
   "planning.revision.read": "planning.revision.read", "planning.board.read": "planning.board.read", "planning.header.read": "team.read",
   "planning.backlog.read": "planning.backlog.read", "planning.sprint.read": "team.read", "planning.task.read": "team.read",
-  "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
+  "planning.review.basis.read": "planning.contribute", "planning.review.request": "planning.contribute", "planning.review.decide": "planning.contribute",
   "planning.review.withdraw": "planning.contribute", "planning.review.reopen": "planning.contribute",
   "planning.task.update": "planning.correct", "planning.relationship.add": "planning.correct", "planning.relationship.remove": "planning.correct",
   "planning.task.delete": "operations.lead", "planning.task.create": "planning.contribute",
@@ -92,6 +96,7 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
   if (input.credential.kind !== "session-request" && !(input.credential.kind === "server-cookies" && readActions.includes(action))) return { ok: false as const, status: 403, error: "Keine Berechtigung für diese Aktion." };
   const strictService = action === "planning.approval.decide" || action.startsWith("planning.trash.") || action.startsWith("workweek.");
   const detailEnvironmentCurrent = planningServiceEnvironmentGuard(strictService);
+  const sprintEnvironmentCurrent = action === "planning.sprint.read" ? planningServiceEnvironmentGuard(true) : undefined;
   const service = planningService(strictService, () => current(), () => assertKnown());
   const followup = planningService(strictService);
   if (!service && !strictService) return { ok: false as const, status: 501, error: "Supabase env is not configured." };
@@ -172,13 +177,66 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
     ? planningPublicationSource(resourceData, profile, assertKnown) : undefined;
   const readAuthority = "readDeadline" in permission ? { userId: permission.user.id, deadline: permission.readDeadline } : undefined;
   const readSession = cookieSession && "user" in permission ? projectSessionView(cookieSession, permission.user) : undefined;
+  const completionEnvironment = action === "planning.sprint.lock" ? planningServiceEnvironmentGuard(true) : undefined;
+  const completionSecret = completionEnvironment ? process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY : undefined;
+  const completionSessionId = "readSessionId" in permission ? permission.readSessionId : undefined;
+  const completionJwt = completionEnvironment ? resolveSessionRequest(request).token : undefined;
+  const completion = completionEnvironment && completionSecret && completionSessionId && completionJwt && resourceData
+    && profile?.platformRole === "ceo" && readAuthority && !localProfileOverride ? {
+      user: resourceData, currentEnvironment: completionEnvironment,
+      access: { ...readAuthority, profileId: profile.id, sessionId: completionSessionId,
+        key: createHmac("sha256", completionSecret).update(JSON.stringify(["sprint-completion-authority-v1", completionJwt])).digest("hex") },
+    } : undefined;
+  const reviewEnvironmentCurrent = action === "planning.review.basis.read" || action === "planning.review.decide"
+    ? planningServiceEnvironmentGuard(true) : undefined;
+  function reviewBasisActor() {
+    const sessionId = "readSessionId" in permission ? permission.readSessionId : undefined;
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+    const jwt = resolveSessionRequest(request).token;
+    if (!targetId || !readAuthority || !profile || !sessionId || !secret || !jwt || localProfileOverride || !reviewEnvironmentCurrent?.()) return;
+    const key = createHmac("sha256", secret).update(JSON.stringify(["deliverable-review-authority-v1", jwt])).digest("hex");
+    return { ...readAuthority, sessionId, profileId: profile.id, role: profile.platformRole, key };
+  }
+  async function reviewBasis(signal?: AbortSignal) {
+    const binding = reviewBasisActor();
+    const publication = planningPublicationSource(resourceData, profile, assertKnown);
+    if (!binding || !publication) return { status: "unavailable" as const };
+    if (binding.deadline <= Date.now()) return { status: "forbidden" as const };
+    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(binding.deadline - Date.now())));
+    const limit = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
+    const guarded = planningService(true, current, assertKnown, limit);
+    return guarded ? readPlanningDeliverableReviewBasis(guarded, publication, binding, targetId, limit) : { status: "unavailable" as const };
+  }
   const serverHeaderRead = (action === "planning.board.read" || action === "planning.task.read") && readSession && readAuthority
     ? { ...readAuthority, id: randomUUID(), timeoutAt: Math.min(readAuthority.deadline, Date.now() + 15_000), sessionRevision: readSession.revision } : undefined;
+  function sprintScopeAccess(requestSignal?: AbortSignal) {
+    if (action !== "planning.sprint.read" || !profile || localProfileOverride) return { status: "forbidden" as const };
+    const sessionId = "readSessionId" in permission ? permission.readSessionId : undefined;
+    const publication = planningPublicationSource(resourceData, profile, assertKnown);
+    if (!readAuthority || !sessionId || !publication || !sprintEnvironmentCurrent?.()) return { status: "unavailable" as const };
+    if (readAuthority.deadline <= Date.now()) return { status: "forbidden" as const };
+    const deadlineSignal = AbortSignal.timeout(Math.max(0, Math.ceil(readAuthority.deadline - Date.now())));
+    const signal = requestSignal ? AbortSignal.any([requestSignal, deadlineSignal]) : deadlineSignal;
+    const guarded = planningService(true, current, () => {
+      if (!sprintEnvironmentCurrent()) throw new WorkspaceAccessError(503, "workspace_access_unavailable");
+      assertKnown();
+    }, signal);
+    if (!guarded) return { status: "unavailable" as const };
+    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+    if (!secret) return { status: "unavailable" as const };
+    const key = createHmac("sha256", secret).update(JSON.stringify([resolveSessionRequest(request).token, profile.id, profile.platformRole])).digest("hex");
+    return { status: "ready" as const, guarded, access: { ...readAuthority, sessionId, profileId: profile.id,
+      role: profile.platformRole, key, publication, signal } };
+  }
+  function checkSprintPublication<T>(result: T) {
+    try { assertKnown(); } catch { return { status: "forbidden" as const }; }
+    return sprintEnvironmentCurrent?.() ? result : { status: "unavailable" as const };
+  }
   return { ok: true as const, readAuthority, readSession, serverHeaderRead, profile: profile ? Object.freeze({ ...profile }) : null, authority: authority ? Object.freeze({ ...authority, profile: Object.freeze({ ...authority.profile }), administratorAccess: Object.freeze({ ...authority.administratorAccess }), capabilities: Object.freeze({ ...authority.capabilities }) }) : undefined, planning: {
     ...planningWorkweekOperations({ action, targetId, profile, service, followup: followup!, data: permission.data, request, current }),
     ...planningCollaborationOperations({ action, targetId, profile, service, followup: followup!, request, current }),
     ...planningParticipationOperations({ action, targetId, profile, service, followup: followup!, current }),
-    ...planningSprintOperations({ action, targetId, profile, service, followup: followup!, current }),
+    ...planningSprintOperations({ action, targetId, profile, service, followup: followup!, current, completion }),
     async readItemKind() {
       if ((action !== "planning.approval.decide" && !action.startsWith("planning.trash.")) || !targetId || await current()) return { data: null, error: forbidden() };
       const result = await service.from("tasks").select("task_type").eq("id", targetId).maybeSingle<{ task_type: string }>();
@@ -320,11 +378,39 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
       if (action !== "planning.review.decide" || !reviewCommitted) throw Object.assign(new Error("Keine Berechtigung für diesen Review-Versand."), { code: "42501" });
       return deliverPendingGitHubReviews({ supabase: followup!, taskId: targetId, limit: 20 });
     },
-    async runReview(invocation: BoundInvocation): Promise<PlanningResult> {
+    async loadDeliverableReviewBasis(signal?: AbortSignal) {
+      if (action !== "planning.review.basis.read" || correction || !actor.ok || localProfileOverride) return { status: "forbidden" as const };
+      return reviewBasis(signal);
+    },
+    async runReview(invocation: BoundInvocation, decisionBasis?: string): Promise<PlanningResult> {
       const call = structuredClone(invocation);
       if (!reviewKinds[action] || correction || !actor.ok || call.command.kind !== "actOnItem" || call.command.action.kind !== reviewKinds[action]
         || !targetId || !("itemId" in call.command.action) || call.command.action.itemId !== targetId || await current()) return rejected();
-      const result = await createPlanningReviewPlanningItems(service).run({ ...call, actor: actor.actor, mode: "commit" });
+      const stale = (): PlanningResult => ({ ok: false, error: { code: "conflict", reason: "state", details: { planningReviewReason: "staleBasis" } } });
+      let fence: import("@/features/planning-items/server/planning-deliverable-review-source").ReviewDecisionFence | undefined;
+      if (call.command.action.kind === "decideReview" && !localProfileOverride) {
+        const binding = reviewBasisActor();
+        if (!binding) return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: true } };
+        let token = decisionBasis;
+        if (token === undefined) {
+          const observed = await reviewBasis();
+          if (observed.status === "forbidden") return rejected();
+          if (observed.status === "notFound") return { ok: false, error: { code: "notFound", entity: { kind: "deliverable", id: targetId } } };
+          if (observed.status === "stale") return stale();
+          if (observed.status !== "ready") return { ok: false, error: { code: "dependencyUnavailable", dependency: "database", retryable: true } };
+          if (call.command.action.expectedRevision && call.command.action.expectedRevision !== observed.basis.taskUpdatedAt) return { ok: false, error: { code: "conflict", reason: "revision" } };
+          if (observed.basis.decision.status === "blocked") return { ok: false, error: { code: "conflict", reason: "state", details: {
+            planningReviewReason: observed.basis.decision.reason === "inactive" ? "notActive" : observed.basis.decision.reason,
+          } } };
+          token = observed.basis.decision.token;
+        }
+        fence = readReviewDecisionFence(binding, token, targetId, call.command.action.expectedRevision) ?? undefined;
+        if (!fence) return stale();
+      } else if (decisionBasis !== undefined) return stale();
+      const command = fence && call.command.action.kind === "decideReview"
+        ? { ...call.command, action: { ...call.command.action, expectedRevision: fence.taskUpdatedAt } }
+        : call.command;
+      const result = await createPlanningReviewPlanningItems(service, fence).run({ ...call, command, actor: actor.actor, mode: "commit" });
       if (result.ok && result.status === "committed") reviewCommitted = true;
       return result;
     },
@@ -370,6 +456,32 @@ export async function authorizePlanning(input: PlanningCredentialInput) {
         if (admissionDenied) return { status: "forbidden" as const };
         throw error;
       }
+    },
+    async loadSprintAssessment(sprintId: string, signal?: AbortSignal) {
+      const context = sprintScopeAccess(signal);
+      if (context.status !== "ready") return { status: context.status };
+      if (!resourceData || !sprintId) return { status: "unavailable" as const };
+      const result = await loadPlanningSprintAssessment(context.guarded, resourceData, context.access, sprintId);
+      return checkSprintPublication(result);
+    },
+    async observeSprintAssessment(sprintId: string, signal?: AbortSignal) {
+      const context = sprintScopeAccess(signal);
+      if (context.status !== "ready") return { status: context.status };
+      if (!resourceData || !sprintId) return { status: "unavailable" as const };
+      const result = await observePlanningSprintAssessment(resourceData, context.access, sprintId);
+      return checkSprintPublication(result);
+    },
+    async loadSprintScope(query: SprintScopedQuery, options?: { signal?: AbortSignal; selectedBasis?: string }): Promise<SprintScopedResult> {
+      const context = sprintScopeAccess(options?.signal);
+      if (context.status !== "ready") return { status: context.status };
+      const result = await loadPlanningSprintTaskScope(context.guarded, context.access, query, options?.selectedBasis);
+      return checkSprintPublication(result);
+    },
+    async loadSprintSelectedProjection(query: SprintScopedQuery, basis: string, options?: { signal?: AbortSignal }): Promise<SprintSelectedProjectionResult> {
+      const context = sprintScopeAccess(options?.signal);
+      if (context.status !== "ready") return { status: context.status };
+      const result = await loadPlanningSprintSelectedProjection(context.guarded, context.access, query, basis);
+      return checkSprintPublication(result);
     },
     async loadSprint() {
       if (action !== "planning.sprint.read" || await current()) return { status: "forbidden" as const };

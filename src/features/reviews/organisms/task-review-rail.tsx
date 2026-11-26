@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Check, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { clearTaskReviewDraft, useTaskReviewDraft } from "@/features/reviews/hooks/use-task-review-draft";
 import { TaskMentionTextArea } from "@/features/tasks/molecules/task-mention-textarea";
 import {
@@ -10,6 +10,7 @@ import {
   reviewDecisionLabels,
   reviewDecisionValidation,
 } from "@/features/reviews/model/task-review-state";
+import type { TaskReviewBasisView } from "@/features/reviews/model/planning-task-review";
 import type { Profile, ReviewDecision, Task, TaskReviewChecklist } from "@/lib/types";
 import { CustomSelect } from "@/shared/atoms/custom-select";
 import { LinkifiedText } from "@/shared/atoms/linkified-text";
@@ -50,6 +51,8 @@ type Props = {
   canWithdraw: boolean;
   canManageReviewOwner: boolean;
   pending: boolean;
+  decisionBasis?: TaskReviewBasisView;
+  onRetryDecisionBasis?: () => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
   onReview: (task: Task, decision: ReviewDecision, score: number, checklist: TaskReviewChecklist, comment: string) => Promise<boolean> | boolean | void;
   onWithdraw: (task: Task, reason: string) => Promise<boolean> | boolean | void;
@@ -78,6 +81,8 @@ export function TaskReviewRail({
   canWithdraw,
   canManageReviewOwner,
   pending,
+  decisionBasis,
+  onRetryDecisionBasis,
   onDirtyChange,
   onReview,
   onWithdraw,
@@ -101,7 +106,34 @@ export function TaskReviewRail({
     return () => onDirtyChange?.(false);
   }, [dirty, onDirtyChange, withdrawReason]);
 
+  const [retryingBasis, setRetryingBasis] = useState(false);
+  const submitButtonId = `review-submit-${task.id}`;
+  async function retryBasis(event: MouseEvent<HTMLButtonElement>) {
+    if (!onRetryDecisionBasis || retryingBasis) return;
+    const trigger = event.currentTarget;
+    setRetryingBasis(true);
+    try {
+      if (await onRetryDecisionBasis() && document.activeElement === trigger) document.getElementById(submitButtonId)?.focus();
+    } finally {
+      setRetryingBasis(false);
+    }
+  }
+
+  const basisStatus = decisionBasis?.readStatus;
+  const exceptionNote = decisionBasis ? decisionBasis.evidence?.exceptionNote : task.reviewEvidenceExceptionNote;
+  const basisBlocked = Boolean(decisionBasis && (basisStatus !== "current" || decisionBasis.blockedReason));
+  const shouldRetry = basisStatus === "stale" || basisStatus === "unavailable" || basisStatus === "forbidden" || Boolean(decisionBasis?.blockedReason);
+  const basisMessage = !decisionBasis || !basisBlocked ? ""
+    : basisStatus === "loading" || basisStatus === "not-loaded" ? "Grundlage für das Review wird geprüft …"
+    : basisStatus === "forbidden" ? "Du darfst dieses Review derzeit nicht abschließen."
+    : basisStatus === "stale" ? "Die Grundlage für das Review ist nicht mehr aktuell."
+    : basisStatus === "unavailable" ? "Die Grundlage für das Review konnte nicht vollständig geprüft werden."
+    : decisionBasis.blockedReason === "sprintLocked" ? "Dieses Review ist durch den Sprint gesperrt."
+    : decisionBasis.blockedReason === "evidenceRequired" ? "Der erforderliche Nachweis für dieses Review fehlt."
+    : "Dieses Review kann im aktuellen Stand nicht abgeschlossen werden.";
+
   const submit = async () => {
+    if (basisBlocked || pending) return;
     if (!draft.decision || !validation.ok) {
       setValidationAttempted(true);
       window.requestAnimationFrame(() => {
@@ -161,13 +193,13 @@ export function TaskReviewRail({
           <p>Die Aufgabe wurde seit Beginn dieses Reviews geändert. Deine Eingaben bleiben erhalten. Prüfe den aktuellen Stand, bevor du sie erneut absendest.</p>
           <UiButton size="lg" className="mt-3" disabled={pending} onClick={()=>setDraft(current=>({...current,expectedUpdatedAt:task.updatedAt}))}>Aktuellen Stand für Review übernehmen</UiButton>
         </UiNotice> : null}
-        {task.reviewEvidenceExceptionNote ? (
+        {exceptionNote ? (
           <UiNotice id="task-review-evidence-exception" tabIndex={-1} tone="warning" className="mt-4">
             <div className="flex items-start gap-2">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
               <div>
                 <div className="font-semibold">Ausnahme beim Nachweis</div>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-5 [overflow-wrap:anywhere]"><LinkifiedText value={task.reviewEvidenceExceptionNote} /></p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-5 [overflow-wrap:anywhere]"><LinkifiedText value={exceptionNote} /></p>
               </div>
             </div>
           </UiNotice>
@@ -298,13 +330,19 @@ export function TaskReviewRail({
             <UiButton
               size="lg"
               variant="primary"
+              id={submitButtonId}
               disabled={pending}
-              aria-describedby={validationMessage ? `review-validation-${task.id}` : undefined}
+              aria-disabled={basisBlocked || undefined}
+              aria-describedby={basisMessage ? `review-basis-${task.id}` : validationMessage ? `review-validation-${task.id}` : undefined}
               onClick={submit}
-              className="mt-3 w-full"
+              className="mt-3 w-full aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             >
               {pending ? "Wird abgeschlossen …" : "Review abschließen"}
             </UiButton>
+            {basisMessage ? <p role="status" id={`review-basis-${task.id}`} className="mt-2 text-sm text-slate-700">{basisMessage}</p> : null}
+            {(shouldRetry || retryingBasis) && onRetryDecisionBasis ? (
+              <UiButton size="lg" variant="secondary" className="mt-2 w-full" disabled={pending} aria-disabled={retryingBasis || undefined} onClick={retryBasis}>Grundlage neu laden</UiButton>
+            ) : null}
           </>
         )}
 

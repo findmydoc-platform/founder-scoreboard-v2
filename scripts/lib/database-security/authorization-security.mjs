@@ -36,8 +36,15 @@ export async function verifyAuthorizationSecurity(client, failures) {
   if (!publication?.present || publication.anonymous_execute || !publication.user_execute || publication.server_execute
     || !publication.definer || !publication.proconfig?.includes('search_path=""')) failures.push("Planning publication context must remain a fixed user-bound fence with an empty search path");
   for (const [signature, userAllowed, definer] of [
+    ["public.platform_release_document_snapshot(text,uuid,text,text)", false, false],
     ["public.planning_release_reference_snapshot(uuid,uuid,text,text,timestamptz,jsonb)", false, true],
     ["public.platform_release_reference_publication_context()", true, true],
+    ["public.planning_sprint_assessment_snapshot(text,text,uuid,uuid,text,timestamptz)", false, true],
+    ["public.planning_sprint_assessment_publication_context(text)", true, true],
+    ["public.planning_sprint_completion_snapshot(text,text,uuid,uuid,timestamptz)", false, true],
+    ["public.planning_sprint_completion_publication_context(text)", true, true],
+    ["public.commit_sprint_completion_basis(text,timestamptz,jsonb,text[],jsonb,jsonb,jsonb,jsonb,jsonb,jsonb,text,text,text,uuid,uuid,timestamptz,timestamptz,text)", false, true],
+    ["workspace_private.advance_external_sprint_completion_revision()", null, true],
     ["workspace_private.release_reference_pr_number(jsonb)", null, false],
     ["workspace_private.advance_release_reference_revision()", null, true],
   ]) {
@@ -51,8 +58,26 @@ export async function verifyAuthorizationSecurity(client, failures) {
       from pg_proc procedure where procedure.oid = to_regprocedure($1)`, [signature])).rows[0];
     if (!entry || entry.anonymous_execute || !entry.public_denied || entry.user_execute !== (userAllowed === true)
       || entry.server_execute !== (userAllowed === false) || entry.definer !== definer || !entry.proconfig?.includes('search_path=""')) {
-      failures.push(`Release reference function violates its fixed execution boundary: ${signature}`);
+      failures.push(`Scoped read function violates its fixed execution boundary: ${signature}`);
     }
+  }
+  for (const [signature, server, definer] of [
+    ["public.planning_sprint_task_scope(text,uuid,uuid,text,timestamptz,text,text,jsonb,integer,text,timestamptz)", true, true],
+    ["public.planning_sprint_selected_matches(text,uuid,uuid,text,timestamptz,text,jsonb,text,timestamptz)", true, true],
+    ["public.planning_sprint_assignment_and_selected_matches(text,uuid,uuid,text,timestamptz,text,jsonb,text,timestamptz,timestamptz,timestamptz)", true, true],
+    ["public.planning_deliverable_review_basis(text,text,uuid,uuid,text,timestamptz)", true, true],
+    ["public.decide_planning_review_from_basis(text,timestamptz,text,uuid,uuid,text,timestamptz,text,timestamptz,text,text,text,jsonb,integer,text[],jsonb,text[],jsonb,text,text)", true, true],
+    ["workspace_private.planning_sprint_task_selection(text,uuid,uuid,text,timestamptz,text,text,jsonb,integer,text,timestamptz,boolean)", false, false],
+  ]) {
+    const sprintScope = (await client.query(`select procedure.prosecdef, procedure.proconfig,
+      has_function_privilege('anon',procedure.oid,'EXECUTE') as anon_execute,
+      has_function_privilege('authenticated',procedure.oid,'EXECUTE') as user_execute,
+      has_function_privilege('service_role',procedure.oid,'EXECUTE') as server_execute,
+      not exists(select 1 from aclexplode(coalesce(procedure.proacl,acldefault('f',procedure.proowner)))
+        where grantee=0 and privilege_type='EXECUTE') as public_denied
+      from pg_proc procedure where procedure.oid=to_regprocedure($1)`, [signature])).rows[0];
+    if (!sprintScope || sprintScope.prosecdef !== definer || !sprintScope.proconfig?.includes('search_path=""') || sprintScope.anon_execute
+      || sprintScope.user_execute || sprintScope.server_execute !== server || !sprintScope.public_denied) failures.push(`Sprint selection violates its execution boundary: ${signature}`);
   }
   const releaseRevision = (await client.query(`select relation.relrowsecurity as rls,
     exists(select 1 from pg_roles as role where role.rolname in ('anon','authenticated','service_role')

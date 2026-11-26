@@ -1,4 +1,6 @@
+import type { BrowserSessionSnapshot } from "@/lib/credentials/browser";
 import type { PlanningShellState, Sprint, Task } from "@/lib/types";
+import type { createSprintCompletionState } from "./sprint-completion-state";
 import type { PlanningReadStatus } from "../planning-state";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import type { SprintLockBasis, SprintLockEditor, SprintLockObservation, SprintLockReceipt, SprintLockResult, SprintLockView } from "@/features/sprint/model/sprint-lock";
@@ -6,13 +8,15 @@ export function createSprintLockState(options: {
     dependenciesPending(basis: SprintLockBasis): boolean;
     active(): boolean;
     generation(): number;
+    actorBinding(): string;
     current(): PlanningShellState;
     changed(): void;
     denied(): boolean;
     nextSequence(): number;
     refresh(): Promise<boolean>;
     readStatus(): PlanningReadStatus;
-    lock?: (basis: SprintLockBasis) => Promise<SprintLockReceipt>;
+    lock?: (basis: SprintLockBasis, completionBasis?: string, expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision">) => Promise<SprintLockReceipt>;
+    completion?: Pick<ReturnType<typeof createSprintCompletionState>, "current" | "load" | "invalidate">;
     observe?: (sprintId: string) => Promise<SprintLockObservation>;
     accept(receipt: SprintLockReceipt, basis: SprintLockBasis, started: number): void;
     plan(input: SprintPlanningOptions): Promise<import("@/features/sprint/model/sprint-plan").SprintPlanResult>;
@@ -34,14 +38,14 @@ export function createSprintLockState(options: {
         views: (id: string) => options.active() ? [...entries.values()].filter(entry => entry.id === id).map(entry => entry.editor.view()) : [],
         resume: (id: string) => [...entries.values()].findLast(entry => entry.id === id && entry.editor.view().submitted)?.editor || null,
         project(data: PlanningShellState) { const saving = new Set([...entries.values()].filter(entry => ["saving", "unconfirmed"].includes(entry.editor.view().phase)).map(entry => entry.id)); return { ...data, sprints: data.sprints.map(sprint => saving.has(sprint.id) ? { ...sprint, status: "closed" as const, scoreLocked: true } : sprint) }; },
-        begin(shown: Sprint, tasks: readonly Task[]): SprintLockEditor {
+        begin(shown: Sprint, tasks: readonly Task[], completionRevision?: number): SprintLockEditor {
             let basis: SprintLockBasis = { sprint: structuredClone(shown), tasks: tasks.map(task => ({ id: task.id, title: task.title, updatedAt: task.updatedAt })) };
             let view: SprintLockView = { sprintId: shown.id, phase: "ready", submitted: null, receipt: null, error: "", projectionRead: "not-loaded", followUp: { phase: "not-started", error: "" }, serverBasis: null, canRelock: false };
-            const generation = options.generation(), key = Symbol(shown.id);
+            const generation = options.generation(), key = Symbol(shown.id), actorBinding = options.actorBinding();
             let closed = false;
             let accessDenied = false;
             let checking: Promise<import("@/features/sprint/model/sprint-lock").SprintLockCheck> | undefined;
-            const active = () => options.active() && generation === options.generation();
+            const active = () => options.active() && generation === options.generation() && actorBinding === options.actorBinding();
             async function prepareFollowingPlan(): Promise<boolean> {
                 if (!active() || !view.receipt || !view.submitted)
                     return false;
@@ -68,6 +72,12 @@ export function createSprintLockState(options: {
                     return { ok: false, kind: "unconfirmed", error: "Der bereits gesendete Sprint-Abschluss wird weiterverfolgt." };
                 if (options.denied() || accessDenied)
                     return { ok: false, kind: "rejected", error: "Kein Zugriff auf den Sprint-Abschluss." };
+                const completion = options.completion?.current(shown.id);
+                if (options.completion && (!completion || completion.revision !== completionRevision || completion.read.decision.status !== "ready")) {
+                    return { ok: false, kind: "rejected", code: "sprint_lock_basis_missing", error: "Prüfe zuerst die aktuelle Grundlage für den Sprint-Abschluss." };
+                }
+                const token = completion?.read.decision.status === "ready" ? completion.read.decision.token : undefined;
+                if (completion) basis = structuredClone(completion.read.basis);
                 if (options.dependenciesPending(basis)) {
                     view = { ...view, phase: "blocked", submitted: structuredClone(input), error: "Eine abhängige Änderung ist noch nicht bestätigt. Der Abschluss wurde nicht gesendet." };
                     options.changed();
@@ -83,7 +93,13 @@ export function createSprintLockState(options: {
                         throw Object.assign(new Error("Lade den Sprint und seine Aufgaben neu, bevor du ihn abschließt."), { status: 400, code: "sprint_lock_basis_missing" });
                     if (!options.lock)
                         throw Object.assign(new Error("Sprint-Abschluss ist nicht verfügbar."), { status: 400 });
-                    const receipt = await options.lock(basis);
+                    if (completion && options.completion?.current(shown.id) !== completion) {
+                        throw Object.assign(new Error("Die Abschlussgrundlage hat sich geändert. Prüfe den aktuellen Stand."), { status: 409, code: "sprint_lock_basis_stale" });
+                    }
+                    const expectedSession = completion?.binding.sessionRevision
+                        ? { userId: completion.binding.userId, revision: completion.binding.sessionRevision }
+                        : undefined;
+                    const receipt = await options.lock(basis, token, expectedSession);
                     if (!active())
                         return { ok: false, kind: "sessionSuperseded", error: "Die Sitzung wurde ersetzt." };
                     if (receipt.sprint.id !== shown.id || !receipt.sprint.scoreLocked || receipt.sprint.status !== "closed")
@@ -107,14 +123,16 @@ export function createSprintLockState(options: {
                         status?: number;
                         code?: string;
                     };
-                    const conflict = failure.code === "sprint_lock_conflict" || failure.code === "sprint_lock_tasks_conflict";
+                    const conflict = failure.code === "sprint_lock_conflict" || failure.code === "sprint_lock_tasks_conflict" || failure.code === "sprint_lock_basis_stale";
+                    if (conflict || failure.status === 401 || failure.status === 403 || !failure.status || failure.status >= 500) options.completion?.invalidate(shown.id);
                     const unknown = !conflict && (failure.status === undefined || failure.status >= 500 || failure.code === "session_superseded");
                     view = { ...view, phase: conflict ? "conflict" : unknown ? "unconfirmed" : "rejected", error: error instanceof Error ? error.message : "Sprint-Abschluss fehlgeschlagen." };
                     options.changed();
                     return { ok: false, kind: conflict ? "versionConflict" : failure.code === "session_superseded" ? "sessionSuperseded" : unknown ? "unconfirmed" : "rejected", error: view.error, code: failure.code };
                 }
             }
-            const editor: SprintLockEditor = { view: () => !active() ? { ...view, phase: "ended", submitted: null, receipt: null, serverBasis: null, canRelock: false, error: "", followUp: { phase: "not-started", error: "" } } : options.denied() || accessDenied ? { ...view, submitted: null, receipt: null, serverBasis: null, canRelock: false } : structuredClone(view), lock, prepareFollowingPlan, checkOutcome() {
+            const editor: SprintLockEditor = { view: () => !active() ? { ...view, phase: "ended", submitted: null, receipt: null, serverBasis: null, canRelock: false, error: "", followUp: { phase: "not-started", error: "" } } : options.denied() || accessDenied ? { ...view, submitted: null, receipt: null, serverBasis: null, canRelock: false } : options.completion && view.serverBasis && options.completion.current(shown.id)?.revision !== completionRevision
+                ? { ...view, serverBasis: null, canRelock: false } : structuredClone(view), lock, prepareFollowingPlan, checkOutcome() {
                     if (!active())
                         return Promise.resolve({ outcome: "session-ended", readStatus: "not-needed" });
                     if (view.phase === "blocked") {
@@ -166,12 +184,18 @@ export function createSprintLockState(options: {
                         checking = undefined; });
                     return checked;
                 }, async refreshConflict() {
-                    if (view.phase !== "conflict" || !active() || !options.observe)
+                    if (view.phase !== "conflict" || !active() || (!options.completion && !options.observe))
                         return false;
                     try {
-                        const observed = await options.observe(shown.id);
-                        if (!active())
+                        if (options.completion) await options.completion.load(shown.id, { refresh: true });
+                        if (!active()) return false;
+                        const completion = options.completion?.current(shown.id);
+                        const observed = options.completion ? completion?.read : await options.observe!(shown.id);
+                        if (!active() || !observed) {
+                            view = { ...view, canRelock: false, serverBasis: null };
+                            options.changed();
                             return false;
+                        }
                         accessDenied = false;
                         if (observed.receipt?.sprint.id === shown.id && observed.receipt.sprint.scoreLocked && observed.receipt.sprint.status === "closed" && observed.basis.sprint.scoreLocked) {
                             options.accept(observed.receipt, basis, options.nextSequence());
@@ -184,7 +208,8 @@ export function createSprintLockState(options: {
                             options.changed();
                             return false;
                         }
-                        const accepted = observed.tasksComplete && !observed.basis.sprint.scoreLocked && Boolean(observed.basis.sprint.updatedAt) && observed.basis.tasks.every(task => task.updatedAt);
+                        const accepted = (!options.completion || completion?.read.decision.status === "ready") && observed.tasksComplete && !observed.basis.sprint.scoreLocked && Boolean(observed.basis.sprint.updatedAt) && observed.basis.tasks.every(task => task.updatedAt);
+                        completionRevision = accepted ? completion?.revision : undefined;
                         view = { ...view, serverBasis: accepted ? structuredClone(observed.basis) : null, canRelock: accepted };
                         options.changed();
                         return accepted;

@@ -16,7 +16,7 @@ import { enumUrlField, stringUrlField, useTableUrlState, type TableUrlSchema } f
 
 import type { SprintScoreRow } from "@/features/sprint/model/sprint-score-table-view-model";
 
-type SprintScoreRows = SprintScoreRow[];
+type SprintScoreRows = readonly SprintScoreRow[];
 
 const scoreFilterSchema: TableUrlSchema<SprintScoreTableFilters> = {
   query: stringUrlField(),

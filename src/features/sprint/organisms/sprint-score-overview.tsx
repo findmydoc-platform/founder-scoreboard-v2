@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SprintControlsSummary } from "@/features/sprint/molecules/sprint-controls-summary";
 import { SprintMeetingAttendanceSection } from "@/features/sprint/molecules/sprint-meeting-attendance-section";
 import { SprintPlanningSection } from "@/features/sprint/molecules/sprint-planning-section";
@@ -13,10 +13,11 @@ import {
   taskHasValidReviewEvidence,
   type ReviewEvidenceSubmission,
 } from "@/features/reviews/model/review-evidence";
-import { buildSprintScoreViewModel } from "@/features/sprint/model/sprint-score-view-model";
+import { buildSprintWorkspaceViewModel } from "@/features/sprint/model/sprint-score-view-model";
 import type { SprintPlanningOptions } from "@/features/sprint/model/sprint-planning-options";
 import { sprintWorkspaceModelToPlanningShellState } from "@/features/sprint/model/sprint-planning-shell-projection";
 import type { PlanningState } from "@/features/planning/model/planning-state";
+import { UiButton, UiNotice, UiPanel } from "@/shared/atoms/ui-primitives";
 import { findCurrentSprint } from "@/lib/planning-schedule";
 import type { Profile, Task, TaskStatus } from "@/lib/types";
 
@@ -49,6 +50,7 @@ export function SprintScoreTableOverview({
   reviewObjectionWindowHours: number;
 }) {
   const sprintView = planningState.sprintWorkspace();
+  const selectedScope = planningState.selectedSprintScope();
   const sprintData = sprintWorkspaceModelToPlanningShellState(sprintView.model);
   const currentSprint = findCurrentSprint(sprintData.sprints);
   const [selectedSprintId, setSelectedSprintId] = useState(currentSprint?.id || "");
@@ -64,18 +66,56 @@ export function SprintScoreTableOverview({
   const {
     sprint,
     sprintTasks,
-    otherTasks,
     unassignedTasks,
-    scoreRows,
     reviewTasks,
     meetings,
     finalScores,
     openScores,
     sprintHasTasks,
     sprintIsCurrent,
-  } = buildSprintScoreViewModel({ data: sprintData, selectedSprintId, coverage: sprintView.model.coverage });
+  } = buildSprintWorkspaceViewModel({ data: sprintData, selectedSprintId });
+  const scopedPage = selectedScope?.page && selectedScope.page.sprintId === sprint?.id ? selectedScope.page : undefined;
+  const membershipCurrent = !selectedScope || Boolean(scopedPage);
   const openObjections = sprintData.scoreObjections.filter((item) => item.sprintId === sprint?.id && item.status === "open");
   const provisionalIds = planningState.sprintPlan().provisionalSprintIds;
+  const assessmentId = sprintView.readStatus !== "forbidden" && sprint && !provisionalIds.includes(sprint.id) ? sprint.id : "";
+  const assessment = planningState.sprintAssessment(assessmentId);
+  const assessmentDemand = useRef<AbortController | null>(null);
+  const assessmentRegion = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!assessmentId) return;
+    let timer: number | undefined;
+    function stop() {
+      assessmentDemand.current?.abort();
+      assessmentDemand.current = null;
+      if (timer !== undefined) window.clearInterval(timer);
+      timer = undefined;
+    }
+    function observe() {
+      const signal = assessmentDemand.current?.signal;
+      if (signal) void planningState.checkSprintAssessment(assessmentId, { signal });
+    }
+    function visible() {
+      if (document.visibilityState === "hidden") { stop(); return; }
+      const started = !assessmentDemand.current;
+      assessmentDemand.current ??= new AbortController();
+      const signal = assessmentDemand.current.signal;
+      const view = planningState.sprintAssessment(assessmentId);
+      if (view.readStatus === "current") observe();
+      else if (started && view.readStatus === "not-loaded") void planningState.loadSprintAssessment(assessmentId, { signal });
+      timer ??= window.setInterval(observe, 60_000);
+    }
+    queueMicrotask(() => { if (mounted) visible(); });
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("online", visible);
+    let mounted = true;
+    return () => {
+      mounted = false;
+      stop();
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("online", visible);
+    };
+  }, [assessmentId, planningState]);
   const sprintPending = pending || provisionalIds.includes(sprint?.id || "");
   const sprintControlsDisabled = sprintPending || !canManageSprint;
   const reviewOwnerName = (task: Task) => task.reviewOwnerProfileId
@@ -122,7 +162,9 @@ export function SprintScoreTableOverview({
         reviewTasksCount={reviewTasks.length}
         finalScores={finalScores}
         openScores={openScores}
-        unassignedTasksCount={unassignedTasks.length}
+        tasksKnown={membershipCurrent}
+        sprintTaskCounts={scopedPage?.sprintTaskCounts}
+        unassignedTasksCount={selectedScope ? scopedPage?.unassignedTotal ?? null : unassignedTasks.length}
         sprintHasTasks={sprintHasTasks}
         sprintIsCurrent={sprintIsCurrent}
         sprintControlsDisabled={sprintControlsDisabled}
@@ -143,12 +185,35 @@ export function SprintScoreTableOverview({
         planningState={planningState}
       />
 
-      <SprintFounderScoreTable
-        sprint={sprint}
-        scoreRows={scoreRows}
-        pending={sprintPending}
-        planningState={planningState}
-      />
+      <section ref={assessmentRegion} aria-label="Sprint-Bewertung" aria-busy={assessment.readStatus === "loading"}>
+        {assessment.readStatus === "current" ? <SprintFounderScoreTable
+          key={sprint.id}
+          sprint={{ ...sprint, scoreLocked: assessment.scoreLocked }}
+          scoreRows={assessment.scoreRows}
+          pending={sprintPending}
+          planningState={planningState}
+        /> : <UiPanel className="space-y-3">
+          <h2 className="font-semibold text-slate-950">FounderOps Score v2.1</h2>
+          <UiNotice role="status" tone="info">
+            {assessment.readStatus === "forbidden" ? "Keine Berechtigung für diese Sprint-Bewertung."
+              : assessment.readStatus === "stale" ? "Die Grundlage der Sprint-Bewertung hat sich geändert."
+              : assessment.readStatus === "unavailable" ? "Die Sprint-Bewertung konnte nicht vollständig geladen werden."
+              : assessmentId ? "Die Grundlage der Sprint-Bewertung wird geladen."
+              : "Die Sprint-Bewertung ist verfügbar, sobald der Sprint bestätigt ist."}
+          </UiNotice>
+          {assessmentId && ["stale", "unavailable", "forbidden"].includes(assessment.readStatus) && <UiButton data-assessment-retry size="lg" onClick={async event => {
+            const trigger = event.currentTarget;
+            const signal = assessmentDemand.current?.signal;
+            if (!signal) return;
+            const ready = await planningState.loadSprintAssessment(assessmentId, { refresh: true, signal });
+            window.requestAnimationFrame(() => {
+              if (signal.aborted || (document.activeElement !== trigger && document.activeElement !== document.body)) return;
+              const selector = ready ? '[aria-label="Founder Score durchsuchen"]' : "[data-assessment-retry]";
+              assessmentRegion.current?.querySelector<HTMLElement>(selector)?.focus();
+            });
+          }}>Sprint-Bewertung neu laden</UiButton>}
+        </UiPanel>}
+      </section>
 
       <SprintMeetingAttendanceSection
         data={sprintData}
@@ -172,7 +237,8 @@ export function SprintScoreTableOverview({
         data={{ ...sprintData, sprints: sprintData.sprints.filter(item => !provisionalIds.includes(item.id)) }}
         sprint={sprint}
         sprintTasks={sprintTasks}
-        otherTasks={otherTasks}
+        planningState={planningState}
+        scopedSelected={Boolean(selectedScope)}
         pending={pending}
         canManageFinalTaskStatus={currentProfile?.platformRole === "ceo"}
         reviewOwnerName={reviewOwnerName}

@@ -20,7 +20,7 @@ import { mapProfile } from "../../planning-profile-mappers";
 import type { HeaderDataSlot, Profile } from "../../types";
 import { planningHeaderSlotLoaders } from "./planning-header-cache";
 import { platformReleaseSeed } from "@/features/platform-releases/model/platform-release-seed";
-import { loadPlatformReleaseContent } from "@/features/platform-releases/server/platform-release-read-model-supabase";
+import { loadPlatformReleaseContent, loadPlatformReleaseDocumentContent } from "@/features/platform-releases/server/platform-release-read-model-supabase";
 import { readPlanningReleaseReferenceSnapshot, type PlanningReleaseKey } from "@/features/planning-items/server/planning-release-reference-read-source";
 import { requiresSupabaseAuth } from "../../supabase-configuration";
 import { settingsPreconditions, governancePreconditions } from "./profile-edit-preconditions";
@@ -191,7 +191,7 @@ export async function authorizeAccount(input: AccountCredentialInput) {
         return { available: false as const, headerData: emptyPlanningHeaderData, calendarProfiles: { ...unavailableProfiles, error: status === 401 || status === 403 ? "Kein Zugriff auf Kalenderprofile." : unavailableProfiles.error } };
       }
     },
-    async readReleaseContent(options?: { version?: string; signal?: AbortSignal }) {
+    async readReleaseContent(options?: { version?: string; detailDocument?: boolean; signal?: AbortSignal }) {
       if (action !== "releases.read") return { status: "forbidden" as const };
       const readAuthority = releaseReadAuthority, readActor = releaseReadActor;
       if (!strictService || !readAuthority || !readActor) {
@@ -205,7 +205,9 @@ export async function authorizeAccount(input: AccountCredentialInput) {
       try {
         assertCurrent();
         if (signal.aborted) return { status: "unavailable" as const };
-        const result = await loadPlatformReleaseContent(strictService, readActor.profileId, { version: options?.version, signal });
+        const result = options?.detailDocument && options.version
+          ? await loadPlatformReleaseDocumentContent(strictService, { userId: readAuthority.userId, ...readActor }, options.version, signal)
+          : await loadPlatformReleaseContent(strictService, readActor.profileId, { version: options?.version, signal });
         if (Date.now() >= readAuthority.deadline) return { status: "forbidden" as const };
         if (result.status !== "ready") return result;
         await current();

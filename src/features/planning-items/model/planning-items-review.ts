@@ -8,6 +8,7 @@ import {
   reviewDecisionTaskState,
   reviewDecisionValidation,
 } from "@/features/reviews/model/task-review-state";
+import type { ReviewDecisionFence } from "../server/planning-deliverable-review-source";
 import { createPlanningItems, type PlanningDecisionCore } from "./planning-items-runner";
 import { createSupabasePlanningItemsStore } from "./planning-items-store-supabase";
 import type {
@@ -761,6 +762,7 @@ function providerError(code: string, request: PlanningCommitRequest<PlanningRevi
   if (code === "P0010") return { ok: false, error: conflict("trashed") };
   if (code === "P0016") return { ok: false, error: conflict("completed") };
   if (code === "P0017") return { ok: false, error: conflict("evidenceRequired") };
+  if (code === "P0021") return { ok: false, error: conflict("staleBasis") };
   if (code === "22023" || code === "23514") return { ok: false, error: invalid("invalidPlanningReview") };
   return null;
 }
@@ -804,9 +806,9 @@ function activities(value: unknown): readonly PlanningReviewActivity[] {
 async function commitReview(
   supabase: PlanningSupabase,
   request: PlanningCommitRequest<PlanningReviewCommitPlan>,
+  fence?: ReviewDecisionFence,
 ): Promise<{ data: PlanningCommitOutcome | null; error: unknown | null }> {
-  const result = await supabase.rpc("mutate_planning_review_command_transaction_v3", {
-    p_action: request.plan.action,
+  const args = {
     p_task_id: request.plan.taskId,
     p_expected_updated_at: request.plan.expectedRevision,
     p_actor_profile_id: request.actor.profileId,
@@ -815,16 +817,22 @@ async function commitReview(
     p_comment: request.plan.comment || null,
     p_checklist: request.plan.checklist,
     p_points: request.plan.points,
-    p_reason: request.plan.reason || null,
-    p_evidence_links: request.plan.evidenceLinks,
-    p_evidence_exception_note: request.plan.evidenceExceptionNote || null,
     p_activity_messages: request.plan.activityMessages,
     p_notifications: request.plan.notifications,
     p_mention_recipient_profile_ids: request.plan.mentionRecipientProfileIds,
     p_audit_after_data: request.plan.auditAfterData,
     p_request_ip: request.requestMetadata?.requestIp || null,
     p_user_agent: request.requestMetadata?.userAgent || null,
-  });
+  };
+  const result = fence && request.plan.action === "decide"
+    ? await supabase.rpc("decide_planning_review_from_basis", {
+      ...args, p_actor_user_id: fence.actor.userId, p_session_id: fence.actor.sessionId, p_platform_role: fence.actor.role,
+      p_deadline: new Date(fence.deadline).toISOString(), p_source_revision: fence.sourceRevision, p_valid_until: fence.validUntil,
+    })
+    : await supabase.rpc("mutate_planning_review_command_transaction_v3", {
+      ...args, p_action: request.plan.action, p_reason: request.plan.reason || null,
+      p_evidence_links: request.plan.evidenceLinks, p_evidence_exception_note: request.plan.evidenceExceptionNote || null,
+    });
   if (result.error) {
     const mapped = providerError(String((result.error as { code?: unknown }).code || ""), request);
     return mapped ? { data: mapped, error: null } : { data: null, error: result.error };
@@ -853,12 +861,12 @@ async function commitReview(
   };
 }
 
-export function createPlanningReviewPlanningItems(supabaseClient: unknown): PlanningItems {
+export function createPlanningReviewPlanningItems(supabaseClient: unknown, fence?: ReviewDecisionFence): PlanningItems {
   const supabase = supabaseClient as PlanningSupabase;
   return createPlanningItems({
     store: createSupabasePlanningItemsStore<PlanningReviewState, PlanningReviewCommitPlan>({
       prepareCommand: (request) => prepareReview(supabase, request),
-      commitCommand: (request) => commitReview(supabase, request),
+      commitCommand: (request) => commitReview(supabase, request, fence),
     }),
     decisionCore: planningReviewDecisionCore,
   });

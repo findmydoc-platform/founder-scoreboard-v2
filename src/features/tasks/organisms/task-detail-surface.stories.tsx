@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { useState, useTransition, useSyncExternalStore } from "react";
 import { useTaskDetailDataLoader } from "@/features/tasks/hooks/use-task-detail-data-loader";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
+import { PlanningBusinessStateContext } from "@/features/planning/hooks/use-planning-business-state";
 import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
 import { expect, fn, userEvent, waitFor, within } from "storybook/test";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
@@ -902,5 +903,84 @@ export const UnknownVoidResultIsNotARejectedReview: Story = {
     await expect(canvas.getByRole("alert")).toHaveTextContent("Unveränderte frühere Meldung.");
     await expect(canvas.queryByRole("button", { name: "Nachweis ergänzen" })).not.toBeInTheDocument();
     await expect(page.queryByRole("heading", { name: "Nachweis vor Review" })).not.toBeInTheDocument();
+  },
+};
+
+const scopedReviewTask = { ...reviewTask, id: "scoped-review-story", updatedAt: "2026-10-28T10:00:00Z" };
+const scopedReviewEvidenceUrl = "https://example.com/verified-sub-issue-evidence";
+let rejectScopedReviewBasis: (() => void) | undefined;
+function ScopedReviewBasisHarness(args: React.ComponentProps<typeof TaskDetailSurface>) {
+  const [opened, setOpened] = useState(false);
+  const [reads, setReads] = useState<string[]>([]);
+  const [owner] = useState(() => {
+    let attempt = 0;
+    const observed = Date.now(), deadline = observed + 60_000;
+    return createPlanningState({
+      userId: "review-story", initialCurrentProfile: args.currentProfile ? { ...args.currentProfile, githubLogin: "" } : null,
+      initialSession: { userId: "review-story", user: { id: "review-story" }, revision: "story-session", expiresAt: 4102444800 },
+      initialData: { ...emptyPlanningShellState, tasks: [scopedReviewTask], profiles },
+      adapter: {
+        saveTask: async () => ({ task: {} }),
+        readWorkspace: async () => { throw new Error("Unrelated Review collection unavailable"); },
+        readTaskReviewBasis: async id => {
+          setReads(current => [...current, id]);
+          if (++attempt === 1) await new Promise<void>((_, reject) => {
+            rejectScopedReviewBasis = () => reject(Object.assign(new Error("Evidence unavailable"), { status: 503 }));
+          });
+          return {
+            taskId: id, taskUpdatedAt: scopedReviewTask.updatedAt, sourceRevision: "review-story-source",
+            evaluatedAt: new Date(observed).toISOString(), validUntil: new Date(deadline).toISOString(),
+            readAuthority: { userId: "review-story", deadline },
+            readActor: { profileId: "sebastian", platformRole: "ceo" },
+            evidence: {
+              status: "present", hasException: false, exceptionNote: null,
+              links: [
+                { taskId: "unloaded-child", title: "Nachweis aus Sub-Issue", kind: "evidence", url: scopedReviewEvidenceUrl },
+                { taskId: "unloaded-child", title: "Nachweis aus Sub-Issue", kind: "github_pull_request", url: "https://github.com/example/review/pull/42",
+                  pullRequest: { repository: "example/review", number: 42, title: "Rendering fix", status: "merged", url: "https://github.com/example/review/pull/42" } },
+              ],
+            },
+            sprintLock: { sprintId: null, locked: false },
+            decision: { status: "allowed", token: "review-story-basis" },
+          };
+        },
+      },
+    });
+  });
+  useSyncExternalStore(owner.planning.subscribe, owner.internal.getSnapshot, owner.internal.getSnapshot);
+  return <PlanningBusinessStateContext.Provider value={owner.planning}>
+    <output aria-label="Geladene Review-Aufgaben">{reads.join(",") || "Keine"}</output>
+    <button type="button" onClick={() => setOpened(true)}>Deliverable zur Prüfung öffnen</button>
+    {opened ? <TaskDetailSurface {...args} task={scopedReviewTask} allTasks={[scopedReviewTask]} subIssues={[]} /> : null}
+  </PlanningBusinessStateContext.Provider>;
+}
+export const ReviewBasisRetryShowsVerifiedEvidence: Story = {
+  args: { task: scopedReviewTask },
+  render: args => <ScopedReviewBasisHarness {...args} />,
+  beforeEach: () => {
+    rejectScopedReviewBasis = undefined;
+    window.sessionStorage.removeItem(`founderops:task-review-draft:v2:${scopedReviewTask.id}:${encodeURIComponent(scopedReviewTask.reviewRequestedAt!)}:sebastian`);
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByLabelText("Geladene Review-Aufgaben")).toHaveTextContent("Keine");
+    await userEvent.click(canvas.getByRole("button", { name: "Deliverable zur Prüfung öffnen" }));
+    await waitFor(() => expect(canvas.getByLabelText("Geladene Review-Aufgaben")).toHaveTextContent(scopedReviewTask.id));
+    const finish = canvas.getByRole("button", { name: "Review abschließen" });
+    await expect(finish).toHaveAttribute("aria-disabled", "true");
+    const draft = canvas.getByRole("textbox", { name: "Review-Kommentar" });
+    await userEvent.type(draft, "Mein Entwurf bleibt");
+    rejectScopedReviewBasis?.();
+    const retry = await canvas.findByRole("button", { name: "Grundlage neu laden" });
+    await expect(draft).toHaveFocus();
+    await expect(finish).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(retry);
+    await expect(await canvas.findByRole("heading", { name: "Nachweis aus Sub-Issue" })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: /verified-sub-issue-evidence/ })).toHaveAttribute("href", scopedReviewEvidenceUrl);
+    await expect(canvas.getByRole("link", { name: /Pull Request example\/review Nummer 42: Rendering fix, Status Gemergt/ })).toBeVisible();
+    await waitFor(() => expect(finish).not.toHaveAttribute("aria-disabled"));
+    await expect(finish).toHaveFocus();
+    await expect(draft).toHaveValue("Mein Entwurf bleibt");
+    await expect(canvas.getByLabelText("Geladene Review-Aufgaben")).toHaveTextContent(`${scopedReviewTask.id},${scopedReviewTask.id}`);
   },
 };

@@ -9,9 +9,11 @@ export function createSprintCommitmentState(options: {
   changed(): void;
   active(): boolean;
   generation(): number;
+  actorBinding(): string;
+  canSave(sprintId: string): boolean;
   nextSequence(): number;
-  refresh(): Promise<boolean>;
-  readStatus(): PlanningReadStatus;
+  refresh(sprintId: string): Promise<boolean>;
+  readStatus(sprintId: string): PlanningReadStatus;
   dependencyPending(sprintId: string): boolean;
   checkDependency(sprintId: string): Promise<unknown>;
   save?: (basis: SprintCommitment, patch: SprintCommitmentPatch) => Promise<SprintCommitmentConfirmation>;
@@ -53,28 +55,59 @@ export function createSprintCommitmentState(options: {
       if (coverage === "complete") completeRead = started;
       return { rows: [...merged.values()], stale };
     },
+    acceptAssessment(rows: readonly SprintCommitment[], started: number) {
+      if (completeRead > started) return undefined;
+      const current = new Map(options.current().sprintCommitments.map(row => [identity(row), row]));
+      for (const row of rows) {
+        const key = identity(row);
+        if (Math.max(stamps.get(key) || 0, readStamps.get(key) || 0) <= started) continue;
+        const newer = current.get(key);
+        if (row.id !== (newer?.id ?? 0) || row.updatedAt !== newer?.updatedAt) return undefined;
+      }
+      for (const row of rows) {
+        const key = identity(row);
+        if (Math.max(stamps.get(key) || 0, readStamps.get(key) || 0) > started) continue;
+        if (row.id === 0) current.delete(key);
+        else current.set(key, row);
+        // Only these participants' rows, including confirmed absence, are covered.
+        readStamps.set(key, started);
+      }
+      return [...current.values()];
+    },
     views: (sprintId: string, profileId: string) => options.active()
       ? [...editors.values()].filter(item => item.key === identity({ sprintId, profileId })).map(item => item.view()) : [],
-    resume(sprintId: string, profileId: string) {
-      return [...editors.values()].findLast(item => item.key === identity({ sprintId, profileId })
-        && ["unconfirmed", "conflict", "blocked", "saving"].includes(item.view().phase))?.resume() || null;
+    resume(sprintId: string, profileId: string, includeHoursDraft = false) {
+      const key = identity({ sprintId, profileId });
+      return [...editors.values()].findLast(item => {
+        if (item.key !== key) return false;
+        const view = item.view();
+        return ["unconfirmed", "conflict", "blocked", "saving"].includes(view.phase)
+          || includeHoursDraft && view.phase === "editing" && view.hoursDraft !== undefined;
+      })?.resume() || null;
     },
     begin(shown: SprintCommitment): SprintCommitmentEditor {
-      const generation = options.generation();
+      const generation = options.generation(), actorBinding = options.actorBinding();
       let closed = false;
-      const active = () => options.active() && generation === options.generation();
+      let hoursDraft: string | null = null;
+      const active = () => options.active() && generation === options.generation() && actorBinding === options.actorBinding();
       const ended = (): SprintCommitmentResult => ({ ok: false, kind: "sessionSuperseded", error: "Die Bearbeitung wurde beendet." });
       let basis = structuredClone(shown);
       let view: SprintCommitmentEditView = { phase: "editing", submitted: null, serverCommitment: null, error: "", canResave: false };
       const key = identity(shown);
       const context = Symbol();
       const readView = () => !active()
-        ? { ...view, phase: "ended" as const, submitted: null, serverCommitment: null, canResave: false } : structuredClone(view);
+        ? { ...view, phase: "ended" as const, submitted: null, serverCommitment: null, canResave: false }
+        : { ...structuredClone(view), ...(hoursDraft === null ? {} : { hoursDraft }) };
       const editor: SprintCommitmentEditor = {
         view: readView,
+        setHoursDraft(value) { if (active() && !closed) hoursDraft = value; },
         save(suppliedPatch) {
           const patch = structuredClone(suppliedPatch);
           if (closed || !active()) return Promise.resolve(ended());
+          if (!options.canSave(basis.sprintId)) {
+            return Promise.resolve({ ok: false, kind: "rejected", error: "Lade zuerst die aktuelle Sprint-Bewertung." });
+          }
+          hoursDraft = null;
           if (uncertain.has(key) || conflicts.has(key) || options.dependencyPending(basis.sprintId)) {
             view = { ...view, phase: "blocked", submitted: patch, error: "Die vorherige Speicherung ist noch nicht bestätigt." };
             options.changed();
@@ -100,6 +133,7 @@ export function createSprintCommitmentState(options: {
             if (!active()) return ended();
             const started = options.nextSequence();
             try {
+              if (!options.canSave(originalBasis.sprintId)) throw Object.assign(new Error("Lade zuerst die aktuelle Sprint-Bewertung."), { status: 409 });
               if (!options.save || (originalBasis.id !== 0 && !originalBasis.updatedAt)) throw Object.assign(new Error("Lade das Commitment neu, bevor du speicherst."), { status: 400 });
               const current = options.current().sprintCommitments.find(row => identity(row) === key);
               if (current?.updatedAt !== originalBasis.updatedAt && (current || originalBasis.id !== 0)) {
@@ -138,10 +172,10 @@ export function createSprintCommitmentState(options: {
         async refreshConflict() {
           if (view.phase !== "conflict" || !active()) return false;
           const started = options.nextSequence();
-          const loaded = await options.refresh();
+          const loaded = await options.refresh(basis.sprintId);
           if (!active()) return false;
           const current = options.current().sprintCommitments.find(row => identity(row) === key);
-          const returned = current ? (readStamps.get(key) || 0) > started : completeRead > started;
+          const returned = (readStamps.get(key) || 0) > started || !current && completeRead > started;
           view = { ...view, serverCommitment: loaded && returned ? current || { ...basis, id: 0, updatedAt: undefined } : null, canResave: Boolean(loaded && returned && (current?.updatedAt || !current)) };
           options.changed();
           return view.canResave;
@@ -158,7 +192,7 @@ export function createSprintCommitmentState(options: {
             if (!active()) return { outcome: "session-ended", readStatus: "not-needed" } as const;
             if (!options.dependencyPending(basis.sprintId)) view = { ...view, phase: "editing", error: "" };
             options.changed();
-            return { outcome: "unconfirmed", readStatus: options.readStatus() } as const;
+            return { outcome: "unconfirmed", readStatus: options.readStatus(basis.sprintId) } as const;
           });
           if (!uncertain.has(key)) {
             if (view.phase === "blocked" && !conflicts.has(key)) { view = { ...view, phase: "editing", error: "" }; options.changed(); }
@@ -170,9 +204,9 @@ export function createSprintCommitmentState(options: {
           view = { ...view, checkStatus: "checking" };
           options.changed();
           const check = (async (): Promise<PlanningTaskSaveCheck> => {
-            await options.refresh();
+            await options.refresh(basis.sprintId);
             if (!active()) return { outcome: "session-ended", readStatus: "not-needed" };
-            const status = options.readStatus();
+            const status = options.readStatus(basis.sprintId);
             const current = options.current().sprintCommitments.find(row => identity(row) === key);
             view = { ...view, checkStatus: status === "forbidden" ? "forbidden" : status === "unavailable" ? "unavailable" : "checked", serverCommitment: current && (readStamps.get(key) || 0) > started ? structuredClone(current) : null };
             options.changed();
@@ -182,7 +216,7 @@ export function createSprintCommitmentState(options: {
           void check.then(() => { if (checks.get(key) === check) checks.delete(key); });
           return check;
         },
-        close() { closed = true; if (!view.submitted) editors.delete(context); },
+        close() { closed = true; if (!view.submitted && hoursDraft === null) editors.delete(context); },
       };
       editors.set(context, { key, view: readView, resume: () => { closed = false; return editor; }, releaseBlocked() { if (view.phase === "blocked") view = { ...view, phase: "editing", error: "" }; } });
       return editor;

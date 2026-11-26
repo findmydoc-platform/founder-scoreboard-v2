@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
-import { createPlanningState } from "@/features/planning/model/internal/planning-state-owner";
+import { createPlanningState, type PlanningStateAdapter } from "@/features/planning/model/internal/planning-state-owner";
 import { emptyPlanningShellState } from "@/features/planning/model/planning-shell-state";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import type { SprintCompletionRead } from "@/features/sprint/model/sprint-completion-read";
 import type { SprintLockReceipt } from "@/features/sprint/model/sprint-lock";
 const sprint = { id: "sprint", name: "Sprint 1", status: "review" as const, startDate: "2020-01-01", endDate: "2020-01-14", reviewDueAt: "2020-01-16T22:59:59Z", scoreLocked: false, updatedAt: "opaque/shown" };
 const task = taskDetailStoryTask({ id: "member", parentTaskId: "initiative", assigneeId: "founder", sprintId: sprint.id, updatedAt: "task/shown", scoreFinal: false });
@@ -102,4 +103,218 @@ test.each([["sprint_lock_objections","rejected"],["sprint_lock_window","rejected
  expect(owner.planning.taskDetail(independent.id).task?.title).toBe("Independent confirmation");
  expect(owner.planning.protectedCache()?.sprints[0].scoreLocked).toBe(false);
  expect(owner.planning.sprintWorkspace().model.sprints[0].scoreLocked).toBe(phase==="unconfirmed");
+});
+
+test("a partial Sprint task table cannot dispatch a completion before its action-specific foundation is shown", async () => {
+    let writes = 0;
+    const date = Date.parse("2026-11-21T12:00:00Z");
+    const owner = createPlanningState({
+        userId: "user",
+        initialWorkspace: "sprint",
+        initialCurrentProfile: { id: "completion-owner", name: "Completion owner", platformRole: "ceo", githubLogin: "" },
+        initialSession: { userId: "user", user: { id: "user" }, revision: "session", expiresAt: date / 1000 + 120 },
+        initialData: initial,
+        adapter: {
+            now: () => date,
+            saveTask: async () => ({ task: {} }),
+            readWorkspace: async () => null,
+            readSprintCompletion: async () => { throw Object.assign(new Error("Completion foundation unavailable"), { status: 503 }); },
+            lockSprint: async () => { writes++; return receipt; },
+        },
+    });
+
+    try {
+        const editor = owner.planning.beginSprintLock(sprint, [task]);
+        await expect(editor.lock(options)).resolves.toMatchObject({ ok: false });
+        expect(writes).toBe(0);
+        expect(owner.planning.sprintWorkspace().model.sprints[0].scoreLocked).toBe(false);
+        expect(owner.planning.taskDetail(independent.id).task?.id).toBe(independent.id);
+    } finally { owner.internal.dispose(); }
+});
+
+const completionNow = Date.parse("2026-11-21T12:00:00Z");
+const completionProfile = { id: "completion-owner", name: "Completion owner", platformRole: "ceo" as const, githubLogin: "" };
+const completionSession = { userId: "user", user: { id: "user" }, revision: "session", expiresAt: completionNow / 1000 + 120 };
+const offpage = { id: "offpage", title: "Outside the visible Sprint page", updatedAt: "task/offpage" };
+const completionRead: SprintCompletionRead = {
+    sprintId: sprint.id, sourceRevision: "source/first", readActor: { profileId: completionProfile.id, platformRole: "ceo" },
+    readAuthority: { userId: completionSession.userId, deadline: completionNow + 60_000 },
+    evaluatedAt: new Date(completionNow).toISOString(), validUntil: new Date(completionNow + 30_000).toISOString(),
+    basis: { sprint: { ...sprint, updatedAt: "sprint/verified" }, tasks: [{ id: task.id, title: task.title, updatedAt: "task/verified" }, offpage] },
+    tasksComplete: true, receipt: null, decision: { status: "ready", token: "completion/bound" },
+    reviewDueAt: sprint.reviewDueAt, openObjections: 0, nextSprintId: "next",
+};
+
+function completionOwner(adapter: Partial<PlanningStateAdapter>) {
+    return createPlanningState({
+        userId: completionSession.userId, initialWorkspace: "sprint", initialCurrentProfile: completionProfile,
+        initialSession: completionSession, initialData: initial,
+        adapter: {
+            now: () => completionNow,
+            saveTask: async () => ({ task: {} }),
+            readWorkspace: async () => null,
+            readSprintCompletion: async () => completionRead,
+            ...adapter,
+        },
+    });
+}
+
+async function loadCompletion(owner: ReturnType<typeof completionOwner>) {
+    expect(await owner.planning.loadSprintCompletion(sprint.id)).toBe(true);
+    const view = owner.planning.sprintCompletion(sprint.id);
+    if (view?.readStatus !== "current") throw new Error("Expected a current completion basis");
+    return view;
+}
+
+test("only the displayed Sprint foundation can submit its exact revisions, including off-page members", async () => {
+    const writes: unknown[] = [];
+    let reads = 0;
+    const owner = completionOwner({
+        readSprintCompletion: async () => { reads++; return completionRead; },
+        lockSprint: async (basis, token, expectedSession) => { writes.push({ basis, token, expectedSession }); return receipt; },
+    });
+    try {
+        const before = owner.planning.beginSprintLock(sprint, [task]);
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual({ readStatus: "not-loaded" });
+        expect(reads).toBe(0);
+        const shown = await loadCompletion(owner);
+        expect(shown).toMatchObject({ basis: completionRead.basis, nextSprintId: "next" });
+        expect(JSON.stringify(shown)).not.toContain("completion/bound");
+        await expect(before.lock(options)).resolves.toMatchObject({ ok: false });
+        expect(writes).toEqual([]);
+        await expect(owner.planning.beginSprintLock(sprint, [task], shown.revision).lock(options)).resolves.toMatchObject({ ok: true });
+        expect(writes).toEqual([{ basis: completionRead.basis, token: "completion/bound",
+            expectedSession: { userId: completionSession.userId, revision: completionSession.revision } }]);
+        expect(reads).toBe(1);
+        expect(owner.planning.taskDetail(independent.id).task?.id).toBe(independent.id);
+    } finally { owner.internal.dispose(); }
+});
+
+test.each(["source changed", "original deadline elapsed"] as const)("confirmed metadata cannot authorize a write when %s", async reason => {
+    let now = completionNow;
+    let writes = 0;
+    const owner = completionOwner({
+        now: () => now,
+        observeSprintCompletion: async () => ({
+            sprintId: sprint.id, sourceRevision: reason === "source changed" ? "source/replaced" : completionRead.sourceRevision,
+            readActor: completionRead.readActor, readAuthority: { userId: completionSession.userId, deadline: completionNow + 100_000 },
+        }),
+        lockSprint: async () => { writes++; return receipt; },
+    });
+    try {
+        const shown = await loadCompletion(owner);
+        const editor = owner.planning.beginSprintLock(sprint, [task], shown.revision);
+        const sameSource = reason !== "source changed";
+        expect(await owner.planning.checkSprintCompletion(sprint.id)).toBe(sameSource);
+        if (sameSource) now += 30_000;
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual({ readStatus: "stale" });
+        await expect(editor.lock(options)).resolves.toMatchObject({ ok: false });
+        expect(writes).toBe(0);
+    } finally { owner.internal.dispose(); }
+});
+
+test("a late completion basis after a session change cannot recover the older editor or authorize a write", async () => {
+    const pending = deferred<SprintCompletionRead>();
+    let reads = 0;
+    let writes = 0;
+    let oldSignal: AbortSignal | undefined;
+    const owner = completionOwner({
+        readSprintCompletion: async (_id, { signal }) => {
+            if (++reads === 1) { oldSignal = signal; return pending.promise; }
+            return { ...completionRead, sourceRevision: "source/new-session" };
+        },
+        lockSprint: async () => { writes++; return receipt; },
+    });
+    try {
+        const oldEditor = owner.planning.beginSprintLock(sprint, [task]);
+        const oldLoad = owner.planning.loadSprintCompletion(sprint.id);
+        await Promise.resolve();
+        owner.internal.bindSession({ ...completionSession, revision: "session/replaced" });
+        pending.resolve(completionRead);
+        await expect(oldLoad).resolves.toBe(false);
+        expect(oldSignal?.aborted).toBe(true);
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual({ readStatus: "not-loaded" });
+        await expect(oldEditor.lock(options)).resolves.toMatchObject({ ok: false, kind: "sessionSuperseded" });
+        expect(writes).toBe(0);
+    } finally { owner.internal.dispose(); }
+});
+
+test("a stale write compares a fresh scoped basis and an uncertain write checks only its durable receipt", async () => {
+    const changes = { ...completionRead, basis: { ...completionRead.basis, tasks: [{ ...offpage, updatedAt: "offpage/new" }] }, sourceRevision: "source/new", decision: { status: "ready" as const, token: "completion/fresh" } };
+    const tokens: unknown[] = [];
+    let scopedReads = 0, legacyReads = 0;
+    const owner = completionOwner({
+        readSprintCompletion: async () => ++scopedReads === 1 ? completionRead : changes,
+        lockSprint: async (basis, token) => {
+            tokens.push({ basis, token });
+            if (tokens.length === 1) throw Object.assign(new Error("stale"), { status: 409, code: "sprint_lock_basis_stale" });
+            throw new Error("response lost");
+        },
+        readSprintLock: async () => {
+            legacyReads++;
+            return { basis: { sprint: { ...sprint, scoreLocked: true }, tasks: [] }, tasksComplete: false, receipt };
+        },
+    });
+    try {
+        const shown = await loadCompletion(owner);
+        const editor = owner.planning.beginSprintLock(sprint, [task], shown.revision);
+        await expect(editor.lock(options)).resolves.toMatchObject({ kind: "versionConflict" });
+        expect(editor.view()).toMatchObject({ phase: "conflict", canRelock: false });
+        expect({ scopedReads, legacyReads }).toEqual({ scopedReads: 1, legacyReads: 0 });
+        await expect(editor.refreshConflict()).resolves.toBe(true);
+        expect(editor.view()).toMatchObject({ serverBasis: changes.basis, canRelock: true });
+        expect(tokens).toHaveLength(1);
+        await expect(editor.relock(options)).resolves.toMatchObject({ kind: "unconfirmed" });
+        await expect(editor.lock(options)).resolves.toMatchObject({ kind: "unconfirmed" });
+        expect({ scopedReads, legacyReads }).toEqual({ scopedReads: 2, legacyReads: 0 });
+        await expect(editor.checkOutcome()).resolves.toMatchObject({ outcome: "confirmed" });
+        expect(legacyReads).toBe(1);
+        expect(editor.view()).toMatchObject({ phase: "locked", receipt });
+        expect(tokens).toEqual([
+            { basis: completionRead.basis, token: "completion/bound" },
+            { basis: changes.basis, token: "completion/fresh" },
+        ]);
+    } finally { owner.internal.dispose(); }
+});
+
+test.each(["partial blocked basis", "wrong Sprint", "denied"] as const)("an invalid completion read (%s) publishes no row or false count and leaves unrelated work available", async reason => {
+    const owner = completionOwner({
+        readSprintCompletion: async () => {
+            if (reason === "denied") throw Object.assign(new Error("Denied"), { status: 403 });
+            if (reason === "wrong Sprint") return { ...completionRead, sprintId: "other" };
+            return { ...completionRead, decision: { status: "blocked", reason: "reviewWindow" }, tasksComplete: false };
+        },
+        saveTask: async (_task, patch) => ({ task: { ...patch, updatedAt: "other/confirmed" } }),
+    });
+    try {
+        await expect(owner.planning.loadSprintCompletion(sprint.id)).resolves.toBe(false);
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual({ readStatus: reason === "denied" ? "forbidden" : "unavailable" });
+        await expect(owner.planning.saveTask(independent, { title: "Independent after denied completion" })).resolves.toMatchObject({ ok: true });
+        expect(owner.planning.taskDetail(independent.id).task?.title).toBe("Independent after denied completion");
+    } finally { owner.internal.dispose(); }
+});
+
+test("closing a completion demand aborts its request and a late result cannot replace a later explicit read", async () => {
+    const pending = deferred<SprintCompletionRead>();
+    let reads = 0;
+    let activeSignal: AbortSignal | undefined;
+    const owner = completionOwner({
+        readSprintCompletion: async (_id, { signal }) => {
+            if (++reads === 1) { activeSignal = signal; return pending.promise; }
+            return completionRead;
+        },
+    });
+    try {
+        const controller = new AbortController();
+        const oldRead = owner.planning.loadSprintCompletion(sprint.id, { signal: controller.signal });
+        await Promise.resolve();
+        controller.abort();
+        expect(activeSignal?.aborted).toBe(true);
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual({ readStatus: "not-loaded" });
+        const displayed = await loadCompletion(owner);
+        pending.resolve({ ...completionRead, basis: { ...completionRead.basis, tasks: [offpage] } });
+        await expect(oldRead).resolves.toBe(false);
+        expect(owner.planning.sprintCompletion(sprint.id)).toEqual(displayed);
+        expect(reads).toBe(2);
+    } finally { owner.internal.dispose(); }
 });

@@ -19,10 +19,11 @@ type BrowserApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   json?: unknown;
   jsonContentType?: boolean;
   useDevProfileOverride?: boolean;
+  replayInvalidSession?: boolean;
   expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision"> & { isCurrent?: () => boolean };
 };
 
-type BrowserApiBlobOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType">;
+type BrowserApiBlobOptions = Omit<BrowserApiRequestOptions, "json" | "jsonContentType" | "replayInvalidSession">;
 type BrowserApiFormOptions = BrowserApiBlobOptions & { expectedSession?: Pick<BrowserSessionSnapshot, "userId" | "revision"> & { isCurrent?: () => boolean } };
 type BrowserApiInput = string | URL;
 
@@ -61,6 +62,7 @@ export function createBrowserApiClient({
       jsonContentType = true,
       useDevProfileOverride = true,
       expectedSession,
+      replayInvalidSession = true,
       ...requestInit
     } = options;
     const headers = new Headers(requestHeaders);
@@ -79,7 +81,7 @@ export function createBrowserApiClient({
     return {
       expectedSession,
       callerAuthorization: headers.has("authorization"),
-      replayAllowed: method === "GET" || method === "HEAD" || typeof body === "string",
+      replayAllowed: replayInvalidSession && (method === "GET" || method === "HEAD" || typeof body === "string"),
       requestInit: { ...requestInit, body, headers, method },
     };
   }

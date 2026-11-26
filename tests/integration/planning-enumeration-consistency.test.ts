@@ -19,6 +19,8 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
   let sourceTransports = 0;
   let summaryOutcomes: string[] = [];
   let failFence = false;
+  let captureCancelledAvatar = false;
+  let cancelledAvatar: { signal?: AbortSignal; read: Promise<unknown> } | undefined;
   try {
     await fixture.mode("linking");
     createdProject = (await fixture.database.query("insert into public.projects(id,name) values('findmydoc-founder-execution','Synthetic Planning') on conflict(id) do nothing returning id")).rowCount === 1;
@@ -69,17 +71,32 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
       if (beforeFence && url.pathname === "/rest/v1/task_links" && Number(url.searchParams.get("offset")) > 0) revokeBeforeLiveCheck = true;
       return response;
     });
+    vi.doMock("@/features/planning-items/server/workspace-profile-avatars", async importOriginal => {
+      const original = await importOriginal<typeof import("@/features/planning-items/server/workspace-profile-avatars")>();
+      return { ...original, withWorkspaceProfileAvatars(...args: Parameters<typeof original.withWorkspaceProfileAvatars>) {
+        const pending = original.withWorkspaceProfileAvatars(...args);
+        if (captureCancelledAvatar) cancelledAvatar = { signal: args[2], read: pending };
+        return pending;
+      } };
+    });
     const { GET } = await importTestModule("src/app/api/planning-board-data/route.ts", { "server-only": {} });
     const actor = await fixture.actor("viewer");
     vi.stubEnv("VERCEL_OIDC_TOKEN", actor.session.access_token);
     const base = `sb-${new URL(fixture.local.API_URL).hostname.split(".")[0]}-auth-token`;
-    const read = async (scope: object = { view: "complete" }) => {
+    const read = async (scope: object = { view: "complete" }, waitForCancelledAvatar = false) => {
       await new Promise(resolve => setTimeout(resolve, 250));
       revokeBeforeLiveCheck = false;
       snapshotTransports = 0; sourceTransports = 0; summaryOutcomes = [];
+      captureCancelledAvatar = waitForCancelledAvatar;
       const response = await GET(new NextRequest(`https://application.example.test/api/planning-board-data?scope=${encodeURIComponent(JSON.stringify(scope))}`, {
         headers: { cookie: `${base}=base64-${Buffer.from(JSON.stringify(actor.session)).toString("base64url")}` },
       }));
+      captureCancelledAvatar = false;
+      if (waitForCancelledAvatar) {
+        // The stale response can return while the cancelled supporting read releases its permit.
+        expect(cancelledAvatar?.signal?.aborted).toBe(true);
+        await cancelledAvatar?.read;
+      }
       expect((await fixture.database.query("select count(*)::integer as remaining from workspace_private.request_permits where user_id=$1", [actor.userId])).rows[0].remaining).toBe(0);
       return response;
     };
@@ -106,7 +123,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
     expect(mutations).toBe(2);
 
     mutation = { table: "active_tasks", run: () => fixture.database.query("update public.tasks set sort_order=5500 where id=$1", [`${prefix}-0004`]) };
-    const incompatibleInitial = await read({ view: "board", filters: {} });
+    const incompatibleInitial = await read({ view: "board", filters: {} }, true);
     const unavailable = await incompatibleInitial.json();
     expect(summaryOutcomes).toEqual(["staleContinuation"]);
     expect(sourceTransports).toBe(0);
@@ -148,6 +165,7 @@ it("complete enumeration and selected SQL reads reject source shifts at their ac
     expect(beforeFence).toBeUndefined();
     expect(snapshotTransports).toBe(1);
   } finally {
+    vi.doUnmock("@/features/planning-items/server/workspace-profile-avatars");
     vi.unstubAllGlobals(); vi.unstubAllEnvs();
     await fixture.database.query("begin");
     await fixture.database.query("select set_config('founderops.trash_lifecycle_write','on',true)");

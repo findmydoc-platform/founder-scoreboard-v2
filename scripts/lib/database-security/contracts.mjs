@@ -18,6 +18,8 @@ export const authenticatedFunctionAllowlist = Object.freeze([
   "public.current_platform_role()",
   "public.current_authenticated_profile()",
   "public.planning_board_publication_context()",
+  "public.planning_sprint_assessment_publication_context(p_sprint_id text)",
+  "public.planning_sprint_completion_publication_context(p_sprint_id text)",
   "public.notification_publication_context()",
   "public.platform_release_reference_publication_context()",
   "public.planning_detail_publication_context(p_item_id text, p_area text)",

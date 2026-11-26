@@ -151,8 +151,13 @@ it("sprint, governance, Focus and Weekly operations preserve lead and owner dist
   if (!lock.ok) throw new Error("Expected CEO sprint lock capability");
   const observed = await lock.planning.readSprintLock();
   expect(observed.error).toBeNull();
-  const values = { expectedUpdatedAt: observed.data.updated_at, taskUpdates: [], acceptedBlockerTaskIds: [], carryoverInserts: [], notifications: [], scoreRows: [], strikeStateRows: [], strikeEvents: [], resultData: { source: "synthetic acceptance" } };
+  const values = { expectedUpdatedAt: observed.data.updated_at, expectedTasks: [], taskUpdates: [], acceptedBlockerTaskIds: [], carryoverInserts: [], notifications: [], scoreRows: [], strikeStateRows: [], strikeEvents: [], resultData: { source: "synthetic acceptance" } };
+  expect((await lock.planning.prepareSprintCompletion()).status).toBe("ready");
   expect((await lock.planning.commitSprintLock({ ...values, taskUpdates: [{ id: task }] }, {})).error?.code).toBe("42501");
-  expect((await lock.planning.commitSprintLock(values, {})).error).toBeNull();
+  const route = await importTestModule("src/app/api/sprints/[id]/lock/route.ts", { "server-only": {} });
+  const result = await route.POST(f.request("ceo", `/api/sprints/${sprint}/lock`, "POST", {
+    expectedUpdatedAt: observed.data.updated_at, expectedTasks: [],
+  }), { params: Promise.resolve({ id: sprint }) });
+  expect(result.status).toBe(200);
   expect((await f.db.query("select score_locked from public.sprints where id=$1", [sprint])).rows[0].score_locked).toBe(true);
 }), 30_000);

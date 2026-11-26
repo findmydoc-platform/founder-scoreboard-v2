@@ -8,6 +8,8 @@ import { emptyPlanningShellState } from "./model/planning-shell-state";
 import { emptyPlanningHeaderData, readyHeaderSlot } from "@/lib/planning-header-data";
 import type { FmdTool, FounderEvent, NotificationEvent, Profile, Sprint } from "@/lib/types";
 import { taskDetailStoryTask } from "@/features/tasks/molecules/task-detail-story-fixtures";
+import { DEFAULT_SPRINT_TASK_FILTERS } from "@/features/sprint/model/sprint-task-table-view-model";
+import type { SprintScopedPage } from "@/features/sprint/model/sprint-scoped-read";
 import type { SprintWorkspaceModel } from "@/features/sprint/model/sprint-read-model";
 import { mockAccountLifecycle } from "../../../tests/helpers/account-lifecycle-browser-fixture";
 import { productUpdates } from "@/features/product-updates/model/product-update-registry";
@@ -27,7 +29,22 @@ const sprints: Sprint[] = [
   { id: "workspace-sprint-2", name: "Sprint 2", startDate: "2099-01-15", endDate: "2099-01-28", reviewDueAt: "", scoreLocked: false, status: "planning", updatedAt: "r1" },
 ];
 const sprintTask = taskDetailStoryTask({ id: "workspace-task", title: "Sprint-Aufgabe", sprintId: sprints[0].id });
-const sprintModel: SprintWorkspaceModel = { revision: "sprint", project: emptyPlanningShellState.project, people: [profile], items: [sprintTask], sprints, commitments: [], scores: [], strikeStates: [], strikeEvents: [], objections: [], meetings: [], attendance: [] };
+const assignmentTask = taskDetailStoryTask({ id: "workspace-offpage-assignment", title: "Später Zuweisungskandidat", sprintId: sprints[1].id });
+let assignmentRequests = 0;
+let projectedSprintRequests = 0;
+let fullSprintRequests = 0;
+let jointSprintRequests = 0;
+let projectionGate = Promise.withResolvers<void>();
+let releaseAssignment = () => {};
+const sprintFixtureTime = Date.now();
+const sprintFixtureAuthority = { userId: user.id, deadline: sprintFixtureTime + 240_000 };
+const sprintFixtureActor = { profileId: profile.id, platformRole: profile.platformRole };
+const sprintStorySession = { user, userId: user.id, revision: "workspace-session", expiresAt: Math.floor(sprintFixtureTime / 1000) + 3600 };
+const scopedSprintPage = (sprintId: string, items = [sprintTask]): SprintScopedPage => ({ scope: "selected", sprintId, items, context: [], matchedTotal: items.length,
+  scopeTotal: items.length, continuation: null, sourceRevision: "sprint-story-source", evaluatedAt: new Date(sprintFixtureTime - 1).toISOString(),
+  validUntil: new Date(sprintFixtureTime + 240_000).toISOString(), unassignedTotal: 0, sprintTaskCounts: { [sprints[0].id]: 1, [sprints[1].id]: 1 }, assignmentTargetsByItemId: {} });
+let selectedSprintGate = Promise.withResolvers<void>();
+const sprintModel: SprintWorkspaceModel = { revision: "sprint-story-source", project: emptyPlanningShellState.project, people: [profile], items: [sprintTask], sprints, commitments: [], scores: [], strikeStates: [], strikeEvents: [], objections: [], meetings: [], attendance: [] };
 const tool: FmdTool = { id: "workspace-tool", name: "Teamhandbuch", category: "tool", kind: "Werkzeuge", description: "Gemeinsame Dokumentation", url: "https://example.com/handbook", owner: "Team", status: "active", isCurated: false, previewImageUrl: "", previewImageSource: "none", sortOrder: 10, updatedAt: "r1" };
 const pendingNotification: NotificationEvent = { id: 1, type: "sprint_update", actorProfileId: profile.id, actorLabel: profile.name, recipientProfileId: profile.id, entityType: "sprint", entityId: sprints[0].id, title: "Offener Hinweis", body: "Bitte prüfe den Sprint.", targetPath: "/sprint", status: "pending", seenAt: "", dismissedAt: "", resolvedAt: "", resolutionReason: "", createdAt: "2099-01-01T10:00:00Z" };
 const doneNotification: NotificationEvent = { ...pendingNotification, id: 2, title: "Abgeschlossener Hinweis", status: "dismissed", dismissedAt: "2099-01-02T10:00:00Z" };
@@ -64,6 +81,13 @@ const meta = {
     initialProtectedDataLoaded: true,
   },
   beforeEach: ({ args }) => {
+    assignmentRequests = 0;
+    projectedSprintRequests = 0;
+    fullSprintRequests = 0;
+    jointSprintRequests = 0;
+    projectionGate = Promise.withResolvers<void>();
+    releaseAssignment = () => {};
+    selectedSprintGate = Promise.withResolvers<void>();
     const access = args.initialAdministratorAccess || inactiveAdministratorAccess;
     const capabilities = sessionAuthority({ platformRole: args.initialCurrentProfile?.platformRole || "viewer", credentialKind: "session", administratorAccess: access }).capabilities;
     const seenKey = `founderops.product-updates.seen.${profile.id}`;
@@ -72,7 +96,7 @@ const meta = {
     const notificationReceiptTime = Date.now();
     const restore = mockAccountLifecycle("google", { linked: true, workspaceEmail: "mara@example.com" }, (input, init) => {
     const url = new URL(String(input), window.location.origin), path = url.pathname;
-    if (path === "/api/auth/session") return Response.json({ session: { user, userId: user.id, revision: "workspace-session", expiresAt: Math.floor(Date.now() / 1000) + 3600 } });
+    if (path === "/api/auth/session") return Response.json({ session: sprintStorySession });
     if (path === "/api/administrator-access") return init?.method && init.method !== "GET" ? Response.json({ error: "This fixture does not activate administrator access" }, { status: 403 }) : Response.json({ administratorAccess: access });
     if (path === "/api/administration-data") return capabilities.manageAdministratorEligibility ? Response.json({ administration: { ...administrationStoryModel, capabilities, people: [], notificationEvents: [], notificationDeliveries: [] } }) : Response.json({ error: "Kein Zugriff", code: "administrator_access_required" }, { status: 403 });
     if (path === "/api/planning-header-data") return Response.json({ headerData, readAuthority: { userId: user.id, deadline: Date.now() + 60_000 } });
@@ -92,6 +116,39 @@ const meta = {
     }
     if (path === "/api/decision-log") return Response.json({ result: { ...decisionLog, fetchedAt: "2099-01-02T10:00:00Z" } });
     if (path === "/api/profile-data") return Response.json({ model: { revision: "profile", people: args.initialData.profiles, project: args.initialData.project, initiatives: [], notificationPreferences: [], preferences: [] } });
+    if (path === "/api/sprint-data" && url.searchParams.get("scope") === "selected") {
+      const selected = url.searchParams.get("sprintId");
+      if (url.searchParams.get("projection") === "matches") {
+        projectedSprintRequests += 1;
+        if (url.searchParams.get("basis") !== "document-selected-basis") return Response.json({ error: "Unexpected selected basis" }, { status: 400 });
+        const { evaluatedAt, validUntil, sourceRevision } = scopedSprintPage(sprints[0].id);
+        return projectionGate.promise.then(() => Response.json({ projection: "matches", sprintId: sprints[0].id,
+          matchedIds: [], matchedTotal: 0, scopeTotal: 1, sourceRevision, evaluatedAt, validUntil,
+          readActor: sprintFixtureActor, readAuthority: sprintFixtureAuthority }));
+      }
+      fullSprintRequests += 1;
+      const id = selected === sprints[1].id ? sprints[1].id : sprints[0].id;
+      const item = selected === sprints[1].id ? assignmentTask : sprintTask;
+      const result = () => Response.json({ model: { ...sprintModel, items: [item], coverage: { sprints: "complete", items: "partial" } },
+        page: scopedSprintPage(id, [item]), readActor: sprintFixtureActor, readAuthority: sprintFixtureAuthority });
+      if (selected === sprints[1].id) return selectedSprintGate.promise.then(result);
+      return result();
+    }
+    if (path === "/api/sprint-data" && url.searchParams.get("scope") === "assignment") {
+      assignmentRequests += 1;
+      const joint = url.searchParams.get("selectedBasis") === "document-selected-basis";
+      if (joint) jointSprintRequests += 1;
+      const page = scopedSprintPage(sprints[0].id);
+      return new Promise<Response>(resolve => { releaseAssignment = () => resolve(Response.json({
+        ...(joint ? { selected: { status: "ready", read: { projection: "matches", sprintId: page.sprintId, matchedIds: [],
+          matchedTotal: 0, scopeTotal: 1, sourceRevision: page.sourceRevision, evaluatedAt: page.evaluatedAt, validUntil: page.validUntil,
+          readActor: sprintFixtureActor, readAuthority: sprintFixtureAuthority } } } : {}),
+        page: { scope: "assignment", sprintId: sprints[0].id, items: [assignmentTask], context: [], matchedTotal: 1, scopeTotal: 1, continuation: null,
+          unassignedTotal: null, sprintTaskCounts: null, assignmentTargetsByItemId: { [assignmentTask.id]: [sprints[0].id] },
+          sourceRevision: "sprint-story-source", evaluatedAt: joint ? page.evaluatedAt : new Date(notificationReceiptTime - 1).toISOString(), validUntil: joint ? page.validUntil : new Date(notificationReceiptTime + 60_000).toISOString() },
+        readActor: { profileId: profile.id, platformRole: profile.platformRole }, readAuthority: joint ? sprintFixtureAuthority : { userId: user.id, deadline: notificationReceiptTime + 60_000 },
+      })); });
+    }
     if (path === "/api/backlog-data") return Response.json({ model: { revision: "backlog", people: args.initialData.profiles, items: args.initialData.tasks, sprints: args.initialData.sprints, commitments: [] } });
     return Response.json({ error: "Not provided by this workspace fixture" }, { status: 503 });
     });
@@ -135,6 +192,98 @@ export const SprintSelectionUpdatesWorkspace: Story = {
     await expect(canvas.getByText("15. Jan. - 28. Jan.")).toBeVisible();
     await expect(canvas.queryByLabelText("1 verknüpfte Aufgaben, Zeitraum geschützt")).not.toBeInTheDocument();
     await expect(context.queryByRole("combobox", { name: "Status" })).not.toBeInTheDocument();
+  },
+};
+
+export const SprintTasksRevealBeforeAssignmentDiscovery: Story = {
+  args: { initialWorkspace: "sprint", initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+    await expect(assignmentRequests).toBe(0);
+    await userEvent.click(await canvas.findByRole("button", { name: "Backlog und andere Sprints laden" }));
+    await expect(await canvas.findByText("Zuweisungskandidaten werden geladen.")).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+    await expect(assignmentRequests).toBe(1);
+    releaseAssignment();
+    await expect(await canvas.findByRole("link", { name: "Später Zuweisungskandidat" })).toBeVisible();
+    await expect(canvas.getByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+  },
+};
+
+export const SprintSelectionDoesNotPresentOldMembershipAsEmpty: Story = {
+  args: {
+    initialWorkspace: "sprint", initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel,
+    initialWorkspaceRead: {
+      workspace: "sprint", queryKey: "workspace", revision: sprintModel.revision, scopeRevision: "sprint-story-source",
+      session: sprintStorySession, readAuthority: sprintFixtureAuthority, coverage: { sprints: "complete", tasks: "partial" }, taskOmittedFields: [],
+      sprintScope: { query: { scope: "selected", sprintId: sprints[0].id, filters: DEFAULT_SPRINT_TASK_FILTERS, continuation: null },
+        page: scopedSprintPage(sprints[0].id), readActor: sprintFixtureActor },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+    const selector = within(await canvas.findByLabelText("Bereichskontext")).getByRole("combobox", { name: "Sprint" });
+    await userEvent.click(selector);
+    await userEvent.click(within(document.body).getByRole("option", { name: /^Sprint 2/ }));
+    await expect(await canvas.findByText("Sprint-Aufgaben werden geladen.")).toBeVisible();
+    await expect(canvas.queryByRole("link", { name: "Sprint-Aufgabe" })).not.toBeInTheDocument();
+    await expect(canvas.queryByText("Noch keine Aufgaben in diesem Sprint.")).not.toBeInTheDocument();
+    selectedSprintGate.resolve();
+    await expect(await canvas.findByRole("link", { name: "Später Zuweisungskandidat" })).toBeVisible();
+    await expect(assignmentRequests).toBe(0);
+  },
+};
+
+const sprintSearchArgs = {
+  initialWorkspace: "sprint" as const, initialData: { ...emptyPlanningShellState, profiles: [profile], sprints, tasks: [sprintTask] }, initialSprintModel: sprintModel,
+  initialWorkspaceRead: {
+    workspace: "sprint", queryKey: "workspace", revision: sprintModel.revision, scopeRevision: "sprint-story-source",
+    session: sprintStorySession, readAuthority: sprintFixtureAuthority, coverage: { sprints: "complete", tasks: "partial" }, taskOmittedFields: [],
+    sprintScope: { query: { scope: "selected", sprintId: sprints[0].id, filters: DEFAULT_SPRINT_TASK_FILTERS, continuation: null },
+      page: scopedSprintPage(sprints[0].id), readActor: sprintFixtureActor, selectionBasis: "document-selected-basis" },
+  },
+} satisfies Story["args"];
+
+export const SprintSharedSearchUsesOneAuthorizedRead: Story = {
+  args: sprintSearchArgs,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+    await userEvent.click(await canvas.findByRole("button", { name: "Backlog und andere Sprints laden" }));
+    await waitFor(() => expect(assignmentRequests).toBe(1));
+    releaseAssignment();
+    await expect(await canvas.findByRole("link", { name: "Später Zuweisungskandidat" })).toBeVisible();
+    const search = canvas.getByRole("searchbox", { name: "Sprint-Aufgaben durchsuchen" });
+    await userEvent.type(search, "Später Zuweisungskandidat{Enter}");
+    await waitFor(() => expect(assignmentRequests).toBe(2));
+    await waitFor(() => expect(jointSprintRequests).toBe(1));
+    await expect(canvas.getByText("Sprint-Aufgaben werden geladen.")).toBeVisible();
+    await expect(canvas.queryByText("Noch keine Aufgaben in diesem Sprint.")).not.toBeInTheDocument();
+    releaseAssignment();
+    await expect(await canvas.findByRole("link", { name: "Später Zuweisungskandidat" })).toBeVisible();
+    await waitFor(() => expect(canvas.queryByText("Sprint-Aufgaben werden geladen.")).not.toBeInTheDocument());
+    await expect(search).toHaveFocus();
+    await expect(search).toHaveValue("Später Zuweisungskandidat");
+    await expect(fullSprintRequests).toBe(0);
+    await expect(projectedSprintRequests).toBe(0);
+  },
+};
+
+export const SprintSearchWhileCandidatesAreClosedDoesNotLoadAssignments: Story = {
+  args: sprintSearchArgs,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole("link", { name: "Sprint-Aufgabe" })).toBeVisible();
+    const search = canvas.getByRole("searchbox", { name: "Sprint-Aufgaben durchsuchen" });
+    await userEvent.type(search, "Später Zuweisungskandidat{Enter}");
+    await waitFor(() => expect(projectedSprintRequests).toBe(1));
+    projectionGate.resolve();
+    await waitFor(() => expect(canvas.queryByText("Sprint-Aufgaben werden geladen.")).not.toBeInTheDocument());
+    await expect(assignmentRequests).toBe(0);
+    await expect(jointSprintRequests).toBe(0);
+    await expect(search).toHaveFocus();
   },
 };
 
