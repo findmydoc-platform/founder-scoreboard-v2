@@ -1,10 +1,12 @@
 "use client";
 
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, MinusCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Code2, Download, ExternalLink, Maximize2, MinusCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { usePlanningBusinessState } from "@/features/planning/hooks/use-planning-business-state";
+import { useModalDialog } from "@/shared/hooks/use-modal-dialog";
 import { platformReleaseReferenceUrl } from "../model/platform-release-manifest";
 import { formatReleaseDate, highlightedChanges, releaseKindLabel, releaseTitle, type PlatformReleaseContent, type PlatformReleasePlanningLink, type PlatformReleasePlanningReference, type PlatformReleaseRecord, type PlatformReleaseReferenceState } from "../model/platform-release-model";
 import { taskDetailHrefWithReturnTo } from "@/features/tasks/model/task-detail-return-navigation";
@@ -70,6 +72,57 @@ function PlanningLinks({ version, state, onRetry, onReload }: {
   );
 }
 
+function ReleaseImage({ src, alt }: { src: string; alt: string }) {
+  const [open, setOpen] = useState(false);
+  const previewRef = useRef<HTMLButtonElement>(null);
+  const close = () => setOpen(false);
+  const dialogRef = useModalDialog<HTMLDivElement>({ open, onClose: close, restoreFocusRef: previewRef });
+
+  return (
+    <>
+      <button
+        ref={previewRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={`Bild vergrößern: ${alt}`}
+        onClick={() => setOpen(true)}
+        className="group grid aspect-video w-full min-w-0 cursor-zoom-in grid-cols-[minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)] items-end gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-2 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={alt} className="size-full object-contain" referrerPolicy="no-referrer" />
+        <span aria-hidden="true" className="grid size-8 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-sm group-hover:text-blue-700">
+          <Maximize2 size={16} />
+        </span>
+      </button>
+      {open && createPortal(
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={alt}
+          tabIndex={-1}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) close();
+          }}
+          className="fixed inset-0 grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] place-items-center gap-3 bg-slate-950 p-3 sm:p-6 [html:has(&)]:bg-slate-950"
+        >
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Bildansicht schließen"
+            className="grid size-11 place-items-center justify-self-end rounded-full bg-white text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={alt} className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function ChangeEntry({ release, change }: { release: PlatformReleaseContent; change: PlatformReleaseContent["manifest"]["changes"][number] }) {
   const visual = change.visualUrls[0];
   const visualMeta = release.manifest.visuals.find((item) => item.url === visual);
@@ -80,12 +133,7 @@ function ChangeEntry({ release, change }: { release: PlatformReleaseContent; cha
         <h3 className="mt-2 text-base font-semibold text-slate-950">{change.title}</h3>
         <p className="mt-2 text-sm leading-6 text-slate-600">{change.summary}</p>
       </div>
-      {visual ? (
-        <figure className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={visual} alt={visualMeta?.altText || change.title} className="aspect-[16/9] h-auto w-full object-cover object-top" referrerPolicy="no-referrer" />
-        </figure>
-      ) : null}
+      {visual ? <ReleaseImage src={visual} alt={visualMeta?.altText || change.title} /> : null}
     </article>
   );
 }
